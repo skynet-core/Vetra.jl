@@ -1,0 +1,905 @@
+# ---------- image ops (T007a) ----------
+# Upstream: pixie/images.nim -- getRgbaSmooth (L367), minifyBy2 (L168),
+# magnifyBy2 (L232), applyOpacity (L261), subImage (L111), blendRect (L484),
+# drawSmooth (L547), draw (L652), drawTiled/drawCorrect (L696/L421).
+#
+# Pinned arithmetic notes:
+# - `image[x, y]` returns transparent for out-of-bounds (images.nim L37).
+# - `h = 0.5` is the half-pixel sampling offset (images.nim L5).
+# - `mix` is pixie common.nim's byte mix (already ported in Vetra.jl).
+# - `round` in minify/applyOpacity is the tie-away-from-zero chroma/Nim round
+#   (roundHalfAway here), and `*`(ColorRGBX, float32) is the opacity formula
+#   from Vetra.jl (`x = round(o * 255)`, `c = (c * x + 127) div 255`).
+# - The `draw` smooth/blending decision, minify/magnify loops (including the
+#   transform rescale `transform * scale(2|1/2)`) and the drawSmooth
+#   scanline walk are ported exactly (integer trunc/ceil/floor casts; the
+#   MaskBlend branches zero the uncovered regions as upstream's zeroMem
+#   calls do). `drawTiled` is upstream `drawCorrect(tiled = true)`; it
+#   dispatches per pixel through `blender`, which now carries the mask modes
+#   (T007b) -- upstream has no zeroMem special cases in drawCorrect; those
+#   live in blendRect/drawSmooth only.
+
+const DRAW_H = Float32(0.5) # images.nim `const h = 0.5`
+
+"""`bumpy`-free pixel read used by the smooth samplers: transparent outside."""
+function _at(image::Image, x::Int, y::Int)
+    if inside(image, x, y)
+        return getColor(image, x, y)
+    end
+    return ColorRGBX(0x00, 0x00, 0x00, 0x00)
+end
+
+"""
+Bilinear sample at float coordinates (upstream `getRgbaSmooth`): the four
+corner pixels (transparent when outside and not `wrapped`, modulo-wrapped
+otherwise), mixed `x` then `y` with pixie `mix` when the fractional part is
+non-zero and the two neighbors differ.
+"""
+function getRgbaSmooth(image::Image, x::Float32, y::Float32, wrapped::Bool = false)
+    x0 = Int(floor(x))
+    y0 = Int(floor(y))
+    xFrac = x - floor(x)
+    yFrac = y - floor(y)
+    if wrapped
+        wrapco(v::Int, extent::Int) = (v % extent < 0 ? v % extent + extent : v % extent)
+        w = wrapco(x0, image.width)
+        h = wrapco(y0, image.height)
+        x1 = w + 1 < image.width ? w + 1 : 0
+        y1 = h + 1 < image.height ? h + 1 : 0
+        x0y0 = getColor(image, w + 1, h + 1)
+        x1y0 = getColor(image, x1 + 1, h + 1)
+        x0y1 = getColor(image, w + 1, y1 + 1)
+        x1y1 = getColor(image, x1 + 1, y1 + 1)
+    else
+        x0y0 = _at(image, x0 + 1, y0 + 1)
+        x1y0 = _at(image, x0 + 2, y0 + 1)
+        x0y1 = _at(image, x0 + 1, y0 + 2)
+        x1y1 = _at(image, x0 + 2, y0 + 2)
+    end
+    topMix = x0y0
+    if xFrac > Float32(0) && x0y0 != x1y0
+        topMix = mix(x0y0, x1y0, xFrac)
+    end
+    bottomMix = x0y1
+    if xFrac > Float32(0) && x0y1 != x1y1
+        bottomMix = mix(x0y1, x1y1, xFrac)
+    end
+    if yFrac != Float32(0) && topMix != bottomMix
+        return mix(topMix, bottomMix, yFrac)
+    end
+    return topMix
+end
+
+"""
+Downscale by `2^power` (upstream `minifyBy2`): 2x2 averaging with `+ 2 div 4`,
+odd trailing rows/columns as `mix(pixels, 0.5) * 0.5`, the odd corner as
+`* 0.25`.
+"""
+function minifyBy2(image::Image, power::Int = 1)
+    power < 0 && throw(ArgumentError("Cannot minifyBy2 with negative power"))
+    power == 0 && return copy(image)
+    src = image
+    for _ in 1:power
+        wOdd = src.width % 2 != 0
+        hOdd = src.height % 2 != 0
+        halfW = src.width ÷ 2
+        halfH = src.height ÷ 2
+        out = newImage(wOdd ? halfW + 1 : halfW, hOdd ? halfH + 1 : halfH)
+        for yy in 0:(halfH - 1)
+            for xx in 0:(halfW - 1)
+                a = _at(src, 2 * xx + 1, 2 * yy + 1)
+                b = _at(src, 2 * xx + 2, 2 * yy + 1)
+                c = _at(src, 2 * xx + 2, 2 * yy + 2)
+                d = _at(src, 2 * xx + 1, 2 * yy + 2)
+                set_pixel(out, xx + 1, yy + 1, ColorRGBX(
+                    UInt8((Int(a.r) + Int(b.r) + Int(c.r) + Int(d.r) + 2) ÷ 4),
+                    UInt8((Int(a.g) + Int(b.g) + Int(c.g) + Int(d.g) + 2) ÷ 4),
+                    UInt8((Int(a.b) + Int(b.b) + Int(c.b) + Int(d.b) + 2) ÷ 4),
+                    UInt8((Int(a.a) + Int(b.a) + Int(c.a) + Int(d.a) + 2) ÷ 4)))
+            end
+            if wOdd
+                c = mix(
+                    _at(src, src.width, 2 * yy + 1), _at(src, src.width, 2 * yy + 2),
+                    Float32(0.5)) * Float32(0.5)
+                set_pixel(out, out.width, yy + 1, c)
+            end
+        end
+        if hOdd
+            for xx in 0:(halfW - 1)
+                c = mix(
+                    _at(src, 2 * xx + 1, src.height), _at(src, 2 * xx + 2, src.height),
+                    Float32(0.5)) * Float32(0.5)
+                set_pixel(out, xx + 1, out.height, c)
+            end
+            if wOdd
+                set_pixel(out, out.width, out.height,
+                    _at(src, src.width, src.height) * Float32(0.25))
+            end
+        end
+        src = out
+    end
+    return src
+end
+
+"""Upscale by `2^power` by duplicating pixels (upstream `magnifyBy2`)."""
+function magnifyBy2(image::Image, power::Int = 1)
+    power < 0 && throw(ArgumentError("Cannot magnifyBy2 with negative power"))
+    s = 2 ^ power
+    out = newImage(image.width * s, image.height * s)
+    for y in 0:(image.height - 1)
+        for x in 0:(image.width - 1)
+            c = getColor(image, x + 1, y + 1)
+            for j in 0:(s - 1)
+                for i in 0:(s - 1)
+                    set_pixel(out, (x * s + 1) + i, (y * s + 1) + j, c)
+                end
+            end
+        end
+    end
+    return out
+end
+
+"""
+Multiply every channel by `opacity` (upstream `applyOpacity`):
+`o = round(255 * opacity)`; 255 is the identity, 0 clears the image.
+"""
+function applyOpacity(image::Image, opacity::Float32)
+    o = roundHalfAway(Float32(255) * opacity)
+    if o == 255
+        return nothing
+    end
+    if o == 0
+        fill(image, ColorRGBX(0x00, 0x00, 0x00, 0x00))
+        return nothing
+    end
+    d = image.data
+    for k in 0:(image.width * image.height - 1)
+        i = 4 * k
+        d[i + 1] = UInt8((Int(d[i + 1]) * o) ÷ 255)
+        d[i + 2] = UInt8((Int(d[i + 2]) * o) ÷ 255)
+        d[i + 3] = UInt8((Int(d[i + 3]) * o) ÷ 255)
+        d[i + 4] = UInt8((Int(d[i + 4]) * o) ÷ 255)
+    end
+    return nothing
+end
+
+"""
+Copy the (x, y, w, h) sub-rectangle of `image` (upstream `subImage`);
+invalid parameters raise (upstream `PixieError`).
+"""
+function subImage(image::Image, x::Int, y::Int, w::Int, h::Int)
+    if x < 0 || x + w > image.width
+        throw(ArgumentError(
+            "Params x: $(x) w: $(w) invalid, image width is $(image.width)"))
+    end
+    if y < 0 || y + h > image.height
+        throw(ArgumentError(
+            "Params y: $(y) h: $(h) invalid, image height is $(image.height)"))
+    end
+    out = newImage(w, h)
+    for yy in 0:(h - 1)
+        for xx in 0:(w - 1)
+            set_pixel(out, xx + 1, yy + 1, getColor(image, x + xx + 1, y + yy + 1))
+        end
+    end
+    return out
+end
+
+# ---------- zeroMem helpers (MaskBlend branches) ----------
+
+function _zeroRows(image::Image, y0::Int, count::Int)
+    count <= 0 && return nothing
+    d = image.data
+    for r in y0:(y0 + count - 1)
+        base = 4 * r * image.width
+        d[(base + 1):(base + 4 * image.width)] .= UInt8(0)
+    end
+    return nothing
+end
+
+function _zeroRowSegment(image::Image, x0::Int, y::Int, count::Int)
+    count <= 0 && return nothing
+    d = image.data
+    base = 4 * (y * image.width + x0)
+    d[(base + 1):(base + 4 * count)] .= UInt8(0)
+    return nothing
+end
+
+# ---------- blendRect (upstream L484) ----------
+
+"""
+Blit `b` onto `a` at integer pixel `pos` (upstream `blendRect`): Normal/
+Overwrite copy the rows, MaskBlend zeros the uncovered parts and multiplies
+by the mask alpha (blendMask), anything else dispatches through `blender`.
+Completely outside `a` + MaskBlend clears `a` (upstream).
+"""
+function blendRect(a::Image, b::Image, pos::NTuple{2,Int}, blendMode)
+    px, py = pos
+    if px >= a.width || px + b.width <= 0 || py >= a.height || py + b.height <= 0
+        if blendMode === MaskBlend
+            fill(a, ColorRGBX(0x00, 0x00, 0x00, 0x00))
+        end
+        return nothing
+    end
+    xStart = max(-px, 0)
+    yStart = max(-py, 0)
+    xEnd = min(b.width, a.width - px)
+    yEnd = min(b.height, a.height - py)
+
+    if blendMode === MaskBlend
+        _zeroRows(a, 0, yStart + py)
+        for y in yStart:(yEnd - 1)
+            _zeroRowSegment(a, 0, y + py, xStart + px)
+            for x in xStart:(xEnd - 1)
+                dst = getColor(a, x + px + 1, y + py + 1)
+                src = getColor(b, x + 1, y + 1)
+                set_pixel(a, x + px + 1, y + py + 1, blendMask(dst, src))
+            end
+            _zeroRowSegment(a, xEnd + px, y + py, a.width - (xEnd + px))
+        end
+        _zeroRows(a, yEnd + py, a.height - (yEnd + py))
+        return nothing
+    end
+
+    if blendMode === NormalBlend
+        for y in yStart:(yEnd - 1)
+            for x in xStart:(xEnd - 1)
+                dst = getColor(a, x + px + 1, y + py + 1)
+                src = getColor(b, x + 1, y + 1)
+                set_pixel(a, x + px + 1, y + py + 1, blendNormal(dst, src))
+            end
+        end
+        return nothing
+    end
+    if blendMode === OverwriteBlend
+        for y in yStart:(yEnd - 1)
+            for x in xStart:(xEnd - 1)
+                set_pixel(a, x + px + 1, y + py + 1, getColor(b, x + 1, y + 1))
+            end
+        end
+        return nothing
+    end
+    blend = blender(blendMode)
+    for y in yStart:(yEnd - 1)
+        for x in xStart:(xEnd - 1)
+            dst = getColor(a, x + px + 1, y + py + 1)
+            src = getColor(b, x + 1, y + 1)
+            set_pixel(a, x + px + 1, y + py + 1, blend(dst, src))
+        end
+    end
+    return nothing
+end
+
+# ---------- drawSmooth (upstream L547) ----------
+
+"""
+Scanline intersection check (bumpy `intersects(Line, Segment, at)`, L507):
+true with the point when `0 <= u <= 1`.
+"""
+function _intersectsLine(l::Line, s::Segment)
+    s1 = l.b - l.a
+    s2 = s.to - s.at
+    denom = (-s2.x * s1.y + s1.x * s2.y)
+    num = s1.x * (l.a.y - s.at.y) - s1.y * (l.a.x - s.at.x)
+    u = num / denom
+    if u >= Float32(0) && u <= Float32(1)
+        return true, s.at + u * s2
+    end
+    return false, Vec2(0f0, 0f0)
+end
+
+"""
+Smooth-draw `b` onto `a` under `transform` (upstream `drawSmooth`): clip the
+destination scanlines to the transformed source perimeter, sample
+`getRgbaSmooth` per pixel along the inverse movement vectors, and blend the
+rows (Normal/Overwrite/MaskBlend special cases as upstream, else `blender`).
+"""
+function drawSmooth(a::Image, b::Image, tform::Mat3, blendMode)
+    corners = [
+        tform * Vec2(0f0, 0f0),
+        tform * Vec2(Float32(b.width), 0f0),
+        tform * Vec2(Float32(b.width), Float32(b.height)),
+        tform * Vec2(0f0, Float32(b.height))]
+    perimeter = [
+        Segment(corners[1], corners[2]),
+        Segment(corners[2], corners[3]),
+        Segment(corners[3], corners[4]),
+        Segment(corners[4], corners[1])]
+    inv = inverse(tform)
+    p = inv * Vec2(DRAW_H, DRAW_H)
+    dx = inv * Vec2(Float32(1) + DRAW_H, DRAW_H) - p
+    dy = inv * Vec2(DRAW_H, Float32(1) + DRAW_H) - p
+
+    yStart = a.height
+    yEnd = 0
+    for s in perimeter
+        yStart = min(yStart, Int(floor(s.at.y)))
+        yEnd = max(yEnd, Int(ceil(s.at.y)))
+    end
+    yStart = clamp(yStart, 0, a.height)
+    yEnd = clamp(yEnd, 0, a.height)
+
+    if blendMode === MaskBlend && yStart > 0
+        _zeroRows(a, 0, yStart)
+    end
+
+    for y in yStart:(yEnd - 1)
+        xMin = Float32(a.width)
+        xMax = Float32(0)
+        for yOffset in (Float32(0), Float32(1))
+            scanLine = Line(
+                Vec2(Float32(-1000), Float32(y) + yOffset),
+                Vec2(Float32(1000), Float32(y) + yOffset))
+            for seg in perimeter
+                hit, at = _intersectsLine(scanLine, seg)
+                if hit && seg.to != at
+                    xMin = min(xMin, at.x)
+                    xMax = max(xMax, at.x)
+                end
+            end
+        end
+        xStart = clamp(Int(floor(xMin)), 0, a.width)
+        xEnd = clamp(Int(ceil(xMax)), 0, a.width)
+        xEnd - xStart == 0 && continue
+
+        srcPos = p + dx * Float32(xStart) + dy * Float32(y)
+        srcPos = Vec2(srcPos.x - DRAW_H, srcPos.y - DRAW_H)
+        if blendMode === MaskBlend && xStart > 0
+            _zeroRowSegment(a, 0, y, xStart)
+        end
+        for x in xStart:(xEnd - 1)
+            sample = getRgbaSmooth(b, srcPos.x, srcPos.y)
+            if blendMode === NormalBlend
+                out = blendNormal(getColor(a, x + 1, y + 1), sample)
+            elseif blendMode === OverwriteBlend
+                out = sample
+            elseif blendMode === MaskBlend
+                out = blendMask(getColor(a, x + 1, y + 1), sample)
+            else
+                out = blender(blendMode)(getColor(a, x + 1, y + 1), sample)
+            end
+            set_pixel(a, x + 1, y + 1, out)
+            srcPos = srcPos + dx
+        end
+        if blendMode === MaskBlend && a.width - xEnd > 0
+            _zeroRowSegment(a, xEnd, y, a.width - xEnd)
+        end
+    end
+
+    if blendMode === MaskBlend && a.height - yEnd > 0
+        _zeroRows(a, yEnd, a.height - yEnd)
+    end
+    return nothing
+end
+
+"""
+`_fract` (vmath `fractional`, ~line 571): `abs(v) - trunc(abs(v))`.
+"""
+_fract(v::Float32) = abs(v) - trunc(abs(v))
+
+"""
+Draw `b` onto `a` with `transform` and `blendMode` (upstream `draw`, L652):
+normalize the sampling step with `minifyBy2`/`magnifyBy2`, then take the
+smooth path when anything is rotated/scaled or the translation has a
+fractional part, else the integer `blendRect` fast path.
+"""
+function draw(
+    a::Image, b::Image, tform::Mat3 = mat3(); blendMode = NormalBlend
+)
+    inv = inverse(tform)
+    p = inv * Vec2(DRAW_H, DRAW_H)
+    dx = inv * Vec2(Float32(1) + DRAW_H, DRAW_H) - p
+    dy = inv * Vec2(DRAW_H, Float32(1) + DRAW_H) - p
+    filterBy2 = max(length(dx), length(dy))
+
+    while filterBy2 >= Float32(2.0)
+        b = minifyBy2(b)
+        p = p / Float32(2)
+        dx = dx / Float32(2)
+        dy = dy / Float32(2)
+        filterBy2 = filterBy2 / Float32(2)
+        # Pinned: transform rescaled in the loops (images.nim `draw`).
+        tform = tform * scale(Vec2(Float32(2), Float32(2)))
+    end
+
+    while filterBy2 <= Float32(0.5)
+        b = magnifyBy2(b)
+        p = p * Float32(2)
+        dx = dx * Float32(2)
+        dy = dy * Float32(2)
+        filterBy2 = filterBy2 * Float32(2)
+        tform = tform * scale(Vec2(Float32(0.5), Float32(0.5)))
+    end
+
+    hasRotationOrScaling = !(dx == Vec2(1f0, 0f0) && dy == Vec2(0f0, 1f0))
+    smooth = !(
+        length(dx) == Float32(1) && length(dy) == Float32(1) &&
+        _fract(tform[3, 1]) == Float32(0) && _fract(tform[3, 2]) == Float32(0))
+
+    if hasRotationOrScaling || smooth
+        return drawSmooth(a, b, tform, blendMode)
+    end
+    return blendRect(
+        a, b, (Int(trunc(tform[3, 1])), Int(trunc(tform[3, 2]))), blendMode)
+end
+
+"""
+Draw `src` tiled (repeating) onto `dst` under `mat` (upstream `drawTiled`,
+L696 = `drawCorrect(..., tiled = true)`): the minify/magnify normalization
+also rescales the inverse transform (where `draw` does not), then per-pixel
+wrapped sampling blended through `blender` (all 20 modes, masks included).
+"""
+function drawTiled(
+    dst::Image, src::Image, mat::Mat3 = mat3(); blendMode = NormalBlend
+)
+    inv = inverse(mat)
+    p = inv * Vec2(DRAW_H, DRAW_H)
+    dx = inv * Vec2(Float32(1) + DRAW_H, DRAW_H) - p
+    dy = inv * Vec2(DRAW_H, Float32(1) + DRAW_H) - p
+    filterBy2 = max(length(dx), length(dy))
+    b = src
+
+    while filterBy2 >= Float32(2.0)
+        b = minifyBy2(b)
+        p = p / Float32(2)
+        dx = dx / Float32(2)
+        dy = dy / Float32(2)
+        filterBy2 = filterBy2 / Float32(2)
+        inv = scale(Vec2(Float32(0.5), Float32(0.5))) * inv
+    end
+
+    while filterBy2 <= Float32(0.5)
+        b = magnifyBy2(b)
+        p = p * Float32(2)
+        dx = dx * Float32(2)
+        dy = dy * Float32(2)
+        filterBy2 = filterBy2 * Float32(2)
+        inv = scale(Vec2(Float32(2), Float32(2))) * inv
+    end
+
+    blend = blender(blendMode)
+    for y in 0:(dst.height - 1)
+        for x in 0:(dst.width - 1)
+            samplePos = inv * Vec2(Float32(x) + DRAW_H, Float32(y) + DRAW_H)
+            sample = getRgbaSmooth(
+                b, samplePos.x - DRAW_H, samplePos.y - DRAW_H, true)
+            backdrop = getColor(dst, x + 1, y + 1)
+            set_pixel(dst, x + 1, y + 1, blend(backdrop, sample))
+        end
+    end
+    return nothing
+end
+
+# ---------- image effects (T007b) ----------
+# Upstream: pixie/images.nim -- flipHorizontal (L78), flipVertical (L90),
+# rotate90 (L100), diff (L138), invert (L279), ceil (L294), blur (L304),
+# resize (L701), spread (L716), shadow (L776), superImage (L794),
+# opaqueBounds (L805); pixie/internal.nim -- gaussianKernel (L17),
+# toPremultipliedAlpha (L86).
+#
+# Pinned arithmetic notes:
+# - `gaussianKernel`: `s` is Float32; `2 * PI * s^2`, the `1/sqrt(...)`
+#   factor and the product `a` are Float64 (Nim widens mixed float ops);
+#   only `exp(...)` stays Float32 (expf); `total` is the Float64 sum and
+#   the normalized weights are re-stored as Float32. `f * 255 * 256` is
+#   Float32, rounded tie-away-from-zero, then truncated to UInt16. All
+#   288 fixture weights (radii 1..16, gaussian_kernel.tsv) match exactly.
+# - `blur`/`spread` X passes store into a transposed image
+#   (`newImage(image.height, image.width)`), which the Y pass reads back
+#   column-wise (images.nim L341/L352, L724/L734).
+# - `blur` accumulates in integers that stay below 255 * sum(kernel)
+#   (< 2^32, upstream's uint32 accumulators), so Int64 is exact; the
+#   final channel is `(acc div 256) div 255` (images.nim L332-338).
+# - `rotate90` is the only effect that upstream mutates in place while
+#   also changing dimensions; `Image` is immutable here, so it returns
+#   the rotated image. Every other effect mutates `image.data` in place
+#   and returns nothing, as upstream.
+# - `invert` re-premultiplies with the two-pass `toPremultipliedAlpha`
+#   (internal.nim L86): per channel `(c * a + 127) div 255` when
+#   `a != 255` (a no-op at 255, so a single pass is equivalent).
+
+"""
+1D Gaussian kernel weights for `radius` (upstream `gaussianKernel`,
+internal.nim L17): `2*radius+1` UInt16 values in [0, 255]*256, summing to
+~65280.
+"""
+function gaussianKernel(radius::Int)
+    out = Vector{UInt16}(undef, 2 * radius + 1)
+    floats = Vector{Float32}(undef, 2 * radius + 1)
+    total = 0.0 # Float64, as upstream infers `var total = 0.0`
+    for step in -radius:radius
+        s = Float32(radius) / Float32(2.2) # 2.2 matches Figma
+        a = (1.0 / sqrt(2.0 * pi * Float64(s * s))) *
+            Float64(exp(
+                -1.0f0 * (Float32(step) * Float32(step)) / (2.0f0 * s * s)))
+        floats[step + radius + 1] = Float32(a)
+        total += a
+    end
+    for step in -radius:radius
+        floats[step + radius + 1] = Float32(floats[step + radius + 1] / total)
+    end
+    for i in 1:(2 * radius + 1)
+        out[i] = UInt16(
+            roundHalfAway(Float32(floats[i]) * Float32(255) * Float32(256)))
+    end
+    return out
+end
+
+"""Flip the image in place around the Y axis (upstream `flipHorizontal`)."""
+function flipHorizontal(image::Image)
+    halfW = image.width ÷ 2
+    for y in 1:image.height
+        for x in 1:halfW
+            c = getColor(image, x, y)
+            set_pixel(image, x, y, getColor(image, image.width - x + 1, y))
+            set_pixel(image, image.width - x + 1, y, c)
+        end
+    end
+    return nothing
+end
+
+"""Flip the image in place around the X axis (upstream `flipVertical`)."""
+function flipVertical(image::Image)
+    halfH = image.height ÷ 2
+    for y in 1:halfH
+        for x in 1:image.width
+            c = getColor(image, x, y)
+            set_pixel(image, x, y, getColor(image, x, image.height - y + 1))
+            set_pixel(image, x, image.height - y + 1, c)
+        end
+    end
+    return nothing
+end
+
+"""
+Rotate the image 90 degrees clockwise (upstream `rotate90`). Upstream
+mutates the image in place; `Image` is immutable here, so the rotated
+image is returned instead.
+"""
+function rotate90(image::Image)
+    rotated = newImage(image.height, image.width)
+    for y in 1:rotated.height
+        for x in 1:rotated.width
+            set_pixel(rotated, x, y, getColor(image, y, image.height - x + 1))
+        end
+    end
+    return rotated
+end
+
+"""
+Compare `image` against `master` (upstream `diff`): returns
+`(score, diffImage)`. The score is the mean absolute per-channel
+difference in percent, computed in Float32 as upstream
+(`100 * diffScore / diffTotal`); `diffImage` is the `max` of both sizes,
+alpha 255, `r = |Δa|`, `g = clamp(Δrgb, 0, 255)`, `b = clamp(-Δrgb, 0,
+255)`, with out-of-bounds pixels reading as transparent.
+"""
+function diff(master::Image, image::Image)
+    w = max(master.width, image.width)
+    h = max(master.height, image.height)
+    diffImage = newImage(w, h)
+    diffScore = 0
+    diffTotal = 0
+    for y in 1:h
+        for x in 1:w
+            m = _at(master, x, y)
+            u = _at(image, x, y)
+            d = (Int(m.r) - Int(u.r)) + (Int(m.g) - Int(u.g)) +
+                (Int(m.b) - Int(u.b))
+            set_pixel(diffImage, x, y, ColorRGBX(
+                UInt8(abs(Int(m.a) - Int(u.a))),
+                UInt8(clamp(d, 0, 255)),
+                UInt8(clamp(-d, 0, 255)),
+                UInt8(0xff)))
+            diffScore += abs(Int(m.r) - Int(u.r)) + abs(Int(m.g) - Int(u.g)) +
+                abs(Int(m.b) - Int(u.b)) + abs(Int(m.a) - Int(u.a))
+            diffTotal += 255 * 4
+        end
+    end
+    return (Float32(100) * Float32(diffScore) / Float32(diffTotal), diffImage)
+end
+
+"""
+Invert all channels in place, then restore premultiplied alpha
+(upstream `invert`): `c = 255 - c`, then the (straight) rgb channels are
+rescaled by the inverted alpha with `(c * a + 127) div 255`.
+"""
+function invert(image::Image)
+    d = image.data
+    for k in 0:(image.width * image.height - 1)
+        i = 4 * k
+        ia = 255 - Int(d[i + 4])
+        if ia == 255
+            d[i + 1] = UInt8(255 - Int(d[i + 1]))
+            d[i + 2] = UInt8(255 - Int(d[i + 2]))
+            d[i + 3] = UInt8(255 - Int(d[i + 3]))
+        else
+            d[i + 1] = UInt8(((255 - Int(d[i + 1])) * ia + 127) ÷ 255)
+            d[i + 2] = UInt8(((255 - Int(d[i + 2])) * ia + 127) ÷ 255)
+            d[i + 3] = UInt8(((255 - Int(d[i + 3])) * ia + 127) ÷ 255)
+        end
+        d[i + 4] = UInt8(ia)
+    end
+    return nothing
+end
+
+"""
+`ceil` in place (upstream `ceil`): per channel, 0 stays 0, anything else
+becomes 255. Extends the (imported) Base generic, so `ceil(Float32)`
+calls elsewhere in the module are unaffected.
+"""
+function ceil(image::Image)
+    d = image.data
+    for i in 1:4
+        for k in i:4:length(d)
+            d[k] = d[k] == 0x00 ? UInt8(0x00) : UInt8(0xff)
+        end
+    end
+    return nothing
+end
+
+"""
+Nim `round` for the `blur`/`spread` radius scalars: ties away from zero
+also for negative inputs (the module-level `roundHalfAway` covers the
+non-negative values used elsewhere).
+"""
+function _roundRadius(v::Float32)
+    return v < 0 ? -Int(floor(-v + Float32(0.5))) : Int(floor(v + Float32(0.5)))
+end
+
+"""
+Gaussian blur in place (upstream `blur`): `radius` is rounded to an int
+(0 is a no-op, negative raises); separable passes over
+`gaussianKernel`, the X pass stored transposed, out-of-bounds samples
+reading as `outOfBounds` (transparent by default).
+"""
+function blur(
+    image::Image, radius::Float32,
+    outOfBounds::ColorRGBX = ColorRGBX(0x00, 0x00, 0x00, 0x00)
+)
+    r = _roundRadius(radius)
+    if r == 0
+        return nothing
+    end
+    if r < 0
+        throw(ArgumentError("Cannot apply negative blur"))
+    end
+    kernel = gaussianKernel(r)
+    oob = outOfBounds
+    ob = (Int(oob.r), Int(oob.g), Int(oob.b), Int(oob.a))
+
+    # X pass, stored transposed (upstream `blurX`).
+    blurX = newImage(image.height, image.width)
+    for y in 0:(image.height - 1)
+        for x in 0:(image.width - 1)
+            vr = vg = vb = va = 0
+            for xx in (x - r):(min(x + r, 0) - 1)
+                ki = Int(kernel[xx - x + r + 1])
+                vr += ob[1] * ki
+                vg += ob[2] * ki
+                vb += ob[3] * ki
+                va += ob[4] * ki
+            end
+            for xx in max(x - r, 0):min(x + r, image.width - 1)
+                smp = getColor(image, xx + 1, y + 1)
+                ki = Int(kernel[xx - x + r + 1])
+                vr += Int(smp.r) * ki
+                vg += Int(smp.g) * ki
+                vb += Int(smp.b) * ki
+                va += Int(smp.a) * ki
+            end
+            for xx in max(x - r, image.width):(x + r)
+                ki = Int(kernel[xx - x + r + 1])
+                vr += ob[1] * ki
+                vg += ob[2] * ki
+                vb += ob[3] * ki
+                va += ob[4] * ki
+            end
+            set_pixel(blurX, y + 1, x + 1, ColorRGBX(
+                UInt8(vr ÷ 256 ÷ 255), UInt8(vg ÷ 256 ÷ 255),
+                UInt8(vb ÷ 256 ÷ 255), UInt8(va ÷ 256 ÷ 255)))
+        end
+    end
+
+    # Y pass, reading the transposed X result column-wise.
+    for y in 0:(image.height - 1)
+        for x in 0:(image.width - 1)
+            vr = vg = vb = va = 0
+            for yy in (y - r):(min(y + r, 0) - 1)
+                ki = Int(kernel[yy - y + r + 1])
+                vr += ob[1] * ki
+                vg += ob[2] * ki
+                vb += ob[3] * ki
+                va += ob[4] * ki
+            end
+            for yy in max(y - r, 0):min(y + r, image.height - 1)
+                smp = getColor(blurX, yy + 1, x + 1)
+                ki = Int(kernel[yy - y + r + 1])
+                vr += Int(smp.r) * ki
+                vg += Int(smp.g) * ki
+                vb += Int(smp.b) * ki
+                va += Int(smp.a) * ki
+            end
+            for yy in max(y - r, image.height):(y + r)
+                ki = Int(kernel[yy - y + r + 1])
+                vr += ob[1] * ki
+                vg += ob[2] * ki
+                vb += ob[3] * ki
+                va += ob[4] * ki
+            end
+            set_pixel(image, x + 1, y + 1, ColorRGBX(
+                UInt8(vr ÷ 256 ÷ 255), UInt8(vg ÷ 256 ÷ 255),
+                UInt8(vb ÷ 256 ÷ 255), UInt8(va ÷ 256 ÷ 255)))
+        end
+    end
+    return nothing
+end
+
+blur(image::Image, radius::Float32, outOfBounds::ColorRGBA) =
+    blur(image, radius, rgbx(outOfBounds))
+blur(image::Image, radius::Float32, outOfBounds::ColorRGB) =
+    blur(image, radius, rgbx(outOfBounds))
+
+"""
+Resize to (width, height) (upstream `resize`): a copy when the size is
+unchanged, else an OverwriteBlend `draw` under the box scale.
+"""
+function resize(srcImage::Image, width::Int, height::Int)
+    if width == srcImage.width && height == srcImage.height
+        return copy(srcImage)
+    end
+    result = newImage(width, height)
+    draw(
+        result, srcImage,
+        scale(Vec2(Float32(width) / Float32(srcImage.width),
+            Float32(height) / Float32(srcImage.height)));
+        blendMode = OverwriteBlend)
+    return result
+end
+
+"""
+Grow (spread > 0) or shrink (spread < 0) the mask in place (upstream
+`spread`): max/min pooling of alpha over a rounded `spread` window with
+early break at the extremum, the result written as an alpha-only mask
+(rgbx(0,0,0,a)); 0 is a no-op.
+"""
+function spread(image::Image, spread::Float32)
+    s = _roundRadius(spread)
+    s == 0 && return nothing
+    if s > 0
+        spreadX = newImage(image.height, image.width)
+        for y in 0:(image.height - 1)
+            for x in 0:(image.width - 1)
+                maxValue = UInt8(0)
+                for xx in max(x - s, 0):min(x + s, image.width - 1)
+                    v = getColor(image, xx + 1, y + 1).a
+                    if v > maxValue
+                        maxValue = v
+                    end
+                    if maxValue == 0xff
+                        break
+                    end
+                end
+                set_pixel(spreadX, y + 1, x + 1,
+                    ColorRGBX(0x00, 0x00, 0x00, maxValue))
+            end
+        end
+        for y in 0:(image.height - 1)
+            for x in 0:(image.width - 1)
+                maxValue = UInt8(0)
+                for yy in max(y - s, 0):min(y + s, image.height - 1)
+                    v = getColor(spreadX, yy + 1, x + 1).a
+                    if v > maxValue
+                        maxValue = v
+                    end
+                    if maxValue == 0xff
+                        break
+                    end
+                end
+                set_pixel(image, x + 1, y + 1,
+                    ColorRGBX(0x00, 0x00, 0x00, maxValue))
+            end
+        end
+    else
+        s = -s
+        spreadX = newImage(image.height, image.width)
+        for y in 0:(image.height - 1)
+            for x in 0:(image.width - 1)
+                minValue = UInt8(0xff)
+                for xx in max(x - s, 0):min(x + s, image.width - 1)
+                    v = getColor(image, xx + 1, y + 1).a
+                    if v < minValue
+                        minValue = v
+                    end
+                    if minValue == 0x00
+                        break
+                    end
+                end
+                set_pixel(spreadX, y + 1, x + 1,
+                    ColorRGBX(0x00, 0x00, 0x00, minValue))
+            end
+        end
+        for y in 0:(image.height - 1)
+            for x in 0:(image.width - 1)
+                minValue = UInt8(0xff)
+                for yy in max(y - s, 0):min(y + s, image.height - 1)
+                    v = getColor(spreadX, yy + 1, x + 1).a
+                    if v < minValue
+                        minValue = v
+                    end
+                    if minValue == 0x00
+                        break
+                    end
+                end
+                set_pixel(image, x + 1, y + 1,
+                    ColorRGBX(0x00, 0x00, 0x00, minValue))
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+Build a shadow image (upstream `shadow`): the source at `offset`
+(OverwriteBlend), grown by `spread`, blurred by `blur`, used as a mask
+over a `color`-filled canvas (MaskBlend draw).
+"""
+function shadow(image::Image, offset::Vec2, spreadPx::Float32, blurPx::Float32, color)
+    if offset == Vec2(0f0, 0f0)
+        mask = copy(image)
+    else
+        mask = newImage(image.width, image.height)
+        draw(mask, image, translate(offset); blendMode = OverwriteBlend)
+    end
+    spread(mask, spreadPx)
+    blur(mask, blurPx)
+
+    result = newImage(mask.width, mask.height)
+    fill(result, color)
+    draw(result, mask; blendMode = MaskBlend)
+    return result
+end
+
+"""
+Sub-image or padded super image (upstream `superImage`): inside the
+bounds it is `subImage`; fully outside, a transparent (w, h) image;
+else the source drawn at (-x, -y) over a transparent canvas.
+"""
+function superImage(image::Image, x::Int, y::Int, w::Int, h::Int)
+    if x >= 0 && x + w <= image.width && y >= 0 && y + h <= image.height
+        return subImage(image, x, y, w, h)
+    end
+    if abs(x) >= image.width || abs(y) >= image.height
+        return newImage(w, h)
+    end
+    result = newImage(w, h)
+    draw(result, image, translate(Vec2(Float32(-x), Float32(-y)));
+        blendMode = OverwriteBlend)
+    return result
+end
+
+"""
+Bounds of the non-transparent pixels (upstream `opaqueBounds`): a zero
+Rect when nothing is visible, otherwise the tight box of alpha != 0.
+"""
+function opaqueBounds(image::Image)
+    xMin = image.width
+    xMax = 0
+    yMin = image.height
+    yMax = 0
+    for y in 1:image.height
+        for x in 1:image.width
+            if getColor(image, x, y).a != 0x00
+                xMin = min(xMin, x - 1)
+                xMax = max(xMax, x)
+                yMin = min(yMin, y - 1)
+                yMax = max(yMax, y)
+            end
+        end
+    end
+    if xMax <= xMin || yMax <= yMin
+        return rect(0f0, 0f0, 0f0, 0f0)
+    end
+    return rect(Float32(xMin), Float32(yMin),
+        Float32(xMax - xMin), Float32(yMax - yMin))
+end

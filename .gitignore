@@ -1,0 +1,24 @@
+# Local Julia environments and generated coverage
+Manifest.toml
+Manifest-v*.toml
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+*.info
+.julia-build.log
+
+# Reference checkout and reproducible output
+.reference/
+artifacts/
+benchmark/results/
+docs/build/
+
+# Local secrets and editor/OS files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/*.local.json

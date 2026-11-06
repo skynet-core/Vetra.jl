@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Vetra: bootstrap",
+      "type": "process",
+      "command": "julia",
+      "args": [
+        "--startup-file=no",
+        "--project=.",
+        "scripts/bootstrap.jl"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Vetra: test",
+      "type": "process",
+      "command": "julia",
+      "args": [
+        "--startup-file=no",
+        "--project=.",
+        "scripts/check.jl"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Vetra: fetch pinned upstream",
+      "type": "process",
+      "command": "julia",
+      "args": [
+        "--startup-file=no",
+        "--project=.",
+        "scripts/fetch_upstream.jl"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+fixture=svg_Ghostscript_Tiger
+upstream_repo=https://github.com/treeform/pixie
+upstream_revision=30bb510877f02cbf9643e4f904e33d1c90f7910f
+deps=vmath@1b6080f4dc8114d2becaeb5f0944694f7e45794f; chroma@08b0d65590221bb964544fd9badf29a146b9091a; zippy@cd562ba43ae8904a4d1ba55611b8a521ef4a179e; flatty@9c3f14cc287890b742196b4f0f74f0b9faab29cb; nimsimd@ba71ac4e2927ba61e6d1bf75d0d124eacc714d1c; bumpy@93583f6f8056a6259aaa96c89f4c143ba55bc6f0; crunchy@98eb6526982bb8aae8eec6e8781f4539fa19e049
+toolchain=nim-2.2.12 (c backend, default flags, checks on)
+os=linux x86_64
+build_flags=-d:pixieNoSimd
+generator=tools/oracle/emit_fixtures.nim
+width=900
+height=900
+pixels=810000
+layout=row-major, R,G,B,A byte order per pixel
+alpha=premultiplied
+byte_length=3240000
+example=tests/.reference/upstream/tests/fileformats/svg/Ghostscript_Tiger.svg
+sha256_raw=f8c21aab993e78dbfb77e40e5d815e4b6351ba009dd7a2403b5ba06fce5de403

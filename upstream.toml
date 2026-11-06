@@ -1,0 +1,11 @@
+schema_version = 1
+repository = "https://github.com/treeform/pixie.git"
+revision = "30bb510877f02cbf9643e4f904e33d1c90f7910f"
+revision_date = "2026-09-13T16:46:58Z"
+inspected_on = "2026-10-27"
+declared_version = "6.1.0"
+license = "MIT"
+license_file = "third_party/upstream.LICENSE"
+minimum_nim = "2.0.0"
+# This pins the source, not the Nim toolchain or its transitive dependencies.
+# T001 must record those before reference outputs are accepted.
