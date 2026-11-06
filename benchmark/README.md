@@ -17,3 +17,8 @@ T011 harness (recorded in tasks/T011-release.md and docs/DECISIONS.md D016):
 - Results: `benchmark/results/{julia,nim}_<date>.tsv` (gitignored; the
   numbers are recorded in tasks/T011-release.md so a clone has the
   evidence). The comparison headline is the steady-state median.
+- CI (D018): `.github/workflows/ci.yml` runs `run_benchmarks.jl` (Julia
+  side only) on every push to `main` — it builds a throwaway env with
+  `Pkg.develop` + `Pkg.add("PNGFiles")` (the D014 opt-in) in
+  `$RUNNER_TEMP` and uploads the TSV as the `benchmark-results`
+  artifact. The Nim reference side stays local (pinned Nim toolchain).

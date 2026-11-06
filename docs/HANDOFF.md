@@ -18,6 +18,10 @@ faster on the text workload and within 1.2x on fill/stroke; gaps on
 draw/PNG are accepted for this release (D016 — no optimization against
 the parity gate without a separate reviewed task).
 
+CI (D018, 2026-11-06): unit tests run on every push/PR (matrix
+1.10/latest x ubuntu/windows/macos); a `benchmark` job runs the Julia
+side on every push to main and uploads the TSVs as an artifact.
+
 Remaining (policy, not technical): registration/publishing awaits an
 explicit user request; "Vetra" was checked available in the General
 registry on 2026-11-06 (404 at `P/Vetra`).

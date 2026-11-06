@@ -433,6 +433,35 @@ Evidence: full gate green after the scrub (811 407 assertions,
 coverage 98.0%); case-insensitive inventory shows only the kept
 categories above.
 
+## D018 — CI benchmark scope: Julia side, main pushes (accepted, 2026-11-06)
+
+Problem: run benchmarks in CI on every push to main, alongside the
+existing unit-test jobs.
+
+Chosen behavior: a `benchmark` job in .github/workflows/ci.yml, gated
+on `push` + `refs/heads/main`, ubuntu-latest, Julia latest. It fetches
+the pinned upstream (fonts), builds a throwaway env in `$RUNNER_TEMP`
+(`Pkg.develop` on the checkout + `Pkg.add("PNGFiles")` per the D014
+opt-in policy), runs `benchmark/run_benchmarks.jl`, and uploads
+`benchmark/results/` as an artifact. No pass/fail threshold — the TSVs
+are evidence, not a gate.
+
+Alternatives that matter: also build/run the Nim reference in CI
+(rejected — needs the pinned upstream checkout plus a Nim 2.2.6 toolchain
+that GitHub runners don't ship; the comparison is a frozen T011 record);
+run benchmarks on PRs/branches (rejected — runner timing is noisy and
+the user scoped this to pushes to main); a performance regression gate
+(rejected — no baseline store in CI to gate against yet; revisit with a
+dedicated task if requested).
+
+Compatibility impact: none; CI-only. The local commands in
+benchmark/README.md are unchanged.
+
+Evidence: the exact CI steps were dry-run locally end-to-end (fresh env
+bootstrap + benchmark run wrote a TSV); unit tests and both benchmark
+sides re-ran green the same day (811 407 assertions; medians within
+noise of the T011 table).
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

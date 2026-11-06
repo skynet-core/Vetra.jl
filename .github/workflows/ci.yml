@@ -32,3 +32,36 @@ jobs:
         run: julia --startup-file=no --project=. scripts/fetch_upstream.jl
       - name: Run package tests with bounds checks
         run: julia --startup-file=no --project=. scripts/check.jl
+
+  benchmark:
+    name: Benchmarks (Julia side)
+    # pushes to main only; the Nim reference side (bench_reference.nim) is
+    # local-only, needing the pinned upstream checkout + Nim 2.2.6 toolchain.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v2
+      - name: Fetch pinned upstream reference (fonts)
+        run: julia --startup-file=no --project=. scripts/fetch_upstream.jl
+      - name: Create benchmark env (Vetra + opt-in PNGFiles)
+        env:
+          BENCH_ENV: ${{ runner.temp }}/vetra-bench
+        run: |
+          mkdir -p "$BENCH_ENV"
+          julia --startup-file=no -e '
+            using Pkg
+            Pkg.activate(ENV["BENCH_ENV"])
+            Pkg.develop(path = pwd())
+            Pkg.add("PNGFiles")'
+          echo "BENCH_ENV=$BENCH_ENV" >> "$GITHUB_ENV"
+      - name: Run benchmarks
+        run: julia --startup-file=no --project="$BENCH_ENV" benchmark/run_benchmarks.jl
+      - name: Save results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark/results/

@@ -108,7 +108,8 @@ Commands:
 - `nim c -d:release -d:pixieNoSimd --path:.reference/upstream/src \
   --path:.reference/pkgs/{vmath,chroma,zippy,flatty,nimsimd,bumpy,crunchy}/src \
   -o:artifacts/benchmarks/pixie_ref benchmark/bench_reference.nim && \
-  artifacts/benchmarks/pixie_ref`
+  artifacts/benchmarks/pixie_ref` (re-verified 2026-11-06 after the
+  `.reference` dir rename; medians unchanged within noise)
 
 Steady-state results (median ms; mean in parentheses; raw TSVs in
 benchmark/results/{julia,nim}_2026-11-06.tsv, gitignored — numbers
