@@ -21,6 +21,11 @@ the parity gate without a separate reviewed task).
 CI (D018, 2026-11-06): unit tests run on every push/PR (matrix
 1.10/latest x ubuntu/windows/macos); a `benchmark` job runs the Julia
 side on every push to main and uploads the TSVs as an artifact.
+Windows fix (same day): `.gitattributes` forces `eol=lf` on text files
+and marks `*.raw` binary — CRLF conversion on Windows checkouts was
+corrupting the last column of fixture `.tsv` rows (readlines-based),
+red on every Windows job since the first push; verified with a
+`core.autocrlf=true` clone.
 
 Remaining (policy, not technical): registration/publishing awaits an
 explicit user request; "Vetra" was checked available in the General
