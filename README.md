@@ -15,6 +15,10 @@ arithmetic contract).
 
 ## Quick start
 
+**New to Vetra?** Follow the [hands-on tutorial](docs/TUTORIAL.md): build a
+dashboard graphic, then explore transforms, gradients, text, compositing,
+image formats, testing, and benchmarks. Every drawing example is runnable.
+
 Requires Julia **1.10+** (developed and tested on 1.10 and 1.13). The
 package is not yet registered (see docs/HANDOFF.md), so add it from a
 checkout:
@@ -23,8 +27,9 @@ checkout:
 julia -e 'using Pkg; Pkg.add(path="/path/to/Vetra.jl")'
 ```
 
-For the opt-in codecs (PNG/JPEG/SVG) use a separate environment, because
-this Julia build freezes precompiled dispatch at precompile time:
+For the opt-in codecs (PNG/JPEG/SVG), add their packages to your application
+environment before loading Vetra. Available codecs are loaded at runtime,
+including when Vetra reuses a cache built without them:
 
 ```sh
 julia -e 'using Pkg; Pkg.activate("/path/to/myenv", shared=true);

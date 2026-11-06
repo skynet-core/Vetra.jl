@@ -55,6 +55,20 @@ integrator. Split a task into a new ID if its spec grows beyond one wave.
 
 ## Completion evidence
 
+- Post-board local test fix (2026-11-06, D019): codec discovery moved from
+  precompile-time code into runtime initialization. A subprocess regression
+  reproduces core-only cache reuse in a codec-enabled environment. The user's
+  exact `Pkg.test()` command and `scripts/check.jl` pass on Julia 1.13.3;
+  coverage is 98.0% (5235/5342). Next: review/commit when requested.
+
+- Post-board tutorial (2026-11-06): [docs/TUTORIAL.md](docs/TUTORIAL.md)
+  builds an activity card, then covers image processing, compositing, SVG,
+  text layout, testing, and benchmarking. Linked from README and examples.
+  All 13 drawing blocks executed together with 18 assertions on Julia 1.13.3;
+  the documented benchmark command completed all eight workloads and the
+  full gate passed at 98.0% coverage. Next: user review of the tutorial;
+  no implementation task opened.
+
 - T000: package scaffold, agent documents, VS Code tasks, CI definition, upstream
   pin, and license notices created. Static validation only; no Julia runtime was
   available. T001 includes the first local Julia verification.

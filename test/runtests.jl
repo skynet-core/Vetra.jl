@@ -5,6 +5,8 @@ using Vetra
     @test Vetra isa Module
 end
 
+include("codec_loading_tests.jl")
+
 # T001: reference fixture reader + comparison harness and its tests.
 include("fixtures.jl")
 using .VetraRef

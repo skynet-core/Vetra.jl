@@ -694,12 +694,8 @@ const _XML_PKGID = Base.PkgId(
     Base.UUID("72c71f33-b9b6-44de-8c94-c961784809e2"), "XML")
 
 """
-The loaded `XML` module, or raise a clear install hint (D014). XML is
-required eagerly at module load when present (see end of file); this is
-what makes the codec callable: this build freezes precompiled code in the
-precompile-time world, and methods of a package first required at runtime
-dispatch as "too new". Environments without XML load normally and get this
-error only on use.
+The `XML` module loaded by Vetra.__init__, or a clear install hint (D014).
+Environments without XML load normally and get this error only on use.
 """
 function _requireXml()
     try
@@ -792,14 +788,4 @@ function parseSvg(data::String, width::Int = 0, height::Int = 0)
     end
     root === nothing && _svgFail()
     return parseSvg(_svgNodeFrom(root), width, height)
-end
-
-# Eager optional require (world-age fix, T008): load XML at module load
-# when it is in the environment, so its methods predate the frozen
-# precompile world and `parseSvg` is callable from precompiled code.
-# Environments without it load Vetra normally; `parseSvg` raises the
-# install hint on use.
-try
-    Base.require(_XML_PKGID)
-catch
 end

@@ -6,10 +6,10 @@ T011 harness (recorded in tasks/T011-release.md and docs/DECISIONS.md D016):
   shadow, draw, PNG encode/decode, text parse+layout+measure); first
   (cold) call, 3 warm-ups, 21 steady-state iterations (mean/min/median,
   ns timer) plus a separate allocation pass (bytes).
-  `julia --startup-file=no --project=/tmp/pngenv run_benchmarks.jl`
-  (the example env carries opt-in PNGFiles; delete
-  `~/.julia/compiled/v1.13/Vetra` first if the package was precompiled
-  in another env).
+  From the repository root:
+  `julia --startup-file=no --project=/tmp/pngenv benchmark/run_benchmarks.jl`
+  (replace `/tmp/pngenv` with an environment containing Vetra and PNGFiles;
+  see the [tutorial setup](../docs/TUTORIAL.md#1-set-up-a-reproducible-workspace)).
 - `bench_reference.nim` — the same workloads against pinned upstream
   pixie, built with `nim c -d:release -d:pixieNoSimd` (scalar, oracle
   paths; checks on). No per-call allocation counter in Nim — those

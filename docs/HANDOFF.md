@@ -4,6 +4,46 @@ Updated: 2026-11-06
 
 ## State
 
+Local `Pkg.test()` fix (2026-11-06, D019): reproduced 5 failures and 30
+errors in the format suite with the user's exact command. Vetra's cached
+module had skipped top-level optional codec loads during a core-only
+precompile. `Vetra.__init__` now discovers and loads available codecs in the
+current environment. No cache clearing or explicit codec imports are needed.
+New `test/codec_loading_tests.jl` (included in runtests) first loads the core
+without codecs, then tests PNG/JPEG/SVG in a codec-enabled process sharing
+the cache; it failed before the fix and passes after it.
+
+Verified on Julia 1.13.3:
+- `julia --startup-file=no --project=. -e 'using Pkg; Pkg.test()'` — passed.
+- `julia --startup-file=no --project=. scripts/check.jl` — passed,
+  98.0% coverage (5235/5342 measurable source lines).
+DeepSeek review was attempted but blocked by insufficient account funds.
+Existing tutorial work was preserved, with obsolete cache workarounds removed.
+Next: review/commit when requested; this fix has not been committed or pushed.
+
+Tutorial follow-up (2026-11-06): `docs/TUTORIAL.md` is a 14-section,
+project-based guide, linked from the root and examples READMEs. It builds
+an activity card and explains coordinates/alpha/mutation, paths, gradients,
+transforms, clips, fonts, effects, compositing, formats, layout, tests,
+and benchmarks. Examples reflect actual source APIs, including binary-string
+QOI output, plain base64 payloads, image-space clips, and unsaved textBaseline.
+
+Verification: the setup commands created `artifacts/tutorial-env`; all 13
+drawing blocks were extracted verbatim into ignored `artifacts/tutorial.jl`
+and passed 18 assertions with
+`julia --startup-file=no --project=artifacts/tutorial-env artifacts/tutorial.jl`
+on Julia 1.13.3. The images are in ignored `artifacts/tutorial/`.
+The documented benchmark command
+`julia --startup-file=no --project=artifacts/tutorial-env -e 'using PNGFiles; include("benchmark/run_benchmarks.jl")'`
+completed all eight workloads. The command
+`julia --startup-file=no --project=. scripts/check.jl` passed (98.0%,
+5230/5337 measurable source lines). Local Markdown links/anchors and
+`git diff --check` passed. The explicit-codec-import workaround used for
+that first tutorial verification is now superseded by the D019 runtime fix.
+DeepSeek review was attempted but unavailable (insufficient account funds);
+API claims were checked directly against source. Next: user review; these
+documentation changes have not been committed or pushed.
+
 **T000–T011 are complete — the board is done.** The port covers: core
 pixels/compositing, geometry, paths/fills, strokes + full context
 (state stack, clip/saveLayer/globalAlpha, `isPointInPath`, dash patterns

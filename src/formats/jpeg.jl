@@ -20,13 +20,9 @@ const _JPEGTURBO_PKGID = Base.PkgId(
     Base.UUID("b835a17e-a41a-41e7-81f0-2f016b05efe0"), "JpegTurbo")
 
 """
-The loaded `JpegTurbo` module, or raise a clear install hint (D014).
-JpegTurbo is required eagerly at module load when present (see end of
-file); that is what makes the codec callable: this build freezes
-precompiled code in the precompile-time world, and methods of a package
-first required at runtime dispatch as "too new" even under
-`Base.invokelatest`. Environments without it load normally and get this
-error only on use.
+The `JpegTurbo` module loaded by Vetra.__init__, or a clear install hint
+(D014). Environments without JpegTurbo load normally and get this error
+only on use.
 """
 function _requireJpegTurbo()
     try
@@ -302,14 +298,4 @@ function decodeJPEGDimensions(data::Vector{UInt8})
     else
         _jpegFail("invalid orientation")
     end
-end
-
-# Eager optional require (world-age fix, T008): load JpegTurbo at module
-# load when it is in the environment, so its methods predate the frozen
-# precompile world and `decodeJPEG` is callable from precompiled code.
-# Environments without it load Vetra normally; `decodeJPEG` raises the
-# install hint on use. (Dimensions need no package.)
-try
-    Base.require(_JPEGTURBO_PKGID)
-catch
 end

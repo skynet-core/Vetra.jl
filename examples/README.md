@@ -1,5 +1,8 @@
 # Examples
 
+For a step-by-step project with explanations, start with the
+[dashboard tutorial](../docs/TUTORIAL.md).
+
 All examples run with `julia --project=. examples/<name>.jl [input] [output]`
 and default to the pinned upstream fixtures in
 `.reference/upstream/tests/fileformats/`, writing under `artifacts/examples/`.

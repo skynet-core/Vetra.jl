@@ -375,4 +375,13 @@ include("formats/gif.jl")
 include("formats/jpeg.jl")
 include("formats/io.jl")
 
+function __init__()
+    # Optional packages depend on the active environment, not the precompile cache.
+    for id in (_PNGFILES_PKGID, _JPEGTURBO_PKGID, _XML_PKGID)
+        if Base.locate_package(id) !== nothing
+            Base.require(id)
+        end
+    end
+end
+
 end # module Vetra

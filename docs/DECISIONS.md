@@ -285,6 +285,7 @@ Chosen behavior, per format:
 
 Opt-in mechanics (D014 extension of the T008 design): the three packages
 are `[extras]`, not `[deps]`; `Project.toml` gains no hard dependency.
+The original precompile-time loading mechanism below is superseded by D019.
 `Vetra` requires each package eagerly **at module load when present**
 (`Base.require` behind a try/catch in `src/formats/{png,jpeg,svg}.jl`);
 environments without them load normally and get an install-hint
@@ -461,6 +462,31 @@ Evidence: the exact CI steps were dry-run locally end-to-end (fresh env
 bootstrap + benchmark run wrote a TSV); unit tests and both benchmark
 sides re-ran green the same day (811 407 assertions; medians within
 noise of the T011 table).
+
+## D019 — Discover optional codecs at runtime initialization (accepted, 2026-11-06)
+
+Problem: ordinary `Pkg.test()` reused a Vetra cache built in an environment
+without codecs. Top-level `Base.require` calls had silently skipped absent
+packages during precompilation and did not run again. PNG/JPEG/SVG tests
+then raised install hints even though their packages were in the test target.
+The coverage gate had passed, so it did not expose this cache-dependent failure.
+
+Chosen behavior: replace the three top-level try/require blocks with one
+`Vetra.__init__` loop. For each existing codec PkgId, `Base.locate_package`
+checks the current environment and `Base.require` loads an available package.
+Missing codecs remain optional; errors from installed codecs are not swallowed.
+Install codecs before loading Vetra, or restart after adding them. No dependency
+or public API changes; this supersedes D014's precompile-time loading mechanism.
+
+Alternatives: deleting caches, disabling precompilation, or importing codecs
+in the tests would mask the runtime defect and leave applications affected.
+
+Evidence: `test/codec_loading_tests.jl` reproduces core-only then codec-enabled
+loading in separate processes sharing a temporary-depot cache. It failed on
+the old code and passes with PNG round-trip, JPEG decode, and SVG rendering.
+The exact user command `julia --startup-file=no --project=. -e 'using Pkg; Pkg.test()'`
+and `julia --startup-file=no --project=. scripts/check.jl` both pass locally
+on Julia 1.13.3; coverage is 98.0% (5235/5342 measurable source lines).
 
 ## Adding a decision
 

@@ -16,20 +16,17 @@
 #   spec; upstream's own decoder (png.nim L641-756) produces identical
 #   pixels for valid files.
 #
-# PNG support is opt-in (D014): `PNGFiles` is required eagerly at module
-# load when present (see end of file); a missing package makes the PNG
+# PNG support is opt-in (D014): `PNGFiles` is loaded by Vetra.__init__
+# when available in the active environment; a missing package makes the PNG
 # entry points raise `ErrorException` with the install hint on use.
 
 const _PNGFILES_PKGID = Base.PkgId(
     Base.UUID("f57f5aa1-a3ce-4bc8-8ab9-96f992907883"), "PNGFiles")
 
 """
-The loaded `PNGFiles` module, or raise a clear install hint (D014). PNGFiles
-is required eagerly at module load when present (see end of file); this is
-what makes the codec callable: this build freezes precompiled code in the
-precompile-time world, and methods of a package first required at runtime
-dispatch as "too new" even under `Base.invokelatest`. Environments without
-PNGFiles load normally and get this error only on use.
+The `PNGFiles` module loaded by Vetra.__init__, or a clear install hint
+(D014). Environments without PNGFiles load normally and get this error
+only on use.
 """
 function _requirePngFiles()
     try
@@ -153,14 +150,4 @@ function decodePNGDimensions(data::Vector{UInt8})
     w = be32(17)
     h = be32(21)
     return (w, h)
-end
-
-# Eager optional require (world-age fix, T008): load PNGFiles at module load
-# when it is in the environment, so its methods predate the frozen
-# precompile world and are callable from precompiled code. Environments
-# without it load Vetra normally; the PNG entry points raise the install
-# hint on use.
-try
-    Base.require(_PNGFILES_PKGID)
-catch
 end

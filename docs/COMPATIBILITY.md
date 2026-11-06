@@ -68,6 +68,13 @@ what the pixie modules themselves use (see docs/NUMERICAL_CONTRACT.md).
 
 ## Images, formats, text (T006, T008, T009)
 
+Optional PNG/JPEG/SVG packages are discovered and loaded during runtime
+module initialization (D019), including when the precompile cache was built
+in a core-only environment. Absent packages still produce install hints on
+format use; installed packages that fail to load propagate their actual error.
+Evidence: `test/codec_loading_tests.jl` covers core-only cache reuse followed
+by PNG, JPEG, and SVG operations in the codec-enabled test environment.
+
 - Examples: square, line, heart (`examples/*.jl`, shared builders in
   `examples/common.jl`) — **implemented** (T006); each matches its pinned
   `.raw` fixture with 0 mismatching bytes, and the `.ppm` payload equals the
