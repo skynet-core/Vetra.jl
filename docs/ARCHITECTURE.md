@@ -1,45 +1,61 @@
-# Proposed architecture
+# Architecture
 
-Everything below is the original design plan; the board is complete
-(T000-T011, see docs/HANDOFF.md) and the module layout followed it.
-The public surface is defined in docs/API.md (D011, Flutter-inspired); task
-specs in tasks/ bind each wave to it.
+Vetra is one Julia module with a CPU rasterizer. The pinned upstream revision
+in `upstream.toml` supplies the numerical contract; the Julia implementation
+does not invoke Nim at runtime.
 
-| Area | Candidate files under src/ | Responsibility |
-| --- | --- | --- |
-| Foundation | colors.jl, geometry.jl, images.jl | Pixel representation, affine geometry, buffers |
-| Compositing | blends.jl | Scalar premultiplied pixel arithmetic |
-| Paths | paths.jl, rasterizer.jl, strokes.jl | Commands, flattening, coverage, stroke geometry |
-| Painting | paints.jl | Solids, gradients, image sampling |
-| Image operations | effects.jl | Masks, resizing, blur, shadows |
-| Context | context.jl | Drawing state, transforms, clips, convenience methods |
-| Formats | formats/ | Encoders, decoders, SVG adapter |
-| Text | fonts/, text.jl | Font data, outlines, metrics, layout |
-| Optional optimization | simd/ | Measured, behavior-preserving accelerated paths |
+## Source layout
 
-Use one public Vetra module initially; internal files can be included without
-introducing a deep module hierarchy. Dependencies should flow from the
-higher-level areas to foundation types. Keep codecs and font backends behind
-small interfaces so their eventual dependency policy does not define the
-rasterizer's design.
+| File or directory | Responsibility |
+| --- | --- |
+| `src/Vetra.jl` | Colors, image storage, alpha conversion, core compositing, exports, codec initialization |
+| `src/geometry.jl` | Float32 vectors, affine matrices, geometry |
+| `src/paths.jl` | Path commands, SVG path parsing, curve flattening |
+| `src/rasterizer.jl` | Scan conversion, coverage, solid fills, filled-path hit testing |
+| `src/blends.jl` | Blend modes and pixel compositing |
+| `src/paints.jl` | Color parsing, gradients, image paints, painted fills |
+| `src/strokes.jl` | Stroke outlines, caps, joins, dash patterns |
+| `src/image_ops.jl` | Image drawing, sampling, resizing, masks, blur, shadows |
+| `src/context.jl` | Drawing state, transforms, clips, layers, convenience API |
+| `src/fontformats/` | OpenType parsing and pinned Unicode case tables |
+| `src/formats/fonts.jl` | Typeface/font objects, text layout and rendering |
+| `src/formats/` | Format-specific readers/writers, SVG adapter, image I/O dispatch |
 
-## Contracts to settle in T001/T002
+## Data flow
 
-- Stored channel order, premultiplied alpha invariant, and straight-alpha I/O.
-- Pixel buffer layout and the mapping between image coordinates and Julia indices.
-- Inclusive/exclusive bounds, clipping, invalid image dimensions, and overflow.
-- Numeric types for geometry and transforms; exact rounding at pixel boundaries.
-- Transform multiplication order, coordinate origin, and curve tolerances.
-- Public argument and error conventions, including allocating vs mutating APIs.
+`Context` builds or accepts a `Path` and supplies its transform and `Paint`.
+Paths are flattened into shapes; fills compute coverage, while strokes first
+build outlines. The rasterizer composites into `Image.data`, a contiguous,
+row-major, premultiplied RGBA byte buffer. Gradients and image paints use
+intermediate masks; context layers use additional image buffers.
 
-Treat the previous discussion of Float32 geometry and fixed-point rasterization
-as an investigation lead. Verify the exact pinned code before choosing Julia
-types; never infer arithmetic semantics only from a type name.
+Font parsing yields glyph outlines and metrics. Text layout positions those
+outlines, and text rendering uses the same path machinery. Image codecs
+convert between the stored premultiplied bytes and their external formats.
+The PNG conversion loop is behind a function barrier so the compiler can
+specialize on the optional codec's concrete pixel type.
 
-## Performance approach
+## Dependencies and extension points
 
-Establish scalar parity first. Use concrete storage and small functions with
-explicit allocation behavior. Warm up Julia before timing, record allocations,
-and separate first-call latency from steady-state rendering. Preserve a scalar
-reference path before adding SIMD or threads. Do not call out to the
-upstream reference implementation as the rendering backend.
+The renderer has no hard external package dependencies. PNGFiles, JpegTurbo,
+and XML are opt-in packages, discovered in `__init__` for the active environment
+(D014/D019). Native font parsing follows D015. Documentation dependencies
+live separately in `docs/Project.toml`.
+
+GPU backends, command recording, and widgets remain future work; there is no
+implemented backend plugin interface. Keep future rendering changes behind
+the existing drawing API and numerical contract rather than adding placeholders.
+
+## Development and validation
+
+- [API](API.md): coordinate, alpha, mutation, and public API conventions.
+- [Compatibility](COMPATIBILITY.md): supported behavior with test evidence.
+- [Numerical contract](NUMERICAL_CONTRACT.md): arithmetic and rounding rules.
+- [Upstream](UPSTREAM.md) and [NOTICE](../NOTICE): provenance and attribution.
+- [Test strategy](../test/README.md): independent expectations and coverage gate.
+- [Benchmarks](../benchmark/README.md): comparable scalar workloads.
+
+Start with scalar correctness. Keep optimizations only after measurement and
+the fixture gate; do not use fast math or unsafe indexing without the recorded
+justification required by AGENTS.md. Historical work lives in `tasks/` and
+[DECISIONS.md](DECISIONS.md); [HANDOFF.md](HANDOFF.md) contains only current state.

@@ -15,7 +15,13 @@ arithmetic contract).
 
 ## Quick start
 
-**New to Vetra?** Follow the [hands-on tutorial](docs/TUTORIAL.md): draw a
+**New to Vetra?** Start with the [beginner Markdown guide](docs/GETTING_STARTED.md):
+draw an activity card while learning shapes, gradients, text, clipping,
+image compositing, and PNG export. Continue to curves, fill rules, layers,
+blend modes, SVG import, and reusable drawing functions. Its code blocks run
+in order in one session, with exercises and troubleshooting along the way.
+
+Then follow the [hands-on chart tutorial](docs/TUTORIAL.md): draw a
 crypto OHLC candlestick chart step by step, render it to PNG, and build a
 small SVG backend. Executed Markdown and a Jupyter notebook with inline
 images generate from one Literate.jl source.
@@ -125,68 +131,64 @@ scalar Nim reference is the comparison target (recorded in
 | png_decode_basic1_x10 | 67.27 ms | **1.50 ms** | 1.17 ms |
 | text_parse_layout_x100_measure_x20 | 1.26 ms | **1.25 ms** | 1.99 ms |
 
-Steady-state medians in milliseconds (3-run medians, same machine).
-All renderer workloads now match or beat the scalar Nim reference,
-except stroke (1.17×) and draw (1.28×), whose remaining gap is scalar
-Julia codegen in the pinned row-scan rasterizer. PNG decode was
-dominated by our boundary conversion, not the codec (per-pixel generic
-dispatch through `invokelatest`, `isdefined` per channel, fixed-point
-Float64 round-trips): after the kernel-function rewrite it is 1.28× the
-reference. PNG encode remains codec-bound: the libpng compression
-inside the opt-in PNGFiles package (D014) takes ~2.1 ms of the ~2.3 ms
-per image.
+Historical steady-state medians in milliseconds (median of three run medians,
+same machine; Nim values from T011). Julia was faster on fill, blur, shadow,
+and text in these workloads, and slower on stroke, draw, and PNG I/O.
+The PNG decode function barrier removed substantial per-pixel dynamic dispatch.
+PNG encoding still spends substantial time in `PNGFiles.save`; those timings
+include package conversion and I/O as well as libpng compression, and do not
+establish a codec performance floor. The remaining stroke/draw gaps have not
+been attributed conclusively. These are scalar-reference comparisons, not
+claims about every image size, scene, or SIMD-enabled upstream build.
 Full records, the rejected alternatives, and method notes:
 `tasks/T012-optimization.md` and `docs/DECISIONS.md` D021.
 
 ## Profiling
 
-What works in this project's pinned environment (the T012 pass was
-profiled this way; records in `tasks/T012-optimization.md`):
-
-**Per-function wall time + allocation** — the primary method:
+Measure warmed-up functions with inputs passed as arguments. This keeps
+compilation and untyped global variables out of the drawing measurement:
 
 ```julia
-using Vetra
-img = newImage(256, 256); fill(img, rgb(0, 0, 0))
-ctx = Context(img)
-ctx.fillStyle = Paint(rgba(255, 0, 0, 255))
-for _ in 1:200   # warm-up: the first timed calls absorb JIT compilation
-    fillRect(ctx, 10f0, 10f0, 10f0, 10f0)
+using Vetra, Profile, InteractiveUtils
+
+function draw_batch!(ctx, n)
+    for _ in 1:n
+        fillRect(ctx, 10f0, 10f0, 10f0, 10f0)
+    end
+    return nothing
 end
-t0 = time_ns()
-for _ in 1:1000
-    fillRect(ctx, 10f0, 10f0, 10f0, 10f0)
-end
-println((time_ns() - t0) / 1000 / 1e3, " µs per call")
-println(@allocated fillRect(ctx, 10f0, 10f0, 10f0, 10f0), " bytes per call")
+
+ctx = Context(256, 256)
+ctx.fillStyle = rgba(255, 0, 0, 255)
+draw_batch!(ctx, 200)
+seconds = @elapsed draw_batch!(ctx, 1000)
+bytes = @allocated draw_batch!(ctx, 1)
+println(seconds * 1e6 / 1000, " µs per call")
+println(bytes, " bytes per call")
+
+@code_warntype draw_batch!(ctx, 1)
+Profile.clear()
+@profile draw_batch!(ctx, 100_000)
+Profile.print(format = :flat, sortedby = :count)
 ```
 
-**Allocation trace** — `--track-allocation=user` writes a copy of the
-script annotated with per-line allocation bytes (allocations made inside
-functions are attributed to the calling line; `-` means none; big number
-= hotspot):
+`@code_warntype` shows inferred types; `Profile.print` displays sampled hot
+spots. For an interactive flame graph, install ProfileView in a profiling
+environment and run `using ProfileView; ProfileView.view()` after sampling.
+If a short workload yields no samples, increase its repetitions. T012 recorded
+local sampling difficulties; their cause was not established and does not
+imply a limitation of Julia's profiler.
 
-```
-$ julia --startup-file=no --project=. --track-allocation=user myscript.jl
-$ cat myscript.jl.<pid>.mem
-         0 for i in 0:99
-      6400     fillRect(ctx, x, y, 10f0, 10f0)
-         0 end
-```
+For line-level allocation traces, run
+`julia --startup-file=no --project=. --track-allocation=user myscript.jl`
+and inspect the generated `*.mem` files. Warm up first and call
+`Profile.clear_malloc_data()` before the measured workload to reset allocation
+counters. A `-` is not a measured allocation count; it should not be interpreted
+as proof of zero allocation. Generated coverage and allocation files are ignored.
 
-**Type stability** — `@code_warntype` highlights non-concrete (potentially
-slow) types, e.g. `@code_warntype Vetra.fillShapes(img, shapes, c, NonZero)`.
-
-**End-to-end workloads** — `benchmark/run_benchmarks.jl` reports cold
-first call, warm-up, and steady-state medians per workload (see the
-Benchmarks table above).
-
-Note: on a stock Julia installation the first resort is the sampling
-profiler — `Profile.clear(); @profile f(); Profile.print()`, or
-ProfileView.jl to browse the call tree. The Julia build this project is
-pinned against collects **zero samples** from it (verified on 20-second
-workloads with `Profile.init(1_000_000, 0.0005)`), which is why the
-timing/allocation method above is the documented one here.
+For repeatable end-to-end comparisons use the [benchmark harness](benchmark/README.md).
+See Julia's [performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/)
+for function barriers, type stability, and measurement guidance.
 
 ## License
 

@@ -707,12 +707,6 @@ function _requireXml()
     end
 end
 
-"""The loaded `XML` module (call `_requireXml` first); PkgId lookup, since
-`require` binds into Main and module Vetra has no static import for it."""
-function _xmlModule()
-    return Base.root_module(_XML_PKGID)
-end
-
 """True for `XML` element nodes (text/comments/xml-decl are skipped).
 Only Element nodes carry a non-`nothing` `tag` (verified on XML v0.4.7;
 this build materializes `NodeType` enum values without named constants,

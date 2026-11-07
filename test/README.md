@@ -4,7 +4,8 @@ The suite runs via `test/runtests.jl` (explicit includes per feature, so
 each file runs in the default `Pkg.test()`), and the gate is
 `julia --startup-file=no --project=. scripts/check.jl` (all tests + the
 >95% `src/` coverage gate per D009). Current totals: ~811k assertions
-(see docs/HANDOFF.md for the per-suite breakdown).
+(historical per-suite evidence in tasks/T011-release.md; latest verification
+in docs/HANDOFF.md).
 
 ## Layers
 

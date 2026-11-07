@@ -4,6 +4,7 @@ Manifest-v*.toml
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
+*.jl.*.mem
 *.info
 .julia-build.log
 

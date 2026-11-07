@@ -10,7 +10,7 @@ buffers and add a minimal lossless output route.
 - Fixtures: `test/reference/square.{raw,meta,png}`,
   `line.{raw,meta,png}`, `heart.{raw,meta,png}`; reader/compare harness in
   `test/fixtures.jl` (`VetraRef.read_raw`, `compare_pixels`, `Mismatch`).
-- docs/ROADMAP.md M1: PNG byte equality is not a criterion; canonical `.raw`
+- docs/UPSTREAM.md: PNG byte equality is not a criterion; canonical `.raw`
   buffers are.
 - D008: minimal lossless writer for this milestone (PPM P6 is the planned
   native choice; record it in DECISIONS via the coordinator).

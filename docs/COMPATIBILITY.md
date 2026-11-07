@@ -1,14 +1,14 @@
 # Compatibility inventory
 
-Status: **T010 — everything implemented**: colors, images, geometry, paths,
+Status: **pinned-scope port complete (T010), optimized in T012**: colors, images, geometry, paths,
 fills/strokes, every `Paint` kind and blend mode, image drawing, the full
 context (state stack, mask/clip/layers, `globalAlpha`, `isPointInPath`,
 dash patterns in strokes), image effects, all codecs except WebP, SVG
 (pinned subset), base64, fonts/text, and the pinned + per-format examples
 (D010–D015; evidence below and in tasks/T002–T010). The inventory comes
-from the pinned source at 30bb510 (see upstream.toml); "Julia status" is
-`not implemented` until a linked task delivers tests and (where relevant)
-fixture evidence.
+from the pinned source at 30bb510 (see upstream.toml). Supported subsets and
+intentional omissions are listed below; completion does not imply unrestricted
+SVG, font, or third-party API compatibility.
 
 Scope note: `pixie.nim` re-exports `bumpy`, `chroma`, `vmath` wholesale;
 those third-party APIs are reference material, not a parity obligation beyond
@@ -57,7 +57,7 @@ what the pixie modules themselves use (see docs/NUMERICAL_CONTRACT.md).
 | --- | --- | --- | --- |
 | `PaintKind`, `Paint`, `ColorStop`, `newPaint`, `copy`, `colorStop`, `Paint(color/image/kind)`, mutable `color`/`opacity`/`blendMode`/`image`/`imageMat`/gradient fields | `pixie/paints.nim` | **implemented** (T005 solid; T007a every kind). `color`/stop colors are straight `ColorRGBA` per D010; `opacity` clamped 0..1 in place at draw entry; `copy` is independent | test/paint_tests.jl "newPaint defaults", "copy independence", "colorStop" |
 | `gradientColor` (internal), `fillGradientLinear`/`Radial`/`Angular`/`fillGradient` | `pixie/paints.nim` | **implemented** (T007a); upstream stop clamping, float32 `lerp`, opacity-before-premultiply, and handle-count errors preserved | test/paint_tests.jl gradient endpoints/midpoints, radial/angular hand checks |
-| `parseHtmlColor` (`#RGB`/`#RRGGBB`), `parseSomePaint` | chroma, `pixie/paints.nim` | **partially implemented** (T005, unchanged in T007a): hex subset only; `rgb()`/`rgba()`/named colors raise `ArgumentError` | test/context_tests.jl hex parsing; recorded deviation |
+| `parseHtmlColor`, `parseSomePaint` | chroma, `pixie/paints.nim` | **implemented**: `#RGB`/`#RRGGBB`, numeric `rgb()`/`rgba()`, case-insensitive named CSS colors; unknown names and malformed input raise `ArgumentError` | test/context_tests.jl hex, named-color, and rgb/rgba parsing tests; T013 corrects the stale hex-only inventory |
 
 ## Image operations and effects (T007a, T007b)
 

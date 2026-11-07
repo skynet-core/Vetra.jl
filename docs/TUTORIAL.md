@@ -1,5 +1,8 @@
 # Executable OHLC chart tutorial
 
+New to the drawing API? Start with the [basics-to-advanced Markdown guide](GETTING_STARTED.md)
+for shapes, gradients, text, clipping, images, PNG export, layers, and blending.
+
 Draw a 24-hour crypto candlestick (OHLC) chart with Vetra, render it to
 PNG, then build a small SVG backend step by step and prove the result by
 reading the SVG back through the library's own parser.

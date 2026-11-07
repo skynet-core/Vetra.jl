@@ -6,7 +6,7 @@ and complete the release/licensing audit.
 
 ## Inputs and upstream references
 
-- docs/ROADMAP.md M4; AGENTS.md performance rules (scalar parity first, no
+- AGENTS.md performance rules (scalar parity first, no
   `@fastmath`/SIMD/threads without a recorded benchmark).
 - Pinned upstream toolchain and examples; benchmark workload must be the same
   for the Julia and Nim reference runs (record commands and versions).

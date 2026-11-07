@@ -54,8 +54,7 @@ straight RGBA in, premultiplied stored pixels out.
 """
 function decodePNG(data::Vector{UInt8})
     _requirePngFiles()
-    # Pre-declare `pixels`: this build loses locals first assigned inside a
-    # try block (verified; see T008 notes).
+    # Keep the decoded matrix in scope after the try block.
     pixels = nothing
     try
         pixels = _pngLoad(data)
@@ -113,14 +112,12 @@ stored pixels are converted to straight RGBA (our `toStraightAlpha`, the
 upstream `toStraightAlpha` path) before encoding.
 """
 function encodePNG(image::Image)
-    _requirePngFiles()
+    png = _requirePngFiles()
     d = image.data
     w = image.width
     h = image.height
     # PNGFiles.save expects a column-major (height, width, 4) RGBA array.
-    # Fill a flat buffer with that exact linear layout ((c-1)*w*h + x*h + y)
-    # and `reshape` it: 1-D indexing into the 3-D array directly would pay
-    # an ind2sub per channel store.
+    # Fill its linear layout ((c-1)*w*h + x*h + y), then reshape without copying.
     out = Vector{UInt8}(undef, h * w * 4)
     plane = w * h
     @inbounds for y in 0:(h - 1)
@@ -129,33 +126,20 @@ function encodePNG(image::Image)
             i = srow + 4 * x
             a = d[i + 4]
             k = x * h + y
-            if a == 0x00
-                # toStraightAlpha's zero branch.
-                out[k + 1] = 0x00
-                out[k + plane + 1] = 0x00
-                out[k + 2 * plane + 1] = 0x00
-                out[k + 3 * plane + 1] = 0x00
-            elseif a == 0xff
-                # Opaque: straight == premultiplied (round(v * 1.0) == v).
-                out[k + 1] = d[i + 1]
-                out[k + plane + 1] = d[i + 2]
-                out[k + 2 * plane + 1] = d[i + 3]
-                out[k + 3 * plane + 1] = a
-            else
-                # toStraightAlpha: UInt8(min(roundHalfAway(v * 255.0/a), 255))
-                mult = 255.0 / Int(a)
-                out[k + 1] = UInt8(min(roundHalfAway(Float64(d[i + 1]) * mult), 255))
-                out[k + plane + 1] = UInt8(min(roundHalfAway(Float64(d[i + 2]) * mult), 255))
-                out[k + 2 * plane + 1] = UInt8(min(roundHalfAway(Float64(d[i + 3]) * mult), 255))
-                out[k + 3 * plane + 1] = a
-            end
+            # Opaque pixels need no conversion; share the pinned formula otherwise.
+            c = a == 0xff ? ColorRGBA(d[i + 1], d[i + 2], d[i + 3], a) :
+                toStraightAlpha(ColorRGBX(d[i + 1], d[i + 2], d[i + 3], a))
+            out[k + 1] = c.r
+            out[k + plane + 1] = c.g
+            out[k + 2 * plane + 1] = c.b
+            out[k + 3 * plane + 1] = c.a
         end
     end
     try
         buf = IOBuffer()
-        _requirePngFiles().save(buf, reshape(out, h, w, 4))
+        png.save(buf, reshape(out, h, w, 4))
         seekstart(buf)
-        return read(buf) # Vector{UInt8} in this build
+        return read(buf)
     catch
         throw(ArgumentError("Unexpected error compressing PNG image data"))
     end

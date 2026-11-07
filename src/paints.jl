@@ -20,9 +20,7 @@
 # then applies the paint's opacity to the *mask*; `draw(fill, mask, MaskBlend)`
 # composites the fill through the mask. The angular-gradient handle-count
 # error message reads "2 handles" like upstream (the check is 3).
-# `parseHtmlColor` keeps the implemented `#RGB`/`#RRGGBB` subset
-# (chroma parseHtmlHex/Tiny); `rgb()`/`rgba()`/named colors raise
-# ArgumentError and land with their parser port, not silently.
+# `parseHtmlColor` accepts hex, rgb()/rgba(), and named CSS colors.
 
 """Upstream `PaintKind` enum order (stable values 0..5)."""
 struct PaintKind

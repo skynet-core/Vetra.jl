@@ -9,7 +9,8 @@ https://github.com/treeform/pixie/tree/30bb510877f02cbf9643e4f904e33d1c90f7910f
 The inspected manifest declares version 6.1.0 and Nim >= 2.0.0.
 Its dependencies are vmath, chroma, zippy, flatty, nimsimd, bumpy, and crunchy,
 with minimum version constraints. Those constraints do **not** make a reference
-build reproducible; record resolved commits/versions as part of T001.
+build reproducible; resolved dependency revisions are pinned in upstream.toml
+and recorded in T001 and fixture metadata.
 
 ## Fetch
 
@@ -25,9 +26,9 @@ commit and expected origin. If a previous download was interrupted or the
 checkout differs, inspect and move that directory aside before retrying; the
 script never resets it for you.
 
-After fetching, the reference analyst should inspect upstream build/test commands,
-choose a Nim toolchain, and record actual resolved dependency versions and flags.
-Do not assume that a successful source checkout is a successful reference build.
+Oracle build commands and toolchain records are in `tools/oracle/build.sh`,
+`test/reference/README.md`, and the task specifications. A source checkout
+alone does not establish a successful reference build.
 
 ## Initial source inventory
 
@@ -56,9 +57,10 @@ Inspect the pinned files for exact API calls and path data. Commit URLs:
 - https://github.com/treeform/pixie/blob/30bb510877f02cbf9643e4f904e33d1c90f7910f/examples/line.nim
 - https://github.com/treeform/pixie/blob/30bb510877f02cbf9643e4f904e33d1c90f7910f/examples/heart.nim
 
-No golden images are bundled. Existing upstream PNGs may be useful inspection
-material, but regenerate canonical buffers with documented provenance before
-using them as definitive output for this pin.
+Approved golden buffers are bundled under `test/reference/`, with dimensions,
+checksums, and provenance. Compare canonical `.raw` pixels, not encoded PNG
+bytes. Existing upstream PNGs are inspection material unless approved through
+the independent oracle workflow; see [the test strategy](../test/README.md).
 
 ## Attribution
 

@@ -5,6 +5,17 @@ Goal: profile the renderer per Julia's performance-tips manual, remove the
 measured bottlenecks, and bring each workload to the pinned scalar Nim
 reference's performance — with every fixture kept byte-exact.
 
+**T013 clarification (2026-11-07):** the observations below are historical,
+not a diagnosis of Julia internals. The causes of the sampling failure and
+streaming-callback regression were not established. Linear indexing into a
+Julia `Array` does not inherently require `ind2sub`; the flat buffer was a
+measured implementation choice, not proof of that mechanism. `PNGFiles.save`
+timings include package conversion and I/O, not just libpng compression, and
+do not establish a codec floor. Stroke/draw gaps have not been attributed
+conclusively to code generation (integer-translation draw uses `blendRect`,
+not the row-scan rasterizer). T013 shares the existing alpha conversion in
+PNG encoding and records a before/after regression check separately.
+
 ## Method
 
 The pinned Julia 1.13.3 build's sampling profiler collects **zero samples**

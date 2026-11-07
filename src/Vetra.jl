@@ -1,11 +1,8 @@
 """
 A Julia port of treeform/pixie, pinned at revision 30bb510 (see upstream.toml).
 
-Current scope (T002-T003): color types, image storage and checked pixel
-access, straight/premultiplied alpha conversion (both upstream paths), and
-basic compositing: mix, opacity/coverage scaling, blendAlpha, blendNormal;
-plus Float32 geometry (Vec2, Rect, Circle, Segment, Line, Polygon) and
-affine Mat3 transforms (upstream vmath/bumpy/common).
+CPU 2D drawing: images, colors, affine geometry, paths, paints, compositing,
+text, and image formats. See docs/COMPATIBILITY.md for supported subsets.
 
 Ported formulas (with source in the pinned tree):
 
@@ -21,15 +18,7 @@ differences between the two premul->straight conversion paths.
 """
 module Vetra
 
-# This toolchain has no `Core.*` global, so binding `Base.*` before defining
-# methods on it keeps ordinary integer/float arithmetic working in this module
-# (a bare `function *(...)` here would otherwise shadow `Base.*`). `ceil` is
-# imported the same way so the image `ceil` effect extends the Base generic
-# instead of shadowing the float calls in geometry/rasterizer.
-# `ceil` and `diff` are imported the same way: the image effects extend the
-# Base generics instead of shadowing them (`ceil(Float32)` calls elsewhere in
-# the module must keep working, and a second `diff` export would be
-# ambiguous for `using Vetra` consumers).
+# Extend Base generics so image methods coexist with scalar/array methods.
 import Base: *, ceil, diff, fill, copy
 
 # Upstream (Nim) `round` ties away from zero (verified against the pinned
@@ -293,9 +282,7 @@ function blendNormal(backdrop::ColorRGBX, source::ColorRGBX)
         blendAlpha(backdrop.a, source.a))
 end
 
-# Exports (classic `export`; this toolchain has no `public`). `width`/`height`
-# are module-local names here (no Base global on this build); `fill`/`copy`
-# are Base generics extended with Image methods (imported at the top).
+# Public API (Julia 1.10-compatible exports).
 export ColorRGB, ColorRGBA, ColorRGBX, Image,
     rgb, rgba, rgbx, toStraightAlpha, toPremultipliedAlpha,
     newImage, width, height, inside, fill, copy,
@@ -358,7 +345,7 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     parseTtf, parseOtf, parseOpenType,
     typeset, layoutBounds, measureText, fillText, strokeText,
     setLineDash, getLineDash,
-    computeBounds, computePaths, defaultLineHeight,
+    computePaths, defaultLineHeight,
     ascent, descent, lineGap, lineHeight, capHeight,
     hasGlyph, fallbackTypeface, getGlyphPath, getAdvance,
     getKerningAdjustment, getLeftSideBearing, isCCW, name

@@ -556,6 +556,30 @@ same pass: decode 67.27 → 1.50 ms (Nim 1.17) via the kernel-function
 barrier and raw-byte channel reads, encode 29.05 → 23.31 ms (Nim
 10.78, codec-bound at ~2.1 ms libpng per image).
 
+## D022 — Consolidate the completed library and correct current guidance (accepted, 2026-11-07)
+
+Problem: generated allocation traces were committed beside source files,
+the handoff duplicated completed task records and retained obsolete setup
+instructions, and some public documentation described planned rather than
+implemented APIs.
+
+Chosen behavior: remove generated traces and obsolete scaffold/split-roadmap
+documents, ignore process-suffixed allocation traces, and keep current API,
+architecture, task board, and handoff guidance concise. Retain independent
+fixtures, licenses, upstream pins, and historical task/decision records.
+PNG encoding reuses `toStraightAlpha` with its existing opaque fast path;
+remove the unused `_xmlModule` wrapper and duplicate `computeBounds` export.
+
+Clarification of D021/T012: the measured callback regression does not prove
+a compiler cause; linear Array indexing is not inherently an `ind2sub`
+operation; PNGFiles.save time is not isolated libpng time. Local profiling
+difficulties do not establish that Julia's profiler is unusable. Current
+guidance distinguishes measurements from these earlier hypotheses.
+
+Compatibility impact: no intended public API or rendering changes. Existing
+named/rgb/rgba color support is now accurately documented. Verification and
+benchmark evidence are recorded in [T013](../tasks/T013-cleanup.md).
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives
