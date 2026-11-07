@@ -1,0 +1,915 @@
+        - # ---------- rasterizer (T004, solid fills; T010 overlaps) ----------
+        - # Upstream: pixie/paths.nim -- PartitionEntry/Partition, shapesToSegments
+        - # (quantizeY), computeBounds(segments), initPartitionEntry / solveX / solveY /
+        - # midpointX, requiresAntiAliasing, partitionSegments, maxEntryCount,
+        - # sortHits, shouldFill, walk, computeCoverage (24.8 fixed point, quality=5
+        - # AA samples), the trapezoid fast path of fillShapes, fillShapes, overlaps
+        - # (scanline point-in-path test, T010), and the
+        - # NormalBlend/OverwriteBlend branches of fillHits / fillCoverage.
+        - # Helpers from pinned sources: pixie/internal.nim `intersectsInside`,
+        - # bumpy `intersects(Line, Segment)`, vmath `quantize`.
+        - #
+        - # Pinned arithmetic is followed exactly: Float32 throughout, `div` and
+        - # truncation-toward-zero integer casts (`Int32`, `p ÷ 256`), coverage
+        - # accumulation in uint8 with wrap (upstream release builds; a scalar build
+        - # would raise on overflow), epsilon = 0.0001 * pi offsets, and `hasCoverage`
+        - # with ties-away-from-zero rounding (`roundHalfAway`, not Base round).
+        - # Upstream UB territory (writes before the clipped row start for paths that
+        - # extend left of the image) is clipped here instead of written out of bounds.
+        - # The other blend branches (masks, Paint gradients) come with Paint (T007a,
+        - # blends.jl) and blender() now dispatches all 20 modes: MaskBlend carries the
+        - # upstream `clearsUncovered` semantics -- uncovered row parts are cleared,
+        - # covered parts go through blendMask (paths.nim fillHits/fillCoverage/
+        - # fillShapes L1466-1591, L1612-1630, L1823-1885, L1926-1928). BlendMode and
+        - # its constants live in blends.jl (included before this file).
+        - 
+        - """A scanline hit: x in 24.8 fixed point (256 units per pixel) + winding."""
+        - struct Hit
+        -     at::Int32
+        -     winding::Int16
+        - end
+        - 
+        - """One clip of a segment inside a partition (upstream `PartitionEntry`,
+        - a mutable `var object` whose `segment` is clipped in place):
+        - m/b are the line x(y) = m * x + b (m = 0 holds vertical lines in b)."""
+        - mutable struct PartitionEntry
+        -     segment::Segment
+        -     m::Float32
+        -     b::Float32
+        -     winding::Int16
+        - end
+        - 
+        - """A y-clip of segments (upstream `Partition`)."""
+        - mutable struct Partition
+        -     entries::Vector{PartitionEntry}
+        -     requiresAntiAliasing::Bool
+        -     twoNonintersectingSpanningSegments::Bool
+        -     top::Int
+        -     bottom::Int
+        - end
+        - function Partition()
+        -     return Partition(Vector{PartitionEntry}(), false, false, 0, 0)
+        - end
+        - 
+        - """Build a line representation (upstream `initPartitionEntry`)."""
+        - function initPartitionEntry(segment::Segment, winding::Int16)
+        -     d = segment.at.x - segment.to.x
+        -     if d == 0f0
+        -         m = 0f0
+        -         b = segment.at.x # keep m = 0 and store the x in b
+        -     else
+        -         m = (segment.at.y - segment.to.y) / d
+        -         b = segment.at.y - m * segment.at.x
+        -     end
+        -     return PartitionEntry(segment, m, b, winding)
+        - end
+        - 
+        - """x coordinate of a line at y (upstream `solveX`)."""
+        - function solveX(e::PartitionEntry, y::Float32)
+        -     return e.m == 0f0 ? e.b : (y - e.b) / e.m
+        - end
+        - 
+        - """y coordinate of a line at x (upstream `solveY`)."""
+        - solveY(e::PartitionEntry, x::Float32) = e.m * x + e.b
+        - 
+        - midpointX(s::Segment) = (s.at.x + s.to.x) * 0.5f0 # upstream `midpointX`
+        - 
+        - """
+        - True if the segment needs anti-aliasing (upstream
+        - `requiresAntiAliasing(segment)`: any non-vertical or fractional coordinate).
+        - """
+        - function requiresAASegment(s::Segment)
+        -     hasFractional(v::Float32) = (v - trunc(v)) != 0f0
+        -     return s.at.x != s.to.x ||
+        -         hasFractional(s.at.x) || # at.x and to.x are the same here
+        -         hasFractional(s.at.y) || hasFractional(s.to.y)
+        - end
+        - 
+        - function requiresAAEntries(entries::Vector{PartitionEntry})
+        -     for e in entries
+        -         requiresAASegment(e.segment) && return true
+        -     end
+        -     return false
+        - end
+        - 
+        - """
+        - Quantize y onto the 1/256 grid to prevent leaks (upstream `quantizeY`,
+        - vmath `quantize(v, n) = trunc(v / n) * n`; the power-of-two ops make this
+        - identical to `trunc(v * 256) / 256`).
+        - """
+        - quantizeY(v::Vec2) = Vec2(v.x, trunc(v.y * 256f0) / 256f0)
+        - 
+        - """A segment with its winding direction (upstream `(Segment, int16)`)."""
+        - struct SegW
+        -     segment::Segment
+        -     winding::Int16
+        - end
+        - 
+        - """
+        - Convert the shapes into filtered segments with winding
+        - (upstream `shapesToSegments`): closing zero-length edges skipped, horizontal
+        - segments dropped when `skipHorizontal`, downward segments swapped to
+        - upward with winding -1.
+        - """
+        - function shapesToSegments(shapes::Vector{Vector{Vec2}}, skipHorizontal::Bool)
+     3200     out = Vector{SegW}()
+        0     for poly in shapes
+        0         isempty(poly) && continue
+        0         prev = quantizeY(poly[end])
+        0         for (k, v) in enumerate(poly)
+        0             cur = quantizeY(v)
+        0             if k == 1 && prev == cur
+        -                 continue # the closing point duplicates the start
+        -             end
+        0             seg = Segment(prev, cur)
+        -             prev = cur
+        0             if skipHorizontal && seg.at.y == seg.to.y
+        -                 continue
+        -             end
+        -             winding = Int16(1)
+        0             if seg.at.y > seg.to.y
+        0                 seg = Segment(seg.to, seg.at)
+        -                 winding = Int16(-1)
+        -             end
+        0             push!(out, SegW(seg, winding))
+        0         end
+        0     end
+        0     return out
+        - end
+        - 
+        - """
+        - Bounding box of the segments (upstream `computeBounds(segments)`); with no
+        - segments or NaN bounds the zero Rect is returned (fillPath then no-ops).
+        - """
+        - function computeBoundsOfSegments(segments::Vector{SegW})
+        -     isempty(segments) && return Rect(0f0, 0f0, 0f0, 0f0)
+        -     xMin = typemax(Float32)
+        -     xMax = typemin(Float32)
+        -     yMin = typemax(Float32)
+        -     yMax = typemin(Float32)
+        -     for s in segments
+        -         xMin = min(xMin, min(s.segment.at.x, s.segment.to.x))
+        -         xMax = max(xMax, max(s.segment.at.x, s.segment.to.x))
+        -         yMin = min(yMin, s.segment.at.y)
+        -         yMax = max(yMax, s.segment.to.y)
+        -     end
+        -     if isnan(xMin) || isnan(xMax) || isnan(yMin) || isnan(yMax)
+        -         return Rect(0f0, 0f0, 0f0, 0f0)
+        -     end
+        -     return Rect(xMin, yMin, xMax - xMin, yMax - yMin)
+        - end
+        - 
+        - """
+        - Put the segments into the partitions they intersect (upstream
+        - `partitionSegments`): at most `max(1, height ÷ 4)` partitions, at most one
+        - per two segments, the last one reaching the actual bottom; entries spanning
+        - an entire partition are clipped to it, and two non-intersecting spanning
+        - entries set the fast-path flag (ordered left-to-right).
+        - """
+        - function partitionSegments(segments::Vector{SegW}, top::Int, height::Int)
+        0     maxPartitions = max(1, height ÷ 4)
+        0     numPartitions = min(maxPartitions, max(1, length(segments) ÷ 2))
+        0     partitionHeight = height ÷ numPartitions
+     6400     parts = Vector{Partition}(undef, numPartitions)
+        0     for i in 1:numPartitions
+     8000         parts[i] = Partition()
+        0     end
+        0     parts[1].top = top
+        0     parts[1].bottom = top + partitionHeight
+        0     for i in 2:numPartitions
+        0         parts[i].top = parts[i - 1].bottom
+        0         parts[i].bottom = parts[i - 1].bottom + partitionHeight
+        0     end
+        -     # The final partition reaches the actual bottom (rounding remainder).
+        0     parts[numPartitions].bottom = top + height
+        - 
+        0     entries = [initPartitionEntry(s.segment, s.winding) for s in segments]
+        0     if numPartitions == 1
+        0         parts[1].entries = entries
+        -     else
+        -         partIndex(v::Float32) =
+        -             # upstream: `max(0, at.y - start).uint32 div partitionHeight`
+        -             # (0-based); +1 for Julia indexing
+        -             min(max(0, Int(trunc(v - Float32(top)))) ÷ partitionHeight, numPartitions - 1) + 1
+        0         counts = zeros(Int, numPartitions)
+        0         for s in segments
+        0             for pi in partIndex(s.segment.at.y):partIndex(s.segment.to.y)
+        0                 counts[pi] += 1
+        0             end
+        0         end
+        0         for pi in 1:numPartitions
+        0             parts[pi].entries = Vector{PartitionEntry}(undef, counts[pi])
+        0         end
+        0         cursor = zeros(Int, numPartitions)
+        0         for (k, s) in enumerate(segments)
+        0             e = entries[k]
+        0             for pi in partIndex(s.segment.at.y):partIndex(s.segment.to.y)
+        -                 # fresh wrapper per partition: upstream `add` copies by value,
+        -                 # and the clip below mutates the wrapper in place. (Segment and
+        -                 # Vec2 are immutable, so sharing them is safe.)
+        0                 parts[pi].entries[cursor[pi] + 1] =
+        -                     PartitionEntry(e.segment, e.m, e.b, e.winding)
+        0                 cursor[pi] += 1
+        0             end
+        0         end
+        -     end
+        - 
+        0     for part in parts
+        0         part.requiresAntiAliasing = requiresAAEntries(part.entries)
+        - 
+        -         # Clip entries that span the whole partition to its bounds
+        0         topF = Float32(part.top)
+        0         botF = Float32(part.bottom)
+        -         topLine = Line(Vec2(0f0, topF), Vec2(1000f0, topF))
+        -         botLine = Line(Vec2(0f0, botF), Vec2(1000f0, botF))
+        0         for e in part.entries
+        0             if e.segment.at.y <= topF && e.segment.to.y >= botF
+        -                 # Upstream clips `at` first, then clips `to` against the
+        -                 # *modified* segment (new `at` as start). The two float32
+        -                 # intersection evaluations differ in the last ulp; matching
+        -                 # the order keeps partition-boundary rows on the trapezoid
+        -                 # fast path exactly as upstream does.
+        0                 newAt = lineSegmentPoint(topLine, e.segment)
+        0                 e.segment = Segment(newAt, e.segment.to)
+        0                 newTo = lineSegmentPoint(botLine, e.segment)
+        0                 e.segment = Segment(e.segment.at, newTo)
+        -             end
+        0         end
+        - 
+        0         if length(part.entries) == 2
+        0             e0 = part.entries[1].segment
+        0             e1 = part.entries[2].segment
+        0             if !intersectsInsideSeg(e0, e1) &&
+        -                 e0.at.y <= topF && e0.to.y >= botF &&
+        -                 e1.at.y <= topF && e1.to.y >= botF
+        -                 # Two non-intersecting segments spanning the partition
+        0                 part.twoNonintersectingSpanningSegments = true
+        -                 # Keep entry[1] on the left
+        0                 if midpointX(e0) > midpointX(e1)
+        0                     part.entries[1], part.entries[2] =
+        -                         part.entries[2], part.entries[1]
+        -                 end
+        -             end
+        -         end
+        0     end
+        0     return parts
+        - end
+        - 
+        - """Largest partition entry count (upstream `maxEntryCount`)."""
+        - function maxEntryCount(parts::Vector{Partition})
+        -     m = 0
+        -     for p in parts
+        -         m = max(m, length(p.entries))
+        -     end
+        -     return m
+        - end
+        - 
+        - """
+        - Intersection point of a line with a segment (bumpy
+        - `intersects(Line, Segment)`); returned point assumes `0 <= u <= 1` (the
+        - callers here test the span first).
+        - """
+        - function lineSegmentPoint(l::Line, s::Segment)
+        -     s1 = l.b - l.a
+        -     s2 = s.to - s.at
+        -     denom = (-s2.x * s1.y + s1.x * s2.y)
+        -     num = s1.x * (l.a.y - s.at.y) - s1.y * (l.a.x - s.at.x)
+        -     u = num / denom
+        -     if u >= 0f0 && u <= 1f0
+        -         return s.at + u * s2
+        -     end
+        -     return Vec2(0f0, 0f0) # unreachable via partition clipping
+        - end
+        - 
+        - """
+        - True if two segments cross strictly inside (endpoints excluded)
+        - (upstream `intersectsInside`).
+        - """
+        - function intersectsInsideSeg(a::Segment, b::Segment)
+        -     s1 = a.to - a.at
+        -     s2 = b.to - b.at
+        -     denom = (-s2.x * s1.y + s1.x * s2.y)
+        -     s = (-s1.y * (a.at.x - b.at.x) + s1.x * (a.at.y - b.at.y)) / denom
+        -     t = (s2.x * (a.at.y - b.at.y) - s2.y * (a.at.x - b.at.x)) / denom
+        -     return s > 0f0 && s < 1f0 && t > 0f0 && t < 1f0
+        - end
+        - 
+        - # ---- 24.8 fixed point (upstream `Fixed32`) -------------------------------
+        - 
+        - fixed32(f::Float32) = Int32(trunc(f * 256f0)) # float->int32 cast truncates (Nim cast)
+        - 
+        - fixedInteger(p::Integer) = p ÷ 256
+        - 
+        - fixedTrunc(p::Integer) = (p ÷ 256) * 256
+        - 
+        - """Stable insertion sort of hit x positions (upstream `sortHits`)."""
+        - function sortHits!(hits::Vector{Hit}, len::Int)
+        0     for i in 2:len
+        0         j = i - 1
+        -         k = i
+        0         while j >= 1 && hits[j].at > hits[k].at
+        0             tmp = hits[j + 1]
+        0             hits[j + 1] = hits[j]
+        0             hits[j] = tmp
+        0             j -= 1
+        0             k -= 1
+        -         end
+        0     end
+        0     return nothing
+        - end
+        - 
+        - """True if a fill should render at this winding count (upstream `shouldFill`)."""
+        - function shouldFill(rule, count::Int)
+        -     return rule === NonZero ? (count != 0) : (count % 2 != 0)
+        - end
+        - 
+        - """
+        - Pair up the sorted hits into fill spans (upstream `walk`): returns
+        - `(prevAt, at, count)` fixed-point spans.
+        - """
+        - function walk(hits::Vector{Hit}, numHits::Int, rule)
+        0     out = Vector{NTuple{3,Int}}()
+        -     i = 1
+        -     count = 0
+        -     prevAt = Int32(0)
+        0     while i <= numHits
+        0         h = hits[i]
+        0         if h.at > 0
+        0             if shouldFill(rule, count)
+        0                 if i < numHits
+        0                     nxt = hits[i + 1]
+        -                     # Canceling touches are skipped here; the span will be
+        -                     # yielded later as one larger chunk.
+        0                     if nxt.at == h.at && h.winding + nxt.winding == 0
+        0                         i += 2
+        -                         continue
+        -                     end
+        -                     # Only the stop-fill (or last hit) matters in NonZero.
+        0                     if rule === NonZero && count + h.winding != 0
+        0                         count += h.winding
+        0                         i += 1
+        -                         continue
+        -                     end
+        -                 end
+        0                 push!(out, (prevAt, h.at, count))
+        -             end
+        0             prevAt = h.at
+        -         end
+        0         count += h.winding
+        0         i += 1
+        0     end
+        0     return out
+        - end
+        - 
+        - """`hasCoverage(area)`: non-SIMD upstream variant, `round(area*255) != 0`."""
+        - hasCoverage(area::Float32) = roundHalfAway(area * Float32(255)) != 0
+        - 
+        - """
+        - Sample the scanline and accumulate per-pixel coverage
+        - (upstream `computeCoverage`): `quality = aa ? 5 : 1` subpixel samples
+        - (offset `1 / quality`, first sample at `+offset / 2 + epsilon`), hits at
+        - `min(x, width)`, uint8 coverage accumulations with upstream wrap.
+        - """
+        - function computeCoverage!(coverages::Vector{UInt8}, hits::Vector{Hit}, imageWidth::Int, y::Int, startX::Int, part::Partition, entryIndices::Vector{Int}, numEntryIndices::Int, rule)
+        0     aa = part.requiresAntiAliasing
+        0     quality = aa ? 5 : 1 # quality divides 255 cleanly
+        0     sampleCoverage = UInt8(255 ÷ quality)
+        0     cov32 = Float32(sampleCoverage)
+        0     offset = Float32(1) / Float32(quality)
+        0     initialOffset = offset / 2f0 + PIXIE_EPSILON
+        -     numHits = 0
+        0     yLine = Float32(y) + initialOffset - offset
+        0     for m in 1:quality
+        0         yLine += offset
+        -         numHits = 0
+        0         for ii in 1:numEntryIndices
+        0             entry = part.entries[entryIndices[ii]]
+        0             if entry.segment.at.y <= yLine && entry.segment.to.y >= yLine
+        0                 x = entry.m == 0f0 ? entry.b : (yLine - entry.b) / entry.m
+        0                 hits[numHits + 1] = Hit(fixed32(min(x, Float32(imageWidth))), entry.winding)
+        0                 numHits += 1
+        -             end
+        0         end
+        0         numHits > 1 && sortHits!(hits, numHits)
+        0         if aa
+        -             # Upstream walks and accumulates per sample row, inside the loop.
+        0             for (prevAt, at, _cnt) in walk(hits, numHits, rule)
+        0                 fillStart = fixedInteger(prevAt)
+        0                 pixelCrossed = fixedInteger(at) != fixedInteger(prevAt)
+        0                 leftCover = pixelCrossed ? (fixedTrunc(prevAt) + 256 - prevAt) :
+        -                     (at - prevAt)
+        0                 if leftCover != 0
+        0                     fillStart += 1
+        0                     idx = fixedInteger(prevAt) - startX + 1
+        0                     if 1 <= idx <= length(coverages)
+        0                         contrib = Int(Int32(leftCover * cov32) ÷ 256)
+        0                         coverages[idx] = UInt8((Int(coverages[idx]) + contrib) & 0xff)
+        -                     end
+        -                 end
+        0                 if pixelCrossed
+        0                     rightCover = at - fixedTrunc(at)
+        0                     if rightCover > 0
+        0                         idx = fixedInteger(at) - startX + 1
+        0                         if 1 <= idx <= length(coverages)
+        0                             contrib = Int(Int32(rightCover * cov32) ÷ 256)
+        0                             coverages[idx] = UInt8((Int(coverages[idx]) + contrib) & 0xff)
+        -                         end
+        -                     end
+        -                 end
+        0                 fillLen = fixedInteger(at) - fillStart
+        0                 if fillLen > 0
+        -                     # Fill absolute pixels [fillStart, fillStart+fillLen) using the
+        -                     # same 1-based index mapping as the left/right slivers
+        -                     # (absolute_pixel - startX + 1); upstream covers exactly fillLen
+        -                     # pixels: `for j in fillStart ..< fillStart+fillLen`.
+        0                     lo = max(fillStart - startX + 1, 1)
+        0                     hi = min(fillStart + fillLen - startX, length(coverages))
+        0                     for k in lo:hi
+        -                         # uint8 accumulation wraps (upstream release semantics)
+        0                         coverages[k] = UInt8((Int(coverages[k]) + Int(sampleCoverage)) & 0xff)
+        0                     end
+        -                 end
+        0             end
+        -         end
+        0     end
+        0     return numHits
+        - end
+        - 
+        - """
+        - Write a solid color over the 0-based span `[x0, x1)` of row `y0..y1-1`
+        - (upstream `fillUnsafe` in scalar form).
+        - """
+        - function fillRowRange(image::Image, rgbx::ColorRGBX, x0::Int, y0::Int, x1::Int, y1::Int)
+        0     xlo = max(x0, 0)
+        0     xhi = min(x1, image.width)
+        0     ylo = max(y0, 0)
+        0     yhi = min(y1, image.height)
+        0     if xlo >= xhi || ylo >= yhi
+        0         return nothing
+        -     end
+        -     # x1/y1 are exclusive (0-based); the loop bounds are inclusive.
+        0     d = image.data
+        0     w = image.width
+        0     for yy in ylo:(yhi - 1)
+        0         for xx in xlo:(xhi - 1)
+        0             i = (yy * w + xx) * 4
+        0             d[i + 1] = rgbx.r
+        0             d[i + 2] = rgbx.g
+        0             d[i + 3] = rgbx.b
+        0             d[i + 4] = rgbx.a
+        0         end
+        0     end
+        0     return nothing
+        - end
+        - 
+        - """
+        - Fill the 0-based span `[x0, x1)` of row `y` (upstream `fillHits` span loop
+        - for Normal/Overwrite/Mask; clamps the span to the image; the mask-mode
+        - clears for the row's uncovered parts live in `fillShapes`/`fillCoverageLine`)
+        - """
+        - function fillHitsLine(image::Image, rgbx::ColorRGBX, y::Int, x0::Int, x1::Int, blendMode)
+        0     lo = max(x0, 0)
+        0     hi = min(x1, image.width)
+        0     if lo >= hi
+        0         return nothing
+        -     end
+        0     if blendMode === MaskBlend
+        -         # Upstream skips the write when rgbx.a == 255 (blendMask with an
+        -         # opaque source is the identity: ch * 255 div 255 == ch).
+        0         rgbx.a == 0xff && return nothing
+        0         for x in lo:(hi - 1)
+        0             backdrop = getColor(image, x + 1, y + 1)
+        0             set_pixel(image, x + 1, y + 1, blendMask(backdrop, rgbx))
+        0         end
+        0         return nothing
+        -     end
+        -     # Fast path: Overwrite writes the color; an opaque Normal source is itself
+        -     # (W3C modes are not, so they fall through to the blended path).
+        0     if blendMode === OverwriteBlend ||
+        -         (blendMode === NormalBlend && rgbx.a == 0xff)
+        0         fillRowRange(image, rgbx, lo, y, hi, y + 1)
+        0         return nothing
+        -     end
+        0     blend = blender(blendMode)
+        0     for x in lo:(hi - 1)
+        0         backdrop = getColor(image, x + 1, y + 1)
+        0         set_pixel(image, x + 1, y + 1, blend(backdrop, rgbx))
+        0     end
+        0     return nothing
+        - end
+        - 
+        - """
+        - Blit a per-pixel coverage row (0-based `x = startX + k`) into the image
+        - (upstream `fillCoverage`: Normal/Overwrite branches; plus the MaskBlend
+        - branch where full coverage keeps the pixel, zero coverage clears it, and
+        - the row's uncovered ends are cleared).
+        - """
+        - function fillCoverageLine(image::Image, rgbx::ColorRGBX, startX::Int, y::Int, coverages::Vector{UInt8}, blendMode)
+        0     d = image.data
+        0     w = image.width
+        0     if blendMode === MaskBlend
+        0         for k in 1:length(coverages)
+        0             cov = coverages[k]
+        0             cov == 0xff && continue # full cover: keep the pixel (upstream skip)
+        0             j = (y * w + (startX + k - 1)) * 4
+        0             backdrop = ColorRGBX(d[j + 1], d[j + 2], d[j + 3], d[j + 4])
+        0             out = blendMask(backdrop, rgbx * cov)
+        0             d[j + 1] = out.r
+        0             d[j + 2] = out.g
+        0             d[j + 3] = out.b
+        0             d[j + 4] = out.a
+        0         end
+        0         fillRowRange(image, ColorRGBX(0x00, 0x00, 0x00, 0x00), 0, y, startX, y + 1)
+        0         fillRowRange(image, ColorRGBX(0x00, 0x00, 0x00, 0x00),
+        -             startX + length(coverages), y, w, y + 1)
+        0         return nothing
+        0     elseif blendMode === OverwriteBlend
+        0         for k in 1:length(coverages)
+        0             cov = coverages[k]
+        0             cov == 0x00 && continue
+        0             out = rgbx * cov
+        0             j = (y * w + (startX + k - 1)) * 4
+        0             d[j + 1] = out.r
+        0             d[j + 2] = out.g
+        0             d[j + 3] = out.b
+        0             d[j + 4] = out.a
+        0         end
+        -     else
+        0         blend = blender(blendMode)
+        0         for k in 1:length(coverages)
+        0             cov = coverages[k]
+        0             cov == 0x00 && continue
+        0             j = (y * w + (startX + k - 1)) * 4
+        0             backdrop = ColorRGBX(d[j + 1], d[j + 2], d[j + 3], d[j + 4])
+        0             out = blend(backdrop, rgbx * cov)
+        0             d[j + 1] = out.r
+        0             d[j + 2] = out.g
+        0             d[j + 3] = out.b
+        0             d[j + 4] = out.a
+        0         end
+        -     end
+        0     return nothing
+        - end
+        - 
+        - function _blendFillPixel(image::Image, x0::Int, y0::Int, rgbx::ColorRGBX, area::Float32, blendMode)
+        0     j = (y0 * image.width + x0) * 4
+        0     d = image.data
+        0     if blendMode === OverwriteBlend
+        0         out = rgbx * area
+        -     else
+        0         backdrop = ColorRGBX(d[j + 1], d[j + 2], d[j + 3], d[j + 4])
+        0         out = blender(blendMode)(backdrop, rgbx * area) # mask: blendMask
+        -     end
+        0     d[j + 1] = out.r
+        0     d[j + 2] = out.g
+        0     d[j + 3] = out.b
+        0     d[j + 4] = out.a
+        0     return nothing
+        - end
+        - 
+        - """
+        - Trapezoid fast path for a scanline fully inside all edges
+        - (upstream `fillShapes` trapezoid shortcut): trapezoids at the edges with the
+        - exact per-pixel coverage area (triangle + rectangle decomposition) and a
+        - flat fill in between. Returns false if the shortcut's preconditions fail,
+        - leaving the coverage pass to run instead.
+        - """
+        - function fillTrapezoids!(image, rgbx::ColorRGBX, y::Int, part::Partition, entryIndices::Vector{Int}, numEntryIndices::Int, traps::Vector{Segment}, rule, blendMode)
+        0     W = image.width
+        0     scanTop = Float32(y)
+        0     scanBottom = Float32(y + 1)
+        0     for i in 1:numEntryIndices
+        0         idx = entryIndices[i]
+        0         e = part.entries[idx]
+        0         traps[idx] = Segment(
+        -             Vec2(solveX(e, scanTop), scanTop),
+        -             Vec2(solveX(e, scanBottom), scanBottom))
+        0     end
+        -     # Sort by midpoint; wrong order across an intersection is caught by the
+        -     # overlap check below.
+        0     for i in 2:numEntryIndices
+        0         j = i - 1
+        -         k = i
+        0         while j >= 1 && midpointX(traps[entryIndices[j]]) > midpointX(traps[entryIndices[k]])
+        0             tmp = entryIndices[j + 1]
+        0             entryIndices[j + 1] = entryIndices[j]
+        0             entryIndices[j] = tmp
+        0             j -= 1
+        0             k -= 1
+        -         end
+        0     end
+        -     # Take the shortcut only if left/right coverage regions do not overlap.
+        0     for i in 1:(numEntryIndices - 1)
+        0         l = traps[entryIndices[i]]
+        0         r = traps[entryIndices[i + 1]]
+        -         # upstream: `leftMaxX.ceil.int > rightMinX.int` (both truncate)
+        0         if Int(ceil(Float32(max(l.at.x, l.to.x)))) > Int(trunc(min(r.at.x, r.to.x)))
+        0             return false
+        -         end
+        0     end
+        -     # Confirm the pairs form simple fills under the winding rule.
+        -     i = 1
+        -     windingCount = 0
+        0     while i < numEntryIndices
+        0         windingCount += part.entries[entryIndices[i]].winding
+        0         !shouldFill(rule, windingCount) && return false
+        0         windingCount += part.entries[entryIndices[i + 1]].winding
+        0         shouldFill(rule, windingCount) && return false
+        0         i += 2
+        -     end
+        -     # Julia `a:b:c` is start:step:stop -- iterate steps of 2 up to numEntryIndices.
+        -     filledTo = 0 # upstream `filledTo` (last pair's right edge, mask clears)
+        0     for i in 2:2:numEntryIndices
+        0         left = part.entries[entryIndices[i - 1]]
+        0         right = part.entries[entryIndices[i]]
+        0         tl = traps[entryIndices[i - 1]]
+        0         tr = traps[entryIndices[i]]
+        0         leftMaxX = max(tl.at.x, tl.to.x)
+        0         rightMinX = min(tr.at.x, tr.to.x)
+        0         fillBegin = clamp(Int(ceil(leftMaxX)), 0, W)
+        -         # upstream: `rightMinX.trunc.int`
+        0         fillEnd = clamp(Int(trunc(Float32(rightMinX))), 0, W)
+        -         # Middle: full coverage between the two rounded boundaries
+        0         fillHitsLine(image, rgbx, y, fillBegin, fillEnd, blendMode)
+        -         # Left-side partial coverage
+        0         inverted = tl.at.x < tl.to.x
+        0         sliverStart = min(tl.at.x, tl.to.x)
+        -         rectStart = leftMaxX
+        -         pen = sliverStart
+        -         prevPen = sliverStart
+        0         penY = inverted ? Float32(y) : Float32(y + 1)
+        -         prevPenY = penY
+        -         # upstream: `for x in sliverStart.int ..< rectStart.ceil.int`
+        0         for x in Int(trunc(sliverStart)):(Int(ceil(rectStart)) - 1)
+        -             prevPen = pen
+        0             pen = Float32(x + 1)
+        -             rightRectArea = 0f0
+        0             if pen > rectStart
+        0                 rightRectArea = pen - rectStart
+        -                 pen = rectStart
+        -             end
+        0             prevPenY = penY
+        0             penY = solveY(left, pen)
+        0             if x >= 0 && x < W
+        0                 run = pen - prevPen
+        0                 triangleArea = 0.5f0 * run * abs(penY - prevPenY)
+        0                 rectArea = (inverted ? (prevPenY - Float32(y)) :
+        -                     (Float32(y + 1) - prevPenY)) * run
+        0                 area = triangleArea + rectArea + rightRectArea
+        -                 # upstream: `hasCoverage(area) or clearsUncovered` (MaskBlend
+        -                 # writes even sub-quantized slivers, which clear the pixel)
+        0                 (hasCoverage(area) || blendMode === MaskBlend) &&
+        -                     _blendFillPixel(image, x, y, rgbx, area, blendMode)
+        -             end
+        0         end
+        -         # Right-side partial coverage
+        0         inverted = tr.at.x > tr.to.x
+        -         rectEnd = rightMinX
+        0         sliverEnd = max(tr.at.x, tr.to.x)
+        -         pen = rectEnd
+        -         prevPen = rectEnd
+        0         penY = inverted ? Float32(y + 1) : Float32(y)
+        -         prevPenY = penY
+        -         # upstream: `for x in rectEnd.int ..< sliverEnd.ceil.int`
+        0         for x in Int(trunc(rectEnd)):(Int(ceil(sliverEnd)) - 1)
+        -             prevPen = pen
+        0             pen = Float32(x + 1)
+        0             leftRectArea = abs(prevPen) - trunc(abs(prevPen)) # upstream
+        -             # `prevPen.fractional` = vmath fract: abs-based, so negative
+        -             # pens (possible under rotated transforms) stay positive.
+        0             if pen > sliverEnd
+        -                 pen = sliverEnd
+        -             end
+        0             prevPenY = penY
+        0             penY = solveY(right, pen)
+        0             if x >= 0 && x < W
+        0                 run = pen - prevPen
+        0                 triangleArea = 0.5f0 * run * abs(penY - prevPenY)
+        0                 rectArea = (inverted ? (penY - Float32(y)) :
+        -                     (Float32(y + 1) - penY)) * run
+        0                 area = leftRectArea + triangleArea + rectArea
+        0                 (hasCoverage(area) || blendMode === MaskBlend) &&
+        -                     _blendFillPixel(image, x, y, rgbx, area, blendMode)
+        -             end
+        0         end
+        -         # Upstream mask mode: clear the gap between this pair's left edge and
+        -         # the previous pair's right edge, then advance the frontier.
+        0         if blendMode === MaskBlend
+        0             clearTo = Int(trunc(min(tl.at.x, tl.to.x)))
+        0             fillRowRange(image, ColorRGBX(0x00, 0x00, 0x00, 0x00),
+        -                 min(filledTo, W), y, min(clearTo, W), y + 1)
+        -         end
+        0         filledTo = Int(ceil(max(tr.at.x, tr.to.x)))
+        0     end
+        0     if blendMode === MaskBlend
+        0         fillRowRange(image, ColorRGBX(0x00, 0x00, 0x00, 0x00),
+        -             min(filledTo, W), y, W, y + 1)
+        -     end
+        0     return true
+        - end
+        - 
+        - """Scanline point test (upstream `overlaps`, paths.nim L2232): a
+        - horizontal scanline rightward from the test point; hits are 1/256
+        - fixed-point x's with the segment windings, sorted and walked. A point
+        - past the last hit is outside (upstream falls through to `false`)."""
+        - function overlaps(shapes::Vector{Vector{Vec2}}, test::Vec2, rule)
+        -     hits = Vector{Hit}()
+        -     scanline = Line(Vec2(0f0, test.y), Vec2(1000f0, test.y))
+        -     for sw in shapesToSegments(shapes, true)
+        -         seg = sw.segment
+        -         seg.at.y <= test.y <= seg.to.y || continue
+        -         # Line/segment intersection (upstream bumpy `intersects`): u is the
+        -         # parameter along the segment; parallel (denom 0) yields NaN/Inf.
+        -         s1 = scanline.b - scanline.a
+        -         s2 = seg.to - seg.at
+        -         u = (s1.x * (scanline.a.y - seg.at.y) -
+        -             s1.y * (scanline.a.x - seg.at.x)) /
+        -             (-s2.x * s1.y + s1.x * s2.y)
+        -         (u >= 0f0 && u <= 1f0) || continue
+        -         at = seg.at + u * s2
+        -         seg.to == at && continue
+        -         push!(hits, Hit(fixed32(at.x), sw.winding))
+        -     end
+        -     sortHits!(hits, length(hits))
+        -     testX = fixed32(test.x)
+        -     count = 0
+        -     for h in hits
+        -         h.at > testX && return shouldFill(rule, count)
+        -         count += h.winding
+        -     end
+        -     return false
+        - end
+        - 
+        - """
+        - Solid-fill the shapes into the image (upstream `fillShapes` for
+        - Normal/Overwrite/MaskBlend; the mask mode clears the uncovered parts of the
+        - row as upstream does): within `snapToPixels(bound)` per partition -- two
+        - non-intersecting spanning segments take the pixel-aligned fast path, a
+        - fully-spanning even entry set takes the trapezoid shortcut per scanline,
+        - otherwise the coverage pass (AA: 5-sampled `computeCoverage` + blended rows;
+        - no-AA: solid row fills from the integer hit walk).
+        - """
+        - 
+        - function fillShapes(image::Image, shapes::Vector{Vector{Vec2}}, color::ColorRGBX, rule; blendMode = NormalBlend)
+        -     rgbx = color
+        0     segments = shapesToSegments(shapes, true)
+        0     bounds = snapToPixels(computeBoundsOfSegments(segments))
+        0     W = image.width
+        0     H = image.height
+        0     startX = max(0, Int(bounds.x))
+        0     startY = clamp(Int(bounds.y), 0, H)
+        0     pathWidth = startX < W ? min(Int(bounds.w), W - startX) : 0
+        0     pathHeight = clamp(Int(bounds.y + bounds.h), 0, H)
+        -     zeroPx = ColorRGBX(0x00, 0x00, 0x00, 0x00) # clears-uncovered clear color
+        0     if pathWidth == 0
+        0         if blendMode === MaskBlend
+        -             # The path is entirely outside the image horizontally, but a mask
+        -             # fill still records that: clear the whole image (upstream).
+        0             fillRowRange(image, zeroPx, 0, 0, W, H)
+        -         end
+        0         return nothing
+        -     end
+        0     pathWidth >= 0 || throw(ArgumentError("Path int overflow detected"))
+        0     parts = partitionSegments(segments, startY, pathHeight - startY)
+        -     partitionIndex = 1
+        0     capacity = max(maxEntryCount(parts), 2)
+     8000     entryIndices = Int[0 for _ in 1:capacity]
+     9600     traps = Vector{Segment}(undef, capacity)
+     8000     coverages = zeros(UInt8, pathWidth)
+     8000     hits = Vector{Hit}(undef, capacity)
+        - 
+        -     y = startY
+        0     while y < pathHeight
+        0         if y >= parts[partitionIndex].bottom
+        0             partitionIndex += 1
+        -         end
+        0         part = parts[partitionIndex]
+        0         partHeight = part.bottom - part.top
+        0         partHeight == 0 && continue
+        - 
+        0         if part.twoNonintersectingSpanningSegments && !part.requiresAntiAliasing
+        -             # No AA needed: two vertical pixel-aligned lines
+        -             # upstream casts with `.int` (truncation)
+        0             minX = clamp(Int(trunc(part.entries[1].segment.at.x)), 0, W)
+        0             maxX = clamp(Int(trunc(part.entries[2].segment.at.x)), 0, W)
+        0             skipBlending = blendMode === OverwriteBlend ||
+        -                 (blendMode === NormalBlend && rgbx.a == 0xff)
+        0             if skipBlending && minX == 0 && maxX == W
+        -                 # Greedy: one big multi-row fill (upstream fillUnsafe over
+        -                 # `dataIndex(0, y)` .. `dataIndex(0, y + partitionHeight)`).
+        0                 fillRowRange(image, rgbx, 0, y, W, y + partHeight)
+        0             elseif blendMode === MaskBlend
+        -                 # Upstream fillHits (maskClears): clear both row ends, blend
+        -                 # the span between.
+        0                 for r in 0:(partHeight - 1)
+        0                     fillRowRange(image, zeroPx, 0, y + r, minX, y + r + 1)
+        0                     fillHitsLine(image, rgbx, y + r, minX, maxX, blendMode)
+        0                     fillRowRange(image, zeroPx, maxX, y + r, W, y + r + 1)
+        0                 end
+        -             else
+        0                 for r in 0:(partHeight - 1)
+        0                     fillHitsLine(image, rgbx, y + r, minX, maxX, blendMode)
+        0                 end
+        -             end
+        0             y += partHeight
+        -             continue
+        -         end
+        - 
+        0         scanTop = Float32(y)
+        0         scanBottom = Float32(y + 1)
+        -         numEntryIndices = 0
+        -         allEntriesInScanlineSpanIt = true
+        0         if part.twoNonintersectingSpanningSegments
+        -             numEntryIndices = 2
+        0             entryIndices[1] = 1
+        0             entryIndices[2] = 2
+        -         else
+        0             for idx in eachindex(part.entries)
+        0                 seg = part.entries[idx].segment
+        0                 (seg.to.y <= scanTop || seg.at.y >= scanBottom) && continue
+        0                 (seg.at.y > scanTop || seg.to.y < scanBottom) &&
+        -                     (allEntriesInScanlineSpanIt = false)
+        0                 entryIndices[numEntryIndices + 1] = idx
+        0                 numEntryIndices += 1
+        0             end
+        -         end
+        - 
+        0         if allEntriesInScanlineSpanIt && numEntryIndices % 2 == 0 &&
+        -             fillTrapezoids!(image, rgbx, y, part, entryIndices, numEntryIndices, traps, rule, blendMode)
+        0             y += 1
+        -             continue
+        -         end
+        - 
+        0         numHits = computeCoverage!(coverages, hits, W, y, startX, part, entryIndices, numEntryIndices, rule)
+        0         if part.requiresAntiAliasing
+        0             fillCoverageLine(image, rgbx, startX, y, coverages, blendMode)
+        0         elseif blendMode === MaskBlend
+        -             # Upstream fillHits (maskClears = true): clear the gap before each
+        -             # span, blend the span, then clear both ends of the row.
+        -             filledTo = startX
+        0             for (prevAt, at, _cnt) in walk(hits, numHits, rule)
+        0                 fillStart = fixedInteger(prevAt)
+        0                 fillLen = fixedInteger(at) - fillStart
+        0                 if fillLen <= 0
+        -                     continue
+        -                 end
+        0                 gap = fillStart - filledTo
+        0                 gap > 0 && fillRowRange(image, zeroPx, filledTo, y, fillStart, y + 1)
+        0                 fillHitsLine(image, rgbx, y, fillStart, fillStart + fillLen, blendMode)
+        0                 filledTo = fillStart + fillLen
+        0             end
+        0             fillRowRange(image, zeroPx, 0, y, startX, y + 1)
+        0             fillRowRange(image, zeroPx, filledTo, y, W, y + 1)
+        -         else
+        0             for (prevAt, at, _cnt) in walk(hits, numHits, rule)
+        0                 fillStart = fixedInteger(prevAt)
+        0                 fillLen = fixedInteger(at) - fillStart
+        0                 fillLen > 0 && fillHitsLine(image, rgbx, y, fillStart, fillStart + fillLen, blendMode)
+        0             end
+        -         end
+        0         fill!(coverages, zero(UInt8))
+        0         y += 1
+        0     end
+        - 
+        -     # Upstream: a MaskBlend fill clears the rows fully above and below the
+        -     # path's bounds, recording that they are uncovered by the clip.
+        0     if blendMode === MaskBlend
+        0         fillRowRange(image, zeroPx, 0, 0, W, startY)
+        0         fillRowRange(image, zeroPx, 0, pathHeight, W, H)
+        -     end
+        0     return nothing
+        - end
+        - 
+        - """
+        - Fill `path` (a `Path` or an SVG path string) with a solid color into
+        - `image` (upstream `fillPath` solid-paint path): the path is closed into
+        - shapes, transformed by `transform` (exactly once), and rasterized with
+        - `windingRule` under `blendMode` (Normal by default, as the documented
+        - entry point). Colors convert to premultiplied alpha before blending.
+        - Mutates `image` and returns nothing.
+        - """
+        - function fillPath(image::Image, path, color, ; transform::Mat3 = mat3(),
+        -     windingRule = NonZero, blendMode = NormalBlend)
+        0     (windingRule === NonZero || windingRule === EvenOdd) ||
+        -         throw(ArgumentError("windingRule must be NonZero or EvenOdd"))
+        -     c = color isa ColorRGBX ? color :
+        -         color isa ColorRGBA ? rgbx(color) :
+        -         color isa ColorRGB ? rgbx(color) :
+        -         throw(ArgumentError("color must be a ColorRGB, ColorRGBA or ColorRGBX"))
+        0     if c.a == 0x00
+        0         return nothing # zero-alpha solid (upstream fillPath gate)
+        -     end
+        -     src = path isa Path ? path :
+        -         path isa String ? parsePath(path) :
+        -         throw(ArgumentError("path must be a Path or an SVG path string"))
+        0     shapes = commandsToShapes(src, true, pixelScale(transform))
+        0     if transform != mat3()
+        0         for s in shapes
+        0             for k in eachindex(s)
+        0                 s[k] = transform * s[k]
+        0             end
+        0         end
+        -     end
+        0     fillShapes(image, shapes, c, windingRule; blendMode = blendMode)
+        0     return nothing
+        - end

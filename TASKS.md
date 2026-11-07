@@ -19,6 +19,7 @@ resolved. Mark readiness explicitly when completing its prerequisites.
 | T009 | [Font parsing and text layout](tasks/T009-fonts-text.md) | W6 | T007b; font policy (D008) | done (D015) |
 | T010 | [Full drawing context integration](tasks/T010-context-integration.md) | W7 | T008, T009 | done |
 | T011 | [Benchmarks, optimization, documentation, release audit](tasks/T011-release.md) | W8 | T010 | done |
+| T012 | [Renderer performance pass](tasks/T012-optimization.md) | W9 | T011 | done |
 
 User directive (2026-10-27): the port must be completable as a full feature
 set, must keep rendering backends swappable (CPU now; Vulkan/OpenGL later)
@@ -44,7 +45,8 @@ integrator. Split a task into a new ID if its spec grows beyond one wave.
   2026-11-06 (D015); T010 (context integration: isPointInPath, dash
   wiring in strokes, cross-feature composition tests) complete and
   integrated on 2026-11-06; T011 (benchmarks/docs/release audit) complete
-  on 2026-11-06. **The board is done** — all tasks T000–T011 are `done`.
+  on 2026-11-06; T012 (renderer performance pass, D021) complete on
+   2026-11-06. **The board is done** — all tasks T000–T012 are `done`.
 - Working tree: main checkout of /home/vasyl/Dev/skynet/julia/Vetra.jl
   (single commit on `main`, pushed to git@github.com:skynet-core/Vetra.jl;
   history re-initialized at the package rename, D017).
@@ -55,19 +57,53 @@ integrator. Split a task into a new ID if its spec grows beyond one wave.
 
 ## Completion evidence
 
+- T012 (2026-11-06, D021): renderer performance pass per Julia's
+  performance-tips manual. Flat-buffer pixel indexing + opaque-source
+  copy in `blendRect`/`drawSmooth`, direct indexing in `blur`/`spread`,
+  `@inbounds` on range-proven loops, hoisted compositing constants,
+  solid-Paint `fillPath` delegation; PNG follow-up: decode
+  kernel-function barrier + raw-byte channel reads (67.3 → 1.50 ms,
+  Nim 1.17) and encode flat build buffer (29.05 → 23.31 ms,
+  codec-bound). Two candidate optimizations were measured and rejected
+  (streaming span callbacks: 6× stroke regression, reverted; scalar
+  trapezoid buffers: neutral, kept the pinned form).
+  `scripts/check.jl` green, 97.95% coverage, all fixtures byte-exact.
+  3-run harness medians vs the pinned scalar Nim reference: blur
+  0.69 → 0.36 ms (Nim 0.43), shadow 1.07 → 0.40 ms (Nim 0.67),
+  draw 1.15 → 0.23 ms (Nim 0.18), fill 0.90 → 0.76 ms (Nim 0.82),
+  text 1.26 → 1.25 ms (Nim 1.99), stroke 26.63 → 26.12 ms
+  (Nim 22.30); PNG decode 67.27 → 1.50 ms (Nim 1.17), PNG encode
+  29.05 → 23.31 ms (Nim 10.78, codec-bound). See
+  [tasks/T012-optimization.md](tasks/T012-optimization.md) and the
+  README Benchmarks table.
+
+- Executable tutorial (2026-11-06, D020): `docs/tutorial.jl` is the single
+  Literate source; `docs/make_tutorial.jl` executes and generates Markdown
+  and Jupyter output under `docs/build/tutorial/`. Documentation dependencies
+  live in `docs/Project.toml`. Both formats passed 13 code cells/18 assertions
+  with eight inline PNGs; the notebook also passed an independent IJulia
+  kernel run via nbclient. Plain-script execution from outside the checkout
+  and the full gate passed (98.0% coverage). Next: edit source and rebuild
+  using the instructions in [docs/TUTORIAL.md](docs/TUTORIAL.md).
+
 - Post-board local test fix (2026-11-06, D019): codec discovery moved from
   precompile-time code into runtime initialization. A subprocess regression
   reproduces core-only cache reuse in a codec-enabled environment. The user's
   exact `Pkg.test()` command and `scripts/check.jl` pass on Julia 1.13.3;
   coverage is 98.0% (5235/5342). Next: review/commit when requested.
 
-- Post-board tutorial (2026-11-06): [docs/TUTORIAL.md](docs/TUTORIAL.md)
-  builds an activity card, then covers image processing, compositing, SVG,
-  text layout, testing, and benchmarking. Linked from README and examples.
-  All 13 drawing blocks executed together with 18 assertions on Julia 1.13.3;
-  the documented benchmark command completed all eight workloads and the
-  full gate passed at 98.0% coverage. Next: user review of the tutorial;
-  no implementation task opened.
+- Post-board tutorial (2026-11-06): [docs/TUTORIAL.md](docs/TUTORIAL.md) is
+  the launch guide; the full tutorial is the Literate source
+  `docs/tutorial.jl`. Rewritten (2026-11-06, per user request) around one
+  project: a 24-hour crypto OHLC candlestick chart. It generates
+  deterministic candles, maps data to pixels, draws grid/price axis,
+  candles, volume, header, timestamps and legend; renders PNG; then builds
+  a small SVG writer (rect/line/text, hex colors, opacity, dashes, XML
+  escaping) and proves the SVG by reading it back through `parseSvg` and
+  comparing pixels (30 assertions). All 23 code cells execute in both
+  generated formats on Julia 1.13.3; the notebook also passes an
+  independent IJulia kernel run. Next: user review; no implementation task
+  opened.
 
 - T000: package scaffold, agent documents, VS Code tasks, CI definition, upstream
   pin, and license notices created. Static validation only; no Julia runtime was

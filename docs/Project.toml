@@ -1,0 +1,15 @@
+[deps]
+IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
+JpegTurbo = "b835a17e-a41a-41e7-81f0-2f016b05efe0"
+Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
+PNGFiles = "f57f5aa1-a3ce-4bc8-8ab9-96f992907883"
+Vetra = "273bb84c-244c-4f17-9eb9-5a651004d3c7"
+XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
+
+[sources]
+Vetra = {path = ".."}
+
+[compat]
+IJulia = "1"
+Literate = "2"
+julia = "1.10"

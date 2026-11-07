@@ -612,20 +612,31 @@ function fillPath(
         return nothing
     end
     if paint.kind === SolidPaint
-        if paint.color.a > 0x00 || paint.blendMode === OverwriteBlend
-            src = path isa Path ? path :
-                path isa String ? parsePath(path) :
-                throw(ArgumentError("path must be a Path or an SVG path string"))
-            shapes = commandsToShapes(src, true, pixelScale(transform))
-            if transform != mat3()
-                for s in shapes
-                    for k in eachindex(s)
-                        s[k] = transform * s[k]
+        # Solid Paints delegate to the rasterizer's ColorRGBX entry point:
+        # identical pixels, one fewer Paint conversion per call.
+        c = solidColorRGBX(paint)
+        if c.a > 0x00 || paint.blendMode === OverwriteBlend
+            if c.a > 0x00 || paint.blendMode !== OverwriteBlend
+                fillPath(image, path, c;
+                    transform = transform, windingRule = windingRule,
+                    blendMode = paint.blendMode)
+            else
+                # Zero-alpha Overwrite is a clear: the ColorRGBX entry
+                # returns early on zero alpha, so rasterize directly.
+                src = path isa Path ? path :
+                    path isa String ? parsePath(path) :
+                    throw(ArgumentError("path must be a Path or an SVG path string"))
+                shapes = commandsToShapes(src, true, pixelScale(transform))
+                if transform != mat3()
+                    for s in shapes
+                        for k in eachindex(s)
+                            s[k] = transform * s[k]
+                        end
                     end
                 end
+                fillShapes(image, shapes, c, windingRule;
+                    blendMode = paint.blendMode)
             end
-            fillShapes(image, shapes, solidColorRGBX(paint), windingRule;
-                blendMode = paint.blendMode)
         end
         return nothing
     end

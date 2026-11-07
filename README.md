@@ -15,9 +15,10 @@ arithmetic contract).
 
 ## Quick start
 
-**New to Vetra?** Follow the [hands-on tutorial](docs/TUTORIAL.md): build a
-dashboard graphic, then explore transforms, gradients, text, compositing,
-image formats, testing, and benchmarks. Every drawing example is runnable.
+**New to Vetra?** Follow the [hands-on tutorial](docs/TUTORIAL.md): draw a
+crypto OHLC candlestick chart step by step, render it to PNG, and build a
+small SVG backend. Executed Markdown and a Jupyter notebook with inline
+images generate from one Literate.jl source.
 
 Requires Julia **1.10+** (developed and tested on 1.10 and 1.13). The
 package is not yet registered (see docs/HANDOFF.md), so add it from a
@@ -108,8 +109,84 @@ values.
 `benchmark/run_benchmarks.jl` (Julia) and `benchmark/bench_reference.nim`
 (pinned upstream, same workloads) measure fill, stroke, blur/shadow, draw,
 PNG encode/decode and text metrics — first call, warm-up and steady state
-separated. Results land in `benchmark/results/`. The T011 record (same
-machine, scalar on both sides) is in `tasks/T011-release.md`.
+separated. Results land in `benchmark/results/`. T012 (2026-11-06)
+optimized the renderer per Julia's performance-tips manual; the pinned
+scalar Nim reference is the comparison target (recorded in
+`tasks/T011-release.md`, re-verified the same day):
+
+| workload | Julia before (T011) | Julia after (T012) | Nim reference |
+| --- | --- | --- | --- |
+| fill_rects_1000 | 0.90 ms | **0.76 ms** | 0.82 ms |
+| stroke_lines_1000 | 26.63 ms | 26.12 ms | 22.30 ms |
+| blur_128_r3 | 0.69 ms | **0.36 ms** | 0.43 ms |
+| shadow_128 | 1.07 ms | **0.40 ms** | 0.67 ms |
+| draw_10 | 1.15 ms | **0.23 ms** | 0.18 ms |
+| png_encode_256_x10 | 29.05 ms | **23.31 ms** | 10.78 ms |
+| png_decode_basic1_x10 | 67.27 ms | **1.50 ms** | 1.17 ms |
+| text_parse_layout_x100_measure_x20 | 1.26 ms | **1.25 ms** | 1.99 ms |
+
+Steady-state medians in milliseconds (3-run medians, same machine).
+All renderer workloads now match or beat the scalar Nim reference,
+except stroke (1.17×) and draw (1.28×), whose remaining gap is scalar
+Julia codegen in the pinned row-scan rasterizer. PNG decode was
+dominated by our boundary conversion, not the codec (per-pixel generic
+dispatch through `invokelatest`, `isdefined` per channel, fixed-point
+Float64 round-trips): after the kernel-function rewrite it is 1.28× the
+reference. PNG encode remains codec-bound: the libpng compression
+inside the opt-in PNGFiles package (D014) takes ~2.1 ms of the ~2.3 ms
+per image.
+Full records, the rejected alternatives, and method notes:
+`tasks/T012-optimization.md` and `docs/DECISIONS.md` D021.
+
+## Profiling
+
+What works in this project's pinned environment (the T012 pass was
+profiled this way; records in `tasks/T012-optimization.md`):
+
+**Per-function wall time + allocation** — the primary method:
+
+```julia
+using Vetra
+img = newImage(256, 256); fill(img, rgb(0, 0, 0))
+ctx = Context(img)
+ctx.fillStyle = Paint(rgba(255, 0, 0, 255))
+for _ in 1:200   # warm-up: the first timed calls absorb JIT compilation
+    fillRect(ctx, 10f0, 10f0, 10f0, 10f0)
+end
+t0 = time_ns()
+for _ in 1:1000
+    fillRect(ctx, 10f0, 10f0, 10f0, 10f0)
+end
+println((time_ns() - t0) / 1000 / 1e3, " µs per call")
+println(@allocated fillRect(ctx, 10f0, 10f0, 10f0, 10f0), " bytes per call")
+```
+
+**Allocation trace** — `--track-allocation=user` writes a copy of the
+script annotated with per-line allocation bytes (allocations made inside
+functions are attributed to the calling line; `-` means none; big number
+= hotspot):
+
+```
+$ julia --startup-file=no --project=. --track-allocation=user myscript.jl
+$ cat myscript.jl.<pid>.mem
+         0 for i in 0:99
+      6400     fillRect(ctx, x, y, 10f0, 10f0)
+         0 end
+```
+
+**Type stability** — `@code_warntype` highlights non-concrete (potentially
+slow) types, e.g. `@code_warntype Vetra.fillShapes(img, shapes, c, NonZero)`.
+
+**End-to-end workloads** — `benchmark/run_benchmarks.jl` reports cold
+first call, warm-up, and steady-state medians per workload (see the
+Benchmarks table above).
+
+Note: on a stock Julia installation the first resort is the sampling
+profiler — `Profile.clear(); @profile f(); Profile.print()`, or
+ProfileView.jl to browse the call tree. The Julia build this project is
+pinned against collects **zero samples** from it (verified on 20-second
+workloads with `Profile.init(1_000_000, 0.0005)`), which is why the
+timing/allocation method above is the documented one here.
 
 ## License
 

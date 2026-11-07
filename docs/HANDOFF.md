@@ -4,6 +4,65 @@ Updated: 2026-11-06
 
 ## State
 
+Renderer performance pass (2026-11-06, T012/D021): per Julia's
+performance-tips manual, the renderer's measured bottlenecks were
+optimized — flat-buffer pixel indexing in `blendRect`/`drawSmooth`
+(including an opaque-source straight copy), direct indexing in `blur`
+and `spread`, `@inbounds` on loops with written range proofs, hoisted
+loop-invariant constants in the compositing closures, solid-Paint
+`fillPath` delegation, and preallocated stroke outlines. The full
+byte-exact fixture gate passes (`scripts/check.jl`, 97.94% coverage,
+5323/5435 lines); no expected output was regenerated. 3-run harness
+medians vs the pinned scalar Nim reference: blur 0.69 → 0.37 ms
+(Nim 0.43 — faster), shadow 1.07 → 0.40 ms (Nim 0.67 — faster),
+draw 1.15 → 0.23 ms (Nim 0.18), fill 0.90 → 0.76 ms (Nim 0.82 —
+faster), text 1.26 → 1.25 ms (Nim 1.99 — faster), stroke 26.63 →
+25.81 ms (Nim 22.30 — within 1.16×). PNG follow-up (user
+commission): decode was 57× the reference because our boundary
+conversion — not the codec — dominated (`invokelatest` hands the
+decoded matrix as `Any`, so per-pixel generic getindex + per-channel
+`isdefined` + fixed-point round-trips); a kernel function specialized
+on the concrete ColorTypes eltype, raw `N0f8.i` byte reads, and an
+inlined premultiply brought it to 67.3 → 1.50 ms (Nim 1.17 — 1.28×);
+encode's build buffer moved to a flat `Vector{UInt8}` + `reshape`
+(29.05 → 23.31 ms; ~2.1 ms/image is libpng compression inside
+PNGFiles, codec-bound per D014 — the save-parameter alternatives
+measured within noise). Two candidate optimizations were
+measured and rejected: a streaming span callback (`eachSpan`) was 6×
+slower on strokes in this build (closure dispatch vs iterating a small
+concrete vector) and was reverted to the pinned `walk`; scalar
+trapezoid-edge buffers were neutral (`Segment` is isbits in a
+preallocated array) and the pinned form was kept. The final README
+Benchmarks table records all numbers, and the new README Profiling
+section documents the verified profiling methods (per-function
+timing/`@allocated`, `--track-allocation=user`, `@code_warntype`) and
+why the sampling profiler is unusable in the pinned build. Next: user
+review/commit when requested.
+
+Executable tutorial (2026-11-06, D020): the full narrative and examples now
+live in `docs/tutorial.jl`; `docs/TUTORIAL.md` is the setup/launch guide.
+`docs/Project.toml` isolates Literate/IJulia/codec dependencies, with Vetra
+linked at `..`. `docs/make_tutorial.jl` executes both outputs into ignored
+`docs/build/tutorial/`: Markdown with eight PNG sidecars and a notebook with
+eight embedded PNGs. Edit the source, not the generated files. Existing
+18 tutorial assertions remain in the 13 executable cells. File paths use
+the Vetra source location, so notebook execution does not depend on cwd.
+
+Verification on Julia 1.13.3, Literate 2.21.0, IJulia 1.34.4:
+- `julia --startup-file=no --project=docs -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'` — passed.
+- `julia --startup-file=no --project=docs docs/make_tutorial.jl` — both
+  formats executed successfully, including all assertions and inline images.
+- Independent Jupyter execution using nbclient from a temporary Python venv
+  (`/tmp/opencode/tutorial-jupyter`): 13 code cells completed, eight PNGs,
+  no errors; executed copy in `/tmp/opencode/tutorial-jupyter-executed.ipynb`.
+- Plain `docs/tutorial.jl` script executed from `/tmp/opencode` using the
+  absolute docs project/source paths — passed.
+- `julia --startup-file=no --project=. scripts/check.jl` — passed,
+  98.0% coverage (5235/5342 measurable source lines).
+Interactive browser UI was not exercised; kernel execution was. Prior
+DeepSeek reviews were blocked by account funds, so this change has no
+independent model review. Next: user review/commit when requested.
+
 Local `Pkg.test()` fix (2026-11-06, D019): reproduced 5 failures and 30
 errors in the format suite with the user's exact command. Vetra's cached
 module had skipped top-level optional codec loads during a core-only
@@ -21,28 +80,44 @@ DeepSeek review was attempted but blocked by insufficient account funds.
 Existing tutorial work was preserved, with obsolete cache workarounds removed.
 Next: review/commit when requested; this fix has not been committed or pushed.
 
-Tutorial follow-up (2026-11-06): `docs/TUTORIAL.md` is a 14-section,
-project-based guide, linked from the root and examples READMEs. It builds
-an activity card and explains coordinates/alpha/mutation, paths, gradients,
-transforms, clips, fonts, effects, compositing, formats, layout, tests,
-and benchmarks. Examples reflect actual source APIs, including binary-string
-QOI output, plain base64 payloads, image-space clips, and unsaved textBaseline.
+Tutorial rewrite (2026-11-06, user request): the Literate tutorial is now
+"From candles to SVG" — a step-by-step crypto OHLC (candlestick) chart.
+`docs/tutorial.jl` generates deterministic 24-hour candles (seeded
+`Random.Xoshiro`), builds the data-to-pixel mapping, draws grid + price
+axis, candles (wick under body, doji guard), translucent volume, header,
+centered timestamps and a legend, renders PNG (`writeFile`), then builds a
+~60-line SVG writer (`SvgDoc`, `writeRect`/`writeLine`/`writeText`, hex
+colors, `fill-opacity`/`stroke-opacity`, `stroke-dasharray`, XML escaping)
+and verifies the SVG by reading it back with the library's own `parseSvg`
+and comparing pixels. Section 12 covers testing/benchmark habits; section
+13 the troubleshooting table and five follow-up charts. `docs/TUTORIAL.md`
+is the setup/launch guide; README links updated.
 
-Verification: the setup commands created `artifacts/tutorial-env`; all 13
-drawing blocks were extracted verbatim into ignored `artifacts/tutorial.jl`
-and passed 18 assertions with
-`julia --startup-file=no --project=artifacts/tutorial-env artifacts/tutorial.jl`
-on Julia 1.13.3. The images are in ignored `artifacts/tutorial/`.
-The documented benchmark command
-`julia --startup-file=no --project=artifacts/tutorial-env -e 'using PNGFiles; include("benchmark/run_benchmarks.jl")'`
-completed all eight workloads. The command
-`julia --startup-file=no --project=. scripts/check.jl` passed (98.0%,
-5230/5337 measurable source lines). Local Markdown links/anchors and
-`git diff --check` passed. The explicit-codec-import workaround used for
-that first tutorial verification is now superseded by the D019 runtime fix.
-DeepSeek review was attempted but unavailable (insufficient account funds);
-API claims were checked directly against source. Next: user review; these
-documentation changes have not been committed or pushed.
+Known build quirks met while writing it (all frozen-Julia 1.13.3): `"$"`
+is a parse error (escape as `"\$"`); soft-scope cells shadow outer names on
+loop assignment (the data walk lives in a function); `join(f, itr)` and
+`replace(s, a, b)` do not exist (use `join(map(f, itr))`, pair-form
+`replace`); a `using` inside a Literate cell does not feed functions it
+defines (fully qualify `Printf` — replaced by hex tables + `Int(round)`
+formatting anyway); SVG reader's float `stroke-opacity` rounding shifts
+stroke pixels ±1 vs byte-alpha context strokes (assert geometry exactly,
+color within 1 — documented in `src/formats/svg.jl`).
+
+Verification on Julia 1.13.3 (Literate 2.21.0, IJulia 1.34.4):
+- `julia --startup-file=no --project=docs docs/make_tutorial.jl` — both
+  formats executed end to end (23 code cells, 30 assertions, 2 inline
+  chart images per format); no warnings.
+- The generated notebook was independently re-executed through the IJulia
+  kernel (Jupyter `nbclient` from a temporary venv): all cells completed,
+  no error or warning outputs.
+- `julia --startup-file=no --project=docs docs/tutorial.jl` run as a plain
+  script from a foreign cwd — passed, writing the PNG/SVG artifacts.
+- `julia --startup-file=no --project=. scripts/check.jl` — passed, 98.0%
+  (5235/5342 measurable source lines). Local Markdown links/anchors pass.
+- The previous activity-card tutorial content was fully replaced; its
+  verification notes above (D019 section) remain for that day's fix.
+DeepSeek review is unavailable (insufficient account funds); API claims
+were checked against source while developing. Next: user review/commit.
 
 **T000–T011 are complete — the board is done.** The port covers: core
 pixels/compositing, geometry, paths/fills, strokes + full context

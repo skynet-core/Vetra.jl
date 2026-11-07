@@ -107,13 +107,18 @@ function strokeShapes(
         commandsToShapes(p, true, pixelScale)[1])
 
     function makeRect(at::Vec2, to::Vec2)
+        # Same arithmetic as upstream, with the tangent components kept in
+        # local variables instead of re-deriving a Vec2 each use.
         tangent = normalize(to - at)
-        normal = Vec2(tangent.y, tangent.x)
-        a = Vec2(at.x + normal.x * halfStroke, at.y - normal.y * halfStroke)
-        b = Vec2(to.x + normal.x * halfStroke, to.y - normal.y * halfStroke)
-        c = Vec2(to.x - normal.x * halfStroke, to.y + normal.y * halfStroke)
-        d = Vec2(at.x - normal.x * halfStroke, at.y + normal.y * halfStroke)
-        return Vec2[a, b, c, d, a]
+        nx = tangent.y
+        ny = tangent.x
+        out = Vector{Vec2}(undef, 5)
+        out[1] = Vec2(at.x + nx * halfStroke, at.y - ny * halfStroke)
+        out[2] = Vec2(to.x + nx * halfStroke, to.y - ny * halfStroke)
+        out[3] = Vec2(to.x - nx * halfStroke, to.y + ny * halfStroke)
+        out[4] = Vec2(at.x - nx * halfStroke, at.y + ny * halfStroke)
+        out[5] = out[1]
+        return out
     end
 
     function addJoin!(shape, prevPos::Vec2, pos::Vec2, nextPos::Vec2)
@@ -187,7 +192,8 @@ function strokeShapes(
             end
         end
 
-        dashCopy = copy(dashes)
+        # Copy only when needed: an empty dash list is never extended.
+        dashCopy = isempty(dashes) ? dashes : copy(dashes)
         if length(dashCopy) % 2 != 0
             append!(dashCopy, dashCopy)
         end

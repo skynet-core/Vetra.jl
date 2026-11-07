@@ -227,7 +227,10 @@ fill(image::Image, color::ColorRGB) =
 """
 function mix(a::ColorRGBX, b::ColorRGBX, t::Float32)
     x = roundHalfAway(t * Float32(255))
-    f(av::UInt8, bv::UInt8) = UInt8((Int(av) * (255 - x) + Int(bv) * x + 127) ÷ 255)
+    # `255 - x` is a constant over the four channels: hoist it so the
+    # per-channel closure is a simple integer mix (bit-identical results).
+    invx = 255 - x
+    f(av::UInt8, bv::UInt8) = UInt8((Int(av) * invx + Int(bv) * x + 127) ÷ 255)
     return ColorRGBX(f(a.r, b.r), f(a.g, b.g), f(a.b, b.b), f(a.a, b.a))
 end
 
@@ -242,6 +245,7 @@ function *(color::ColorRGBX, opacity::Float32)
         return ColorRGBX(0x00, 0x00, 0x00, 0x00)
     end
     x = roundHalfAway(opacity * Float32(255))
+    # Constant closure over the four channels (bit-identical results).
     f(v::UInt8) = UInt8((Int(v) * x + 127) ÷ 255 & 0xff)
     return ColorRGBX(f(color.r), f(color.g), f(color.b), f(color.a))
 end
@@ -256,7 +260,9 @@ function *(color::ColorRGBX, coverage::UInt8)
     elseif coverage == 0xff
         return color
     end
-    f(v::UInt8) = UInt8((Int(v) * Int(coverage) + 127) ÷ 255)
+    cov = Int(coverage)
+    # Constant closure over the four channels (bit-identical results).
+    f(v::UInt8) = UInt8((Int(v) * cov + 127) ÷ 255)
     return ColorRGBX(f(color.r), f(color.g), f(color.b), f(color.a))
 end
 
@@ -279,11 +285,12 @@ function blendNormal(backdrop::ColorRGBX, source::ColorRGBX)
         return backdrop
     end
     k = 255 - Int(source.a)
+    sR, sG, sB = Int(source.r), Int(source.g), Int(source.b)
     # Upstream adds in `uint8`: sums past 255 wrap (visible on the
     # invalid-premul fixture cells, e.g. 255+255 -> 0). Mirror that.
-    f(bv::UInt8, sv::UInt8) = UInt8((Int(sv) + (Int(bv) * k) ÷ 255) % 256)
-    return ColorRGBX(f(backdrop.r, source.r), f(backdrop.g, source.g),
-        f(backdrop.b, source.b), blendAlpha(backdrop.a, source.a))
+    f(bv::UInt8, sv::Int) = UInt8((sv + (Int(bv) * k) ÷ 255) % 256)
+    return ColorRGBX(f(backdrop.r, sR), f(backdrop.g, sG), f(backdrop.b, sB),
+        blendAlpha(backdrop.a, source.a))
 end
 
 # Exports (classic `export`; this toolchain has no `public`). `width`/`height`

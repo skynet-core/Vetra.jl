@@ -9,7 +9,7 @@ T011 harness (recorded in tasks/T011-release.md and docs/DECISIONS.md D016):
   From the repository root:
   `julia --startup-file=no --project=/tmp/pngenv benchmark/run_benchmarks.jl`
   (replace `/tmp/pngenv` with an environment containing Vetra and PNGFiles;
-  see the [tutorial setup](../docs/TUTORIAL.md#1-set-up-a-reproducible-workspace)).
+  see the [tutorial setup](../docs/TUTORIAL.md#setup)).
 - `bench_reference.nim` — the same workloads against pinned upstream
   pixie, built with `nim c -d:release -d:pixieNoSimd` (scalar, oracle
   paths; checks on). No per-call allocation counter in Nim — those

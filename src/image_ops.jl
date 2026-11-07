@@ -226,14 +226,30 @@ function blendRect(a::Image, b::Image, pos::NTuple{2,Int}, blendMode)
     xEnd = min(b.width, a.width - px)
     yEnd = min(b.height, a.height - py)
 
+    # The clamps above keep x+1 / y+1 inside both images, so index the raw
+    # buffers directly instead of the bounds-checked getColor/set_pixel.
+    # @inbounds: every da/db access below stays within the clamped rect
+    # (aj/bj advance by 4 per pixel from 4*(row*width + col)).
+    da = a.data
+    db = b.data
+    wa = a.width
+    wb = b.width
     if blendMode === MaskBlend
         _zeroRows(a, 0, yStart + py)
-        for y in yStart:(yEnd - 1)
+        @inbounds for y in yStart:(yEnd - 1)
             _zeroRowSegment(a, 0, y + py, xStart + px)
+            aj = 4 * ((y + py) * wa + xStart + px)
+            bj = 4 * (y * wb + xStart)
             for x in xStart:(xEnd - 1)
-                dst = getColor(a, x + px + 1, y + py + 1)
-                src = getColor(b, x + 1, y + 1)
-                set_pixel(a, x + px + 1, y + py + 1, blendMask(dst, src))
+                src = ColorRGBX(db[bj + 1], db[bj + 2], db[bj + 3], db[bj + 4])
+                dst = ColorRGBX(da[aj + 1], da[aj + 2], da[aj + 3], da[aj + 4])
+                out = blendMask(dst, src)
+                da[aj + 1] = out.r
+                da[aj + 2] = out.g
+                da[aj + 3] = out.b
+                da[aj + 4] = out.a
+                aj += 4
+                bj += 4
             end
             _zeroRowSegment(a, xEnd + px, y + py, a.width - (xEnd + px))
         end
@@ -242,29 +258,61 @@ function blendRect(a::Image, b::Image, pos::NTuple{2,Int}, blendMode)
     end
 
     if blendMode === NormalBlend
-        for y in yStart:(yEnd - 1)
+        @inbounds for y in yStart:(yEnd - 1)
+            aj = 4 * ((y + py) * wa + xStart + px)
+            bj = 4 * (y * wb + xStart)
             for x in xStart:(xEnd - 1)
-                dst = getColor(a, x + px + 1, y + py + 1)
-                src = getColor(b, x + 1, y + 1)
-                set_pixel(a, x + px + 1, y + py + 1, blendNormal(dst, src))
+                # blendNormal returns an opaque source verbatim, so opaque
+                # source pixels are a straight copy (skips the dst read).
+                if db[bj + 4] == 0xff
+                    da[aj + 1] = db[bj + 1]
+                    da[aj + 2] = db[bj + 2]
+                    da[aj + 3] = db[bj + 3]
+                    da[aj + 4] = db[bj + 4]
+                else
+                    src = ColorRGBX(db[bj + 1], db[bj + 2], db[bj + 3], db[bj + 4])
+                    dst = ColorRGBX(da[aj + 1], da[aj + 2], da[aj + 3], da[aj + 4])
+                    out = blendNormal(dst, src)
+                    da[aj + 1] = out.r
+                    da[aj + 2] = out.g
+                    da[aj + 3] = out.b
+                    da[aj + 4] = out.a
+                end
+                aj += 4
+                bj += 4
             end
         end
         return nothing
     end
     if blendMode === OverwriteBlend
-        for y in yStart:(yEnd - 1)
+        @inbounds for y in yStart:(yEnd - 1)
+            aj = 4 * ((y + py) * wa + xStart + px)
+            bj = 4 * (y * wb + xStart)
             for x in xStart:(xEnd - 1)
-                set_pixel(a, x + px + 1, y + py + 1, getColor(b, x + 1, y + 1))
+                da[aj + 1] = db[bj + 1]
+                da[aj + 2] = db[bj + 2]
+                da[aj + 3] = db[bj + 3]
+                da[aj + 4] = db[bj + 4]
+                aj += 4
+                bj += 4
             end
         end
         return nothing
     end
     blend = blender(blendMode)
-    for y in yStart:(yEnd - 1)
+    @inbounds for y in yStart:(yEnd - 1)
+        aj = 4 * ((y + py) * wa + xStart + px)
+        bj = 4 * (y * wb + xStart)
         for x in xStart:(xEnd - 1)
-            dst = getColor(a, x + px + 1, y + py + 1)
-            src = getColor(b, x + 1, y + 1)
-            set_pixel(a, x + px + 1, y + py + 1, blend(dst, src))
+            src = ColorRGBX(db[bj + 1], db[bj + 2], db[bj + 3], db[bj + 4])
+            dst = ColorRGBX(da[aj + 1], da[aj + 2], da[aj + 3], da[aj + 4])
+            out = blend(dst, src)
+            da[aj + 1] = out.r
+            da[aj + 2] = out.g
+            da[aj + 3] = out.b
+            da[aj + 4] = out.a
+            aj += 4
+            bj += 4
         end
     end
     return nothing
@@ -323,23 +371,38 @@ function drawSmooth(a::Image, b::Image, tform::Mat3, blendMode)
         _zeroRows(a, 0, yStart)
     end
 
-    for y in yStart:(yEnd - 1)
-        xMin = Float32(a.width)
+    # The scanline is (-1000, y+off) to (1000, y+off), so its direction is
+    # exactly (2000, 0): the same arithmetic as `_intersectsLine` without
+    # allocating a Line/Vec2 per row. Pixel writes index `a.data` directly
+    # (x+1, y+1 are in range by the clamps above, so the bounds-checked
+    # getColor/set_pixel add nothing).
+    d = a.data
+    aw = a.width
+    # Writes land in [4*y*aw, 4*(y+1)*aw) with y < yEnd <= a.height and
+    # x < xEnd <= aw, so the pixel stores below are proven in range.
+    @inbounds for y in yStart:(yEnd - 1)
+        xMin = Float32(aw)
         xMax = Float32(0)
         for yOffset in (Float32(0), Float32(1))
-            scanLine = Line(
-                Vec2(Float32(-1000), Float32(y) + yOffset),
-                Vec2(Float32(1000), Float32(y) + yOffset))
+            laY = Float32(y) + yOffset
             for seg in perimeter
-                hit, at = _intersectsLine(scanLine, seg)
-                if hit && seg.to != at
-                    xMin = min(xMin, at.x)
-                    xMax = max(xMax, at.x)
+                s2 = seg.to - seg.at
+                denom = -s2.x * Float32(0) + Float32(2000) * s2.y
+                num = Float32(2000) * (laY - seg.at.y) -
+                    Float32(0) * (Float32(-1000) - seg.at.x)
+                u = num / denom
+                if u >= Float32(0) && u <= Float32(1)
+                    ax = seg.at.x + u * s2.x
+                    ay = seg.at.y + u * s2.y
+                    if !(seg.to.x == ax && seg.to.y == ay)
+                        xMin = min(xMin, ax)
+                        xMax = max(xMax, ax)
+                    end
                 end
             end
         end
-        xStart = clamp(Int(floor(xMin)), 0, a.width)
-        xEnd = clamp(Int(ceil(xMax)), 0, a.width)
+        xStart = clamp(Int(floor(xMin)), 0, aw)
+        xEnd = clamp(Int(ceil(xMax)), 0, aw)
         xEnd - xStart == 0 && continue
 
         srcPos = p + dx * Float32(xStart) + dy * Float32(y)
@@ -347,22 +410,30 @@ function drawSmooth(a::Image, b::Image, tform::Mat3, blendMode)
         if blendMode === MaskBlend && xStart > 0
             _zeroRowSegment(a, 0, y, xStart)
         end
+        rowBase = 4 * y * aw
         for x in xStart:(xEnd - 1)
             sample = getRgbaSmooth(b, srcPos.x, srcPos.y)
+            o = rowBase + 4 * x
             if blendMode === NormalBlend
-                out = blendNormal(getColor(a, x + 1, y + 1), sample)
+                out = blendNormal(
+                    ColorRGBX(d[o + 1], d[o + 2], d[o + 3], d[o + 4]), sample)
             elseif blendMode === OverwriteBlend
                 out = sample
             elseif blendMode === MaskBlend
-                out = blendMask(getColor(a, x + 1, y + 1), sample)
+                out = blendMask(
+                    ColorRGBX(d[o + 1], d[o + 2], d[o + 3], d[o + 4]), sample)
             else
-                out = blender(blendMode)(getColor(a, x + 1, y + 1), sample)
+                out = blender(blendMode)(
+                    ColorRGBX(d[o + 1], d[o + 2], d[o + 3], d[o + 4]), sample)
             end
-            set_pixel(a, x + 1, y + 1, out)
+            d[o + 1] = out.r
+            d[o + 2] = out.g
+            d[o + 3] = out.b
+            d[o + 4] = out.a
             srcPos = srcPos + dx
         end
-        if blendMode === MaskBlend && a.width - xEnd > 0
-            _zeroRowSegment(a, xEnd, y, a.width - xEnd)
+        if blendMode === MaskBlend && aw - xEnd > 0
+            _zeroRowSegment(a, xEnd, y, aw - xEnd)
         end
     end
 
@@ -667,11 +738,18 @@ function blur(
     kernel = gaussianKernel(r)
     oob = outOfBounds
     ob = (Int(oob.r), Int(oob.g), Int(oob.b), Int(oob.a))
+    d = image.data
+    w = image.width
+    h = image.height
 
-    # X pass, stored transposed (upstream `blurX`).
-    blurX = newImage(image.height, image.width)
-    for y in 0:(image.height - 1)
-        for x in 0:(image.width - 1)
+    # X pass, stored transposed (upstream `blurX`). All buffer indexing is
+    # proven in range (xx in [0, w-1], yy in [0, h-1], kernel in [1, 2r+1]),
+    # so @inbounds drops the per-access check.
+    blurX = newImage(h, w)
+    db = blurX.data
+    @inbounds for y in 0:(h - 1)
+        row = 4 * y * w
+        for x in 0:(w - 1)
             vr = vg = vb = va = 0
             for xx in (x - r):(min(x + r, 0) - 1)
                 ki = Int(kernel[xx - x + r + 1])
@@ -680,30 +758,34 @@ function blur(
                 vb += ob[3] * ki
                 va += ob[4] * ki
             end
-            for xx in max(x - r, 0):min(x + r, image.width - 1)
-                smp = getColor(image, xx + 1, y + 1)
+            for xx in max(x - r, 0):min(x + r, w - 1)
+                i = row + 4 * xx
                 ki = Int(kernel[xx - x + r + 1])
-                vr += Int(smp.r) * ki
-                vg += Int(smp.g) * ki
-                vb += Int(smp.b) * ki
-                va += Int(smp.a) * ki
+                vr += Int(d[i + 1]) * ki
+                vg += Int(d[i + 2]) * ki
+                vb += Int(d[i + 3]) * ki
+                va += Int(d[i + 4]) * ki
             end
-            for xx in max(x - r, image.width):(x + r)
+            for xx in max(x - r, w):(x + r)
                 ki = Int(kernel[xx - x + r + 1])
                 vr += ob[1] * ki
                 vg += ob[2] * ki
                 vb += ob[3] * ki
                 va += ob[4] * ki
             end
-            set_pixel(blurX, y + 1, x + 1, ColorRGBX(
-                UInt8(vr ÷ 256 ÷ 255), UInt8(vg ÷ 256 ÷ 255),
-                UInt8(vb ÷ 256 ÷ 255), UInt8(va ÷ 256 ÷ 255)))
+            # blurX has width h / height w; pixel (col y, row x) is (x*h+y).
+            i = 4 * (x * h + y)
+            db[i + 1] = UInt8(vr ÷ 256 ÷ 255)
+            db[i + 2] = UInt8(vg ÷ 256 ÷ 255)
+            db[i + 3] = UInt8(vb ÷ 256 ÷ 255)
+            db[i + 4] = UInt8(va ÷ 256 ÷ 255)
         end
     end
 
     # Y pass, reading the transposed X result column-wise.
-    for y in 0:(image.height - 1)
-        for x in 0:(image.width - 1)
+    @inbounds for y in 0:(h - 1)
+        row = 4 * y * w
+        for x in 0:(w - 1)
             vr = vg = vb = va = 0
             for yy in (y - r):(min(y + r, 0) - 1)
                 ki = Int(kernel[yy - y + r + 1])
@@ -712,24 +794,26 @@ function blur(
                 vb += ob[3] * ki
                 va += ob[4] * ki
             end
-            for yy in max(y - r, 0):min(y + r, image.height - 1)
-                smp = getColor(blurX, yy + 1, x + 1)
+            for yy in max(y - r, 0):min(y + r, h - 1)
+                i = 4 * (x * h + yy)
                 ki = Int(kernel[yy - y + r + 1])
-                vr += Int(smp.r) * ki
-                vg += Int(smp.g) * ki
-                vb += Int(smp.b) * ki
-                va += Int(smp.a) * ki
+                vr += Int(db[i + 1]) * ki
+                vg += Int(db[i + 2]) * ki
+                vb += Int(db[i + 3]) * ki
+                va += Int(db[i + 4]) * ki
             end
-            for yy in max(y - r, image.height):(y + r)
+            for yy in max(y - r, h):(y + r)
                 ki = Int(kernel[yy - y + r + 1])
                 vr += ob[1] * ki
                 vg += ob[2] * ki
                 vb += ob[3] * ki
                 va += ob[4] * ki
             end
-            set_pixel(image, x + 1, y + 1, ColorRGBX(
-                UInt8(vr ÷ 256 ÷ 255), UInt8(vg ÷ 256 ÷ 255),
-                UInt8(vb ÷ 256 ÷ 255), UInt8(va ÷ 256 ÷ 255)))
+            i = row + 4 * x
+            d[i + 1] = UInt8(vr ÷ 256 ÷ 255)
+            d[i + 2] = UInt8(vg ÷ 256 ÷ 255)
+            d[i + 3] = UInt8(vb ÷ 256 ÷ 255)
+            d[i + 4] = UInt8(va ÷ 256 ÷ 255)
         end
     end
     return nothing
@@ -766,13 +850,20 @@ early break at the extremum, the result written as an alpha-only mask
 function spread(image::Image, spread::Float32)
     s = _roundRadius(spread)
     s == 0 && return nothing
+    d = image.data
+    w = image.width
+    h = image.height
     if s > 0
-        spreadX = newImage(image.height, image.width)
-        for y in 0:(image.height - 1)
-            for x in 0:(image.width - 1)
+        spreadX = newImage(h, w)
+        db = spreadX.data
+        # Pooling window indices are proven in range (xx/yy clamped to the
+        # image); @inbounds drops the per-access check.
+        @inbounds for y in 0:(h - 1)
+            row = 4 * y * w
+            for x in 0:(w - 1)
                 maxValue = UInt8(0)
-                for xx in max(x - s, 0):min(x + s, image.width - 1)
-                    v = getColor(image, xx + 1, y + 1).a
+                for xx in max(x - s, 0):min(x + s, w - 1)
+                    v = d[row + 4 * xx + 4]
                     if v > maxValue
                         maxValue = v
                     end
@@ -780,15 +871,20 @@ function spread(image::Image, spread::Float32)
                         break
                     end
                 end
-                set_pixel(spreadX, y + 1, x + 1,
-                    ColorRGBX(0x00, 0x00, 0x00, maxValue))
+                # spreadX pixel (col y, row x); the mask keeps rgb zeroed.
+                i = 4 * (x * h + y)
+                db[i + 1] = UInt8(0x00)
+                db[i + 2] = UInt8(0x00)
+                db[i + 3] = UInt8(0x00)
+                db[i + 4] = maxValue
             end
         end
-        for y in 0:(image.height - 1)
-            for x in 0:(image.width - 1)
+        @inbounds for y in 0:(h - 1)
+            row = 4 * y * w
+            for x in 0:(w - 1)
                 maxValue = UInt8(0)
-                for yy in max(y - s, 0):min(y + s, image.height - 1)
-                    v = getColor(spreadX, yy + 1, x + 1).a
+                for yy in max(y - s, 0):min(y + s, h - 1)
+                    v = db[4 * (x * h + yy) + 4]
                     if v > maxValue
                         maxValue = v
                     end
@@ -796,18 +892,23 @@ function spread(image::Image, spread::Float32)
                         break
                     end
                 end
-                set_pixel(image, x + 1, y + 1,
-                    ColorRGBX(0x00, 0x00, 0x00, maxValue))
+                i = row + 4 * x
+                d[i + 1] = UInt8(0x00)
+                d[i + 2] = UInt8(0x00)
+                d[i + 3] = UInt8(0x00)
+                d[i + 4] = maxValue
             end
         end
     else
         s = -s
-        spreadX = newImage(image.height, image.width)
-        for y in 0:(image.height - 1)
-            for x in 0:(image.width - 1)
+        spreadX = newImage(h, w)
+        db = spreadX.data
+        @inbounds for y in 0:(h - 1)
+            row = 4 * y * w
+            for x in 0:(w - 1)
                 minValue = UInt8(0xff)
-                for xx in max(x - s, 0):min(x + s, image.width - 1)
-                    v = getColor(image, xx + 1, y + 1).a
+                for xx in max(x - s, 0):min(x + s, w - 1)
+                    v = d[row + 4 * xx + 4]
                     if v < minValue
                         minValue = v
                     end
@@ -815,15 +916,19 @@ function spread(image::Image, spread::Float32)
                         break
                     end
                 end
-                set_pixel(spreadX, y + 1, x + 1,
-                    ColorRGBX(0x00, 0x00, 0x00, minValue))
+                i = 4 * (x * h + y)
+                db[i + 1] = UInt8(0x00)
+                db[i + 2] = UInt8(0x00)
+                db[i + 3] = UInt8(0x00)
+                db[i + 4] = minValue
             end
         end
-        for y in 0:(image.height - 1)
-            for x in 0:(image.width - 1)
+        @inbounds for y in 0:(h - 1)
+            row = 4 * y * w
+            for x in 0:(w - 1)
                 minValue = UInt8(0xff)
-                for yy in max(y - s, 0):min(y + s, image.height - 1)
-                    v = getColor(spreadX, yy + 1, x + 1).a
+                for yy in max(y - s, 0):min(y + s, h - 1)
+                    v = db[4 * (x * h + yy) + 4]
                     if v < minValue
                         minValue = v
                     end
@@ -831,8 +936,11 @@ function spread(image::Image, spread::Float32)
                         break
                     end
                 end
-                set_pixel(image, x + 1, y + 1,
-                    ColorRGBX(0x00, 0x00, 0x00, minValue))
+                i = row + 4 * x
+                d[i + 1] = UInt8(0x00)
+                d[i + 2] = UInt8(0x00)
+                d[i + 3] = UInt8(0x00)
+                d[i + 4] = minValue
             end
         end
     end

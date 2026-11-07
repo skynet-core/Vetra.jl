@@ -882,12 +882,14 @@ end
 
 """
 Fill `path` (a `Path` or an SVG path string) with a solid color into
-`image` (upstream `fillPath` solid-paint path, blend mode Normal): the path
-is closed into shapes, transformed by `transform` (exactly once), and
-rasterized with `windingRule`. Colors convert to premultiplied alpha before
-blending. Mutates `image` and returns nothing.
+`image` (upstream `fillPath` solid-paint path): the path is closed into
+shapes, transformed by `transform` (exactly once), and rasterized with
+`windingRule` under `blendMode` (Normal by default, as the documented
+entry point). Colors convert to premultiplied alpha before blending.
+Mutates `image` and returns nothing.
 """
-function fillPath(image::Image, path, color, ; transform::Mat3 = mat3(), windingRule = NonZero)
+function fillPath(image::Image, path, color, ; transform::Mat3 = mat3(),
+    windingRule = NonZero, blendMode = NormalBlend)
     (windingRule === NonZero || windingRule === EvenOdd) ||
         throw(ArgumentError("windingRule must be NonZero or EvenOdd"))
     c = color isa ColorRGBX ? color :
@@ -908,6 +910,6 @@ function fillPath(image::Image, path, color, ; transform::Mat3 = mat3(), winding
             end
         end
     end
-    fillShapes(image, shapes, c, windingRule)
+    fillShapes(image, shapes, c, windingRule; blendMode = blendMode)
     return nothing
 end

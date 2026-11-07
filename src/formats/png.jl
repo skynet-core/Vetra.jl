@@ -12,6 +12,10 @@
 # - 16-bit PNGs: libpng strips to 8-bit (high byte); upstream scales
 #   `(v * 255 + 32767) div 65535` (png.nim `toUint8` L251-252). No pinned
 #   fixture exercises 16-bit input.
+# - Encode settings: PNGFiles `save` runs with its package defaults
+#   (level Z_BEST_SPEED, strategy Z_RLE, PAETH filter); the measured
+#   alternative filter/strategy combinations were within run-to-run
+#   noise on the benchmark workload, so no override is pinned.
 # - Interlacing/palette/tRNS are handled by libpng exactly per the PNG
 #   spec; upstream's own decoder (png.nim L641-756) produces identical
 #   pixels for valid files.
@@ -44,21 +48,12 @@ function _pngLoad(data::Vector{UInt8})
     return Base.invokelatest(m.load, IOBuffer(data), expand_paletted = true)
 end
 
-"""`PNGFiles.save`."""
-function _pngSave(buf::IOBuffer, out)
-    m = _requirePngFiles()
-    m.save(buf, out)
-    return nothing
-end
-
 """
 Decode PNG bytes into an `Image` (upstream `decodePng(data).convertToImage()`):
 straight RGBA in, premultiplied stored pixels out.
 """
 function decodePNG(data::Vector{UInt8})
     _requirePngFiles()
-    # PNGFiles `load` yields a (w, h) matrix of ColorTypes colors
-    # (Gray/GrayA/RGB/RGBA, 8-bit fixed-point; palette expanded).
     # Pre-declare `pixels`: this build loses locals first assigned inside a
     # try block (verified; see T008 notes).
     pixels = nothing
@@ -67,30 +62,49 @@ function decodePNG(data::Vector{UInt8})
     catch
         throw(ArgumentError("Invalid PNG buffer, unable to load"))
     end
-    # PNGFiles returns a (height, width) matrix: pixels[row, col].
     h = size(pixels, 1)
     w = size(pixels, 2)
     image = newImage(w, h)
-    d = image.data
-    n8(c) = UInt8(round(Float64(c) * 255)) # exact for N0f8 (k/255)
-    for y in 1:h
+    # `_pngLoad` dispatches through `invokelatest`, so `pixels` reaches here
+    # as `Any`; the kernel function is specialized on the concrete element
+    # type (function-barrier pattern, per the performance manual), keeping
+    # the per-pixel loop hot instead of a generic getindex per pixel.
+    _decodePngPixels!(pixels, image.data, w, h)
+    return image
+end
+
+"""
+Kernel for `decodePNG`: straight 8-bit ColorTypes pixels (Gray/GrayA/RGB/
+RGBA of `FixedPointNumbers.N0f8`, whose channel's `.i` field is the raw
+byte — exactly what `UInt8(round(Float64(ch) * 255))` yields, verified on
+the pinned fixtures) converted to premultiplied `d` bytes. Channel fields
+are tested once on the concrete element type `C`, never per pixel.
+"""
+function _decodePngPixels!(pixels::AbstractMatrix{C}, d::Vector{UInt8}, w::Int, h::Int) where {C}
+    fn = fieldnames(C)
+    hasG = :g in fn
+    hasB = :b in fn
+    hasA = :alpha in fn
+    # (y, x) ranges over the matrix; every d[..] access stays in range.
+    @inbounds for y in 1:h
+        row = 4 * (y - 1) * w
         for x in 1:w
             c = pixels[y, x]
-            r = n8(c.r)
-            # Channel layout per upstream `writePixels` (png.nim L262):
-            # gray, gray+alpha, rgb, rgba -> straight RGBA.
-            g = isdefined(c, :g) ? n8(c.g) : r
-            b = isdefined(c, :b) ? n8(c.b) : g
-            a = isdefined(c, :alpha) ? n8(c.alpha) : 0xff
-            p = rgbx(ColorRGBA(r, g, b, a))
-            o = 4 * ((y - 1) * w + (x - 1))
-            d[o + 1] = p.r
-            d[o + 2] = p.g
-            d[o + 3] = p.b
-            d[o + 4] = p.a
+            r = hasG ? c.r.i : c.value.i
+            g = hasG ? c.g.i : r
+            b = hasB ? c.b.i : g
+            a = hasA ? c.alpha.i : UInt8(0xff)
+            # chroma `rgbx(ColorRGBA)`: straight -> premultiplied,
+            # `(v * a + 127) div 255`.
+            ai = Int(a)
+            o = row + 4 * (x - 1)
+            d[o + 1] = UInt8((Int(r) * ai + 127) ÷ 255)
+            d[o + 2] = UInt8((Int(g) * ai + 127) ÷ 255)
+            d[o + 3] = UInt8((Int(b) * ai + 127) ÷ 255)
+            d[o + 4] = a
         end
     end
-    return image
+    return nothing
 end
 
 """
@@ -101,23 +115,45 @@ upstream `toStraightAlpha` path) before encoding.
 function encodePNG(image::Image)
     _requirePngFiles()
     d = image.data
-    # PNGFiles.save expects a column-major (height, width, 4) RGBA array
-    # (verified: first dimension is the row). Fill it directly rather than
-    # reshaping a row-major byte buffer (Julia is column-major).
-    out = Array{UInt8, 3}(undef, image.height, image.width, 4)
-    for y in 0:(image.height - 1)
-        for x in 0:(image.width - 1)
-            i = 4 * (y * image.width + x)
-            c = toStraightAlpha(ColorRGBX(d[i + 1], d[i + 2], d[i + 3], d[i + 4]))
-            out[y + 1, x + 1, 1] = c.r
-            out[y + 1, x + 1, 2] = c.g
-            out[y + 1, x + 1, 3] = c.b
-            out[y + 1, x + 1, 4] = c.a
+    w = image.width
+    h = image.height
+    # PNGFiles.save expects a column-major (height, width, 4) RGBA array.
+    # Fill a flat buffer with that exact linear layout ((c-1)*w*h + x*h + y)
+    # and `reshape` it: 1-D indexing into the 3-D array directly would pay
+    # an ind2sub per channel store.
+    out = Vector{UInt8}(undef, h * w * 4)
+    plane = w * h
+    @inbounds for y in 0:(h - 1)
+        srow = 4 * y * w
+        for x in 0:(w - 1)
+            i = srow + 4 * x
+            a = d[i + 4]
+            k = x * h + y
+            if a == 0x00
+                # toStraightAlpha's zero branch.
+                out[k + 1] = 0x00
+                out[k + plane + 1] = 0x00
+                out[k + 2 * plane + 1] = 0x00
+                out[k + 3 * plane + 1] = 0x00
+            elseif a == 0xff
+                # Opaque: straight == premultiplied (round(v * 1.0) == v).
+                out[k + 1] = d[i + 1]
+                out[k + plane + 1] = d[i + 2]
+                out[k + 2 * plane + 1] = d[i + 3]
+                out[k + 3 * plane + 1] = a
+            else
+                # toStraightAlpha: UInt8(min(roundHalfAway(v * 255.0/a), 255))
+                mult = 255.0 / Int(a)
+                out[k + 1] = UInt8(min(roundHalfAway(Float64(d[i + 1]) * mult), 255))
+                out[k + plane + 1] = UInt8(min(roundHalfAway(Float64(d[i + 2]) * mult), 255))
+                out[k + 2 * plane + 1] = UInt8(min(roundHalfAway(Float64(d[i + 3]) * mult), 255))
+                out[k + 3 * plane + 1] = a
+            end
         end
     end
     try
         buf = IOBuffer()
-        _pngSave(buf, out)
+        _requirePngFiles().save(buf, reshape(out, h, w, 4))
         seekstart(buf)
         return read(buf) # Vector{UInt8} in this build
     catch

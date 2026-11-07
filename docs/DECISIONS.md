@@ -488,6 +488,74 @@ The exact user command `julia --startup-file=no --project=. -e 'using Pkg; Pkg.t
 and `julia --startup-file=no --project=. scripts/check.jl` both pass locally
 on Julia 1.13.3; coverage is 98.0% (5235/5342 measurable source lines).
 
+## D020 — Executable tutorial from Literate.jl (accepted, 2026-11-06)
+
+Problem: the tutorial (a step-by-step crypto OHLC candlestick chart,
+rewritten 2026-11-06 to also build an SVG backend and read it back through
+`parseSvg`) must generate both executable Jupyter cells and Markdown
+containing executed results, without maintaining separate examples.
+
+Chosen behavior: `docs/tutorial.jl` is the single source. Literate.jl emits
+CommonMark and `.ipynb`, with `execute=true` for both and errors propagated.
+`docs/make_tutorial.jl` writes to ignored `docs/build/tutorial/`; the existing
+`docs/TUTORIAL.md` URL becomes the setup/launch guide. A small tutorial-only
+PNG display adapter supplies inline images without adding methods to Vetra's
+public types. Existing assertions execute in both formats.
+
+Literate and IJulia live only in `docs/Project.toml`, alongside the optional
+codecs and a local Vetra development dependency. The explicit develop step
+works on Julia 1.10, which does not use the newer `[sources]` table. Assets
+are fetched explicitly before building. No package installation or network
+fetch occurs inside notebook cells. Repo links in generated prose use GitHub
+URLs so they remain valid at either output location.
+
+Alternative: Weave.jl could produce evaluated documents too; Literate's
+plain-Julia input and direct Markdown/notebook outputs fit the existing
+examples without another document syntax. Generated outputs are build
+artifacts rather than a second editable copy of the tutorial.
+
+Evidence: both Literate formats executed 13 code cells/18 assertions with
+eight inline images; nbclient independently executed the notebook through
+IJulia with no error outputs. Plain-script execution and the package gate
+also passed (docs/HANDOFF.md records commands and versions).
+
+## D021 — Renderer performance pass: official-tips optimizations, byte-exact gate (accepted, 2026-11-06)
+
+Problem: close the gap to the pinned scalar Nim reference (T011: draw
+6.3×, blur/shadow 1.5×, stroke 1.2×) per the Julia performance-tips
+manual, without changing any pinned rendering arithmetic.
+
+Chosen behavior: the optimizations in tasks/T012-optimization.md —
+flat-buffer pixel indexing in `blendRect`/`drawSmooth`/`blur`/`spread`
+(replacing per-pixel bounds-checked wrappers), an opaque-source
+straight copy in Normal compositing (pixel-identical by `blendNormal`'s
+documented early return), loop-invariant hoisting in the compositing
+closures, preallocated stroke outlines, and `@inbounds` only on loops
+whose in-range proof is written in the code. Correctness is proven by
+the unchanged byte-exact fixture gate (97.94% coverage), not by
+tolerances.
+
+Alternative considered and rejected: streaming span callbacks
+(`eachSpan`) replacing the per-row `walk` vector — measured 6× slower
+on the stroke workload in this build (closure dispatch vs iteration
+over a small concrete vector); the pinned `walk` stays. Also rejected:
+scalar trapezoid-edge buffers (neutral — `Segment` is isbits in a
+preallocated array), and `@inbounds` in the rasterizer's pinned loops
+(range-provable but not measured to matter; recorded as the next
+candidate in T012).
+
+Compatibility impact: none observable — all fixture outputs
+byte-identical; `fillPath(ColorRGBX...)` gained a `blendMode` keyword
+(default `NormalBlend`, prior behavior).
+
+Evidence: 3-run harness medians vs T011 baseline vs Nim: blur 0.69 →
+0.37 ms (Nim 0.43), shadow 1.07 → 0.40 ms (Nim 0.67), draw 1.15 → 0.23
+ms (Nim 0.18), fill 0.90 → 0.76 ms (Nim 0.82), text 1.26 → 1.25 ms
+(Nim 1.99), stroke 26.63 → 25.81 ms (Nim 22.30); PNG follow-up in the
+same pass: decode 67.27 → 1.50 ms (Nim 1.17) via the kernel-function
+barrier and raw-byte channel reads, encode 29.05 → 23.31 ms (Nim
+10.78, codec-bound at ~2.1 ms libpng per image).
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives
