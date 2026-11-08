@@ -348,7 +348,8 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     computePaths, defaultLineHeight,
     ascent, descent, lineGap, lineHeight, capHeight,
     hasGlyph, fallbackTypeface, getGlyphPath, getAdvance,
-    getKerningAdjustment, getLeftSideBearing, isCCW, name
+    getKerningAdjustment, getLeftSideBearing, isCCW, name,
+    toColors, fromColors
 
 include("paths.jl")
 include("blends.jl")
@@ -368,14 +369,35 @@ include("formats/qoi.jl")
 include("formats/gif.jl")
 include("formats/jpeg.jl")
 include("formats/io.jl")
+include("colormatrices.jl")
+
+# --- precompile common entry points (T021) ---
+# Measured in fresh processes: the first fillRect/stroke/fillText call
+# compiles the whole draw pipeline (mask, rasterizer, text layout) for ~2.5 s
+# on first use. Compiling these instances at precompile time moves that cost
+# to the install/precompile stage (reported separately; no sysimage needed).
+precompile(Context, (Image,))
+precompile(newImage, (Int, Int))
+precompile(fillRect, (Context, Float32, Float32, Float32, Float32))
+precompile(fillRect, (Context, Rect))
+precompile(fill, (Context, Path))
+precompile(stroke, (Context, Path))
+precompile(strokeSegment, (Context, Float32, Float32, Float32, Float32))
+precompile(fillText, (Context, String, Float32, Float32))
+precompile(measureText, (Context, String))
+precompile(drawImage, (Context, Image, Float32, Float32, Float32, Float32))
+precompile(save, (Context,))
+precompile(restore, (Context,))
+precompile(saveLayer, (Context,))
+precompile(clip, (Context, Path))
+precompile(getColor, (Image, Int, Int))
+precompile(encodeImage, (Image, FileFormat))
 
 function __init__()
-    # Optional packages depend on the active environment, not the precompile cache.
-    for id in (_PNGFILES_PKGID, _JPEGTURBO_PKGID, _XML_PKGID)
-        if Base.locate_package(id) !== nothing
-            Base.require(id)
-        end
-    end
+    # Optional codecs are discovered lazily on first use (D028): each
+    # _require* loads its package only when a user actually calls the
+    # feature, so `using Vetra` stays fast in codec-enabled environments.
+    return nothing
 end
 
 end # module Vetra

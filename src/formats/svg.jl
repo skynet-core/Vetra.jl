@@ -694,17 +694,17 @@ const _XML_PKGID = Base.PkgId(
     Base.UUID("72c71f33-b9b6-44de-8c94-c961784809e2"), "XML")
 
 """
-The `XML` module loaded by Vetra.__init__, or a clear install hint (D014).
-Environments without XML load normally and get this error only on use.
+The `XML` module, loaded on first use (lazy discovery, D028), or a clear
+install hint (D014). Environments without XML load normally and get this
+error only on use.
 """
 function _requireXml()
-    try
-        return Base.root_module(_XML_PKGID)
-    catch
+    if Base.locate_package(_XML_PKGID) === nothing
         throw(ErrorException(
             "SVG support is opt-in: add the XML package to your environment " *
             "(Pkg.add(\"XML\")) and retry"))
     end
+    return Base.require(_XML_PKGID)
 end
 
 """True for `XML` element nodes (text/comments/xml-decl are skipped).
@@ -769,7 +769,9 @@ function parseSvg(data::String, width::Int = 0, height::Int = 0)
     # try block (verified; see T008 notes).
     doc = nothing
     try
-        doc = xml.parse(data, xml.Node)
+        # invokelatest: XML may be required (lazy discovery, D028) by this
+        # very call, so `parse` can be newer than this method instance.
+        doc = Base.invokelatest(xml.parse, data, xml.Node)
     catch
         _svgFail()
     end

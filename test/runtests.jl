@@ -56,3 +56,12 @@ include("font_tests.jl")
 # stack, clips, transforms, dashes, layers, opacity, text and gradients
 # (hand-derived expectations; isPointInPath + dash wiring).
 include("context_integration_tests.jl")
+
+# T014: ordinary-number (Real) boundary arguments for the drawing API.
+include("numeric_api_tests.jl")
+
+# T015: color matrix interop (opt-in ColorTypes, D024).
+include("colormatrices_tests.jl")
+
+# T016: notebook image display (MIME show methods).
+include("notebook_display_tests.jl")

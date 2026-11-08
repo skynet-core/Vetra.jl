@@ -11,8 +11,12 @@ widget APIs are not part of the current library.
 
 - Drawing coordinates: top-left origin, x right, y down, distances in pixels,
   angles in radians. Geometry uses `Float32`; pixel centers lie at `n + 0.5`.
-- Context coordinate overloads generally take `Float32`: write `10f0` or
-  `Float32(x)`. Image dimensions are `Int`.
+- Context coordinate overloads accept ordinary Julia numbers (`Int`,
+  `Float64`, …) as well as `Float32`; a `Real` boundary method converts once
+  and delegates to the specialized `Float32` kernel, so callers pay no
+  dynamic-dispatch cost (T014). Image dimensions and pixel indices remain
+  `Int`. Keyword arguments (`strokeWidth = …`, gradient positions, …) are
+  still typed `Float32` and need `2f0`-style literals.
 - Pixel access (`getColor`, `setColor`) is 1-based. Crop offsets (`subImage`)
   and drawing coordinates start at 0.
 - `Image.data` contains premultiplied RGBA `UInt8` bytes, row-major. Use
@@ -38,6 +42,13 @@ colors. `toPremultipliedAlpha` and `toStraightAlpha` convert at boundaries;
 `parseHtmlColor` accepts `#RGB`, `#RRGGBB`, numeric `rgb(...)`/`rgba(...)`, and
 named CSS colors. `rgba(255, 0, 0, 128)` uses byte alpha, while the string
 `"rgba(255, 0, 0, 0.5)"` uses alpha from 0 to 1.
+
+With the opt-in `ColorTypes` package (D024), `toColors(image)` exports an
+image as a `Matrix{RGBA{N0f8}}` (straight alpha, `[row, col]`, row 1 = top)
+and `fromColors(matrix)` imports 2-D `RGB`/`RGBA` matrices (N0f8 bytes or
+0..1 floats, clamped) as a premultiplied `Image`. Both use the PNG boundary
+conversions, so matrix bytes equal PNG payload bytes; 3-D plane matrices and
+non-`Matrix` views are rejected with a clear error.
 
 ## Geometry and paths
 

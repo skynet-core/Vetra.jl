@@ -45,6 +45,8 @@ live separately in `docs/Project.toml`.
 GPU backends, command recording, and widgets remain future work; there is no
 implemented backend plugin interface. Keep future rendering changes behind
 the existing drawing API and numerical contract rather than adding placeholders.
+The [forward roadmap](ROADMAP.md) schedules recording/export design and
+implementation; GPU rendering and widgets remain deferred.
 
 ## Development and validation
 

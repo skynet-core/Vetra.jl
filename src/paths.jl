@@ -129,6 +129,8 @@ function moveTo(path::Path, x::Float32, y::Float32)
     return nothing
 end
 moveTo(path::Path, v::Vec2) = moveTo(path, v.x, v.y)
+"""Number form (T014): converts once, then dispatches to the `Float32` kernel."""
+moveTo(path::Path, x::Real, y::Real) = moveTo(path, Float32(x), Float32(y))
 
 """Connect the sub-path's last point to (x, y) with a straight line
 (upstream `lineTo`)."""
@@ -138,6 +140,7 @@ function lineTo(path::Path, x::Float32, y::Float32)
     return nothing
 end
 lineTo(path::Path, v::Vec2) = lineTo(path, v.x, v.y)
+lineTo(path::Path, x::Real, y::Real) = lineTo(path, Float32(x), Float32(y)) # T014
 
 """Append a cubic Bézier segment (upstream `bezierCurveTo`)."""
 function bezierCurveTo(path::Path, x1::Float32, y1::Float32, x2::Float32, y2::Float32, x3::Float32, y3::Float32)
@@ -147,6 +150,10 @@ function bezierCurveTo(path::Path, x1::Float32, y1::Float32, x2::Float32, y2::Fl
 end
 bezierCurveTo(path::Path, c1::Vec2, c2::Vec2, to::Vec2) =
     bezierCurveTo(path, c1.x, c1.y, c2.x, c2.y, to.x, to.y)
+bezierCurveTo(path::Path, x1::Real, y1::Real, x2::Real, y2::Real,
+    x3::Real, y3::Real) = # T014
+    bezierCurveTo(path, Float32(x1), Float32(y1), Float32(x2), Float32(y2),
+        Float32(x3), Float32(y3))
 
 """Append a quadratic Bézier segment (upstream `quadraticCurveTo`)."""
 function quadraticCurveTo(path::Path, x1::Float32, y1::Float32, x2::Float32, y2::Float32)
@@ -156,6 +163,8 @@ function quadraticCurveTo(path::Path, x1::Float32, y1::Float32, x2::Float32, y2:
 end
 quadraticCurveTo(path::Path, c::Vec2, to::Vec2) =
     quadraticCurveTo(path, c.x, c.y, to.x, to.y)
+quadraticCurveTo(path::Path, x1::Real, y1::Real, x2::Real, y2::Real) = # T014
+    quadraticCurveTo(path, Float32(x1), Float32(y1), Float32(x2), Float32(y2))
 
 """
 Append an elliptical arc (upstream `ellipticalArcTo`): radii, axis rotation
@@ -167,6 +176,10 @@ function ellipticalArcTo(path::Path, rx::Float32, ry::Float32, xAxisRotation::Fl
     path.at = Vec2(x, y)
     return nothing
 end
+ellipticalArcTo(path::Path, rx::Real, ry::Real, xAxisRotation::Real,
+    largeArcFlag::Bool, sweepFlag::Bool, x::Real, y::Real) = # T014
+    ellipticalArcTo(path, Float32(rx), Float32(ry), Float32(xAxisRotation),
+        largeArcFlag, sweepFlag, Float32(x), Float32(y))
 
 """
 Add a circular arc centered at (x, y) from angle a0 to a1 (upstream `arc`).
@@ -210,6 +223,8 @@ function arc(path::Path, x::Float32, y::Float32, r::Float32, a0::Float32, a1::Fl
 end
 arc(path::Path, pos::Vec2, r::Float32, a::Vec2; ccw::Bool = false) =
     arc(path, pos.x, pos.y, r, a.x, a.y; ccw = ccw)
+arc(path::Path, x::Real, y::Real, r::Real, a0::Real, a1::Real; ccw::Bool = false) = # T014
+    arc(path, Float32(x), Float32(y), Float32(r), Float32(a0), Float32(a1); ccw = ccw)
 
 """
 Rounded-corner arc between the (x0,y0)->(x1,y1) and (x1,y1)->(x2,y2)
@@ -255,6 +270,8 @@ function arcTo(path::Path, x1::Float32, y1::Float32, x2::Float32, y2::Float32, r
     return nothing
 end
 arcTo(path::Path, a::Vec2, b::Vec2, r::Float32) = arcTo(path, a.x, a.y, b.x, b.y, r)
+arcTo(path::Path, x1::Real, y1::Real, x2::Real, y2::Real, r::Real) = # T014
+    arcTo(path, Float32(x1), Float32(y1), Float32(x2), Float32(y2), Float32(r))
 
 """
 Add a rectangle with corner (x, y) and size (w, h) (upstream `rect`);
@@ -277,6 +294,8 @@ function rect(path::Path, x::Float32, y::Float32, w::Float32, h::Float32; clockw
 end
 rect(path::Path, r::Rect; clockwise::Bool = true) =
     rect(path, r.x, r.y, r.w, r.h; clockwise = clockwise)
+rect(path::Path, x::Real, y::Real, w::Real, h::Real; clockwise::Bool = true) = # T014
+    rect(path, Float32(x), Float32(y), Float32(w), Float32(h); clockwise = clockwise)
 
 """Bézier circle-approximation constant (upstream `splineCircleK`).
 Float64, exactly as upstream: the magic offsets are computed in Float64 and
@@ -345,6 +364,10 @@ function roundedRect(path::Path, x::Float32, y::Float32, w::Float32, h::Float32,
 end
 roundedRect(path::Path, r::Rect, nw::Float32, ne::Float32, se::Float32, sw::Float32; clockwise::Bool = true) =
     roundedRect(path, r.x, r.y, r.w, r.h, nw, ne, se, sw; clockwise = clockwise)
+roundedRect(path::Path, x::Real, y::Real, w::Real, h::Real, nw::Real, ne::Real,
+    se::Real, sw::Real; clockwise::Bool = true) = # T014
+    roundedRect(path, Float32(x), Float32(y), Float32(w), Float32(h),
+        Float32(nw), Float32(ne), Float32(se), Float32(sw); clockwise = clockwise)
 
 """Add an ellipse centered at (cx, cy), radii (rx, ry): four Bézier segments
 plus Close (upstream `ellipse`)."""
@@ -368,10 +391,14 @@ function ellipse(path::Path, cx::Float32, cy::Float32, rx::Float32, ry::Float32)
     return nothing
 end
 ellipse(path::Path, c::Vec2, rx::Float32, ry::Float32) = ellipse(path, c.x, c.y, rx, ry)
+ellipse(path::Path, cx::Real, cy::Real, rx::Real, ry::Real) = # T014
+    ellipse(path, Float32(cx), Float32(cy), Float32(rx), Float32(ry))
 
 """Add a circle (upstream `circle`: an ellipse with equal radii)."""
 circle(path::Path, cx::Float32, cy::Float32, r::Float32) = ellipse(path, cx, cy, r, r)
 circle(path::Path, c::Circle) = ellipse(path, c.pos.x, c.pos.y, c.radius, c.radius)
+circle(path::Path, cx::Real, cy::Real, r::Real) = # T014
+    ellipse(path, Float32(cx), Float32(cy), Float32(r), Float32(r))
 
 """
 Add a regular n-gon centered at (x, y) with circumradius `size`, vertex 0
@@ -392,6 +419,8 @@ function polygon(path::Path, x::Float32, y::Float32, size::Float32, sides::Int)
 end
 polygon(path::Path, pos::Vec2, size::Float32, sides::Int) =
     polygon(path, pos.x, pos.y, size, sides)
+polygon(path::Path, x::Real, y::Real, size::Real, sides::Int) = # T014
+    polygon(path, Float32(x), Float32(y), Float32(size), sides)
 
 # --------------------------------------------------------------------------
 # SVG path parsing

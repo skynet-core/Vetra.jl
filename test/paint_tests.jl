@@ -588,3 +588,280 @@ end
         end
     end
 end
+
+# T022: non-solid gradient paints are cut out of the coverage mask and
+# blended in one pass (no fill canvas). Expected pixels are hand-derived
+# from the documented arithmetic — Float32 `t`, stop interpolation,
+# roundHalfAway, applyOpacity + MaskBlend cut-out, the paint's blend —
+# never from the code under test.
+@testset "T022 fused non-solid gradient fill" begin
+    # Opaque red @0 -> opaque blue @1; both stops opaque, so premul ==
+    # straight: t=0 -> (255,0,0,255), t=0.5 -> 127.5 -> (128,0,128,255),
+    # t=1 -> (0,0,255,255).
+    function fgStops()
+        [ColorStop(rgba(255, 0, 0, 255), 0f0),
+            ColorStop(rgba(0, 0, 255, 255), 1f0)]
+    end
+
+    function fgLinear(opacity, blend, h1, h2)
+        p = Paint(LinearGradientPaint)
+        p.opacity = opacity
+        p.blendMode = blend
+        p.gradientHandlePositions = [h1, h2]
+        p.gradientStops = fgStops()
+        return p
+    end
+
+    function fgFresh(w, h; white = false)
+        img = newImage(w, h)
+        white && fill(img, rgb(255, 255, 255))
+        return img
+    end
+
+    function fgFullRect(w, h)
+        p = newPath()
+        rect(p, 0f0, 0f0, Float32(w), Float32(h))
+        return p
+    end
+
+    # Linear, horizontal handles (0,0)->(10,0): t = x/10; x=0 -> t=0,
+    # x=5 -> t=0.5 (50f0/100f0 exact).
+    @testset "linear horizontal" begin
+        img = fgFresh(10, 1)
+        fillPath(img, fgFullRect(10, 1),
+            fgLinear(1f0, NormalBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(255, 0, 0, 255)
+        @test getColor(img, 6, 1) == rgbx(128, 0, 128, 255)
+    end
+
+    # Multi-row horizontal with opacity 0.5 (o = 128, full coverage
+    # k = 128): every row must be the SAME cut-out, (128,0,0,128) at t=0.
+    # A double cut-out (scaling an already-cut row again) would give
+    # row 2 = 128*128 div 255 = 64 — this pins that regression.
+    @testset "linear horizontal multi-row" begin
+        img = fgFresh(4, 2)
+        fillPath(img, fgFullRect(4, 2),
+            fgLinear(0.5f0, NormalBlend, Vec2(0f0, 0f0), Vec2(4f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(128, 0, 0, 128)
+        @test getColor(img, 1, 2) == rgbx(128, 0, 0, 128)
+    end
+
+    # Linear, vertical handles (0,0)->(0,10): t = y/10.
+    @testset "linear vertical" begin
+        img = fgFresh(1, 10)
+        fillPath(img, fgFullRect(1, 10),
+            fgLinear(1f0, NormalBlend, Vec2(0f0, 0f0), Vec2(0f0, 10f0)))
+        @test getColor(img, 1, 1) == rgbx(255, 0, 0, 255)
+        @test getColor(img, 1, 6) == rgbx(128, 0, 128, 255)
+    end
+
+    # Linear, general handles (0,0)->(8,8): t = (x+y)/16.
+    @testset "linear general" begin
+        img = fgFresh(16, 16)
+        fillPath(img, fgFullRect(16, 16),
+            fgLinear(1f0, NormalBlend, Vec2(0f0, 0f0), Vec2(8f0, 8f0)))
+        @test getColor(img, 1, 1) == rgbx(255, 0, 0, 255)    # t=0
+        @test getColor(img, 9, 1) == rgbx(128, 0, 128, 255) # t=0.5
+        @test getColor(img, 5, 5) == rgbx(128, 0, 128, 255) # t=0.5
+        @test getColor(img, 9, 9) == rgbx(0, 0, 255, 255)   # t=1
+    end
+
+    # Radial: center (8,8), edge (16,8), skew (8,16) -> t=0 at the center
+    # and t=0.5 at (12,8) (exact 0.5f0 in the normalized space).
+    @testset "radial" begin
+        p = Paint(RadialGradientPaint)
+        p.gradientHandlePositions = [Vec2(8f0, 8f0), Vec2(16f0, 8f0),
+            Vec2(8f0, 16f0)]
+        p.gradientStops = fgStops()
+        img = fgFresh(16, 16)
+        fillPath(img, fgFullRect(16, 16), p)
+        @test getColor(img, 9, 9) == rgbx(255, 0, 0, 255)
+        @test getColor(img, 13, 9) == rgbx(128, 0, 128, 255)
+    end
+
+    # Angular: center (8,8), edge (16,8) (gradientAngle 0). Right of
+    # center a = 0 -> t = 0.75 ((1-t)*255 = 63.75 -> 64, t*255 = 191.25
+    # -> 191); above center a = -pi/2 -> t = 0.5; left of center
+    # a = pi -> fixAngle(3pi/2) = -pi/2 (range (-pi, pi]) -> t = 0.25
+    # ((1-t)*255 = 191.25 -> 191, t*255 = 63.75 -> 64).
+    @testset "angular" begin
+        p = Paint(AngularGradientPaint)
+        p.gradientHandlePositions = [Vec2(8f0, 8f0), Vec2(16f0, 8f0),
+            Vec2(8f0, 16f0)]
+        p.gradientStops = fgStops()
+        img = fgFresh(16, 16)
+        fillPath(img, fgFullRect(16, 16), p)
+        @test getColor(img, 13, 9) == rgbx(64, 0, 191, 255)
+        @test getColor(img, 9, 5) == rgbx(128, 0, 128, 255)
+        @test getColor(img, 5, 9) == rgbx(191, 0, 64, 255)
+    end
+
+    # Opacity rounding: o = roundHalfAway(255 * opacity) scales the full
+    # coverage (255) to k = o, so the opaque-red t=0 sample becomes
+    # (o, 0, 0, o). o=0 leaves the backdrop untouched.
+    @testset "opacity" begin
+        for (op, expected) in
+            ((1f0, rgbx(255, 0, 0, 255)),
+                (0.5f0, rgbx(128, 0, 0, 128)),
+                (0.499f0, rgbx(127, 0, 0, 127)),
+                (0.501f0, rgbx(128, 0, 0, 128)),
+                (0.002f0, rgbx(1, 0, 0, 1)),
+                (0.9991f0, rgbx(255, 0, 0, 255)))
+            img = fgFresh(10, 1)
+            fillPath(img, fgFullRect(10, 1),
+                fgLinear(op, NormalBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+            @test getColor(img, 1, 1) == expected
+        end
+        img = fgFresh(10, 1; white = true)
+        fillPath(img, fgFullRect(10, 1),
+            fgLinear(0.001f0, NormalBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(255, 255, 255, 255)
+    end
+
+    # Blend modes reach the fused pass: Overwrite writes the cut-out
+    # source verbatim (clears white); Multiply over white with an opaque
+    # red source is red ((255-255)*sv + 0 + 255*sv) div 255 per channel).
+    @testset "blend modes" begin
+        img = fgFresh(10, 1; white = true)
+        fillPath(img, fgFullRect(10, 1),
+            fgLinear(1f0, OverwriteBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(255, 0, 0, 255)
+        img = fgFresh(10, 1; white = true)
+        fillPath(img, fgFullRect(10, 1),
+            fgLinear(1f0, MultiplyBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(255, 0, 0, 255)
+    end
+
+    # Mask-family paint blend modes reach the generic branch. MaskBlend
+    # scales the backdrop by the source alpha: translucent premul
+    # backdrop (100,50,25,200) x cut-out source (128,0,0,128) at
+    # opacity 0.5 (o = k = 128, full coverage) -> (100*128/255,
+    # 50*128/255, 25*128/255, 200*128/255) = (50,25,12,100).
+    @testset "mask blend mode" begin
+        img = newImage(10, 1)
+        fill(img, rgbx(100, 50, 25, 200))
+        fillPath(img, fgFullRect(10, 1),
+            fgLinear(0.5f0, MaskBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(50, 25, 12, 100)
+        # Opacity rounded to zero (o = 0) with MaskBlend clears the
+        # backdrop (source alpha 0 scales it to 0).
+        img = fgFresh(10, 1; white = true)
+        fillPath(img, fgFullRect(10, 1),
+            fgLinear(0.001f0, MaskBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(0, 0, 0, 0)
+    end
+
+    # Translucent premultiplied backdrop under NormalBlend: dst
+    # (100,50,25,200), src (128,0,0,128) (t=0, o = k = 128) ->
+    # k = 255-128 = 127: R = 128 + 100*127/255 = 177,
+    # G = 0 + 50*127/255 = 24, B = 0 + 25*127/255 = 12,
+    # A = 128 + 200*127/255 = 227.
+    @testset "translucent backdrop" begin
+        img = newImage(10, 1)
+        fill(img, rgbx(100, 50, 25, 200))
+        fillPath(img, fgFullRect(10, 1),
+            fgLinear(0.5f0, NormalBlend, Vec2(0f0, 0f0), Vec2(10f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(177, 24, 12, 227)
+    end
+
+    # Partial coverage x opacity (white-box): coverage 255 and 128 with
+    # o = 128 -> k = 128 and 128*128/255 = 64; handles (0,0)->(2,0) give
+    # t=0 red (255,0,0,255) and t=0.5 mid (128,0,128,255), cut to
+    # (128,0,0,128) and (128*64/255, 0, 128*64/255, 64) = (32,0,32,64)
+    # over a transparent backdrop.
+    @testset "partial coverage times opacity" begin
+        mask = newImage(2, 1)
+        setColor(mask, 1, 1, rgbx(255, 255, 255, 255))
+        setColor(mask, 2, 1, rgbx(255, 255, 255, 128))
+        img = newImage(2, 1)
+        p = fgLinear(Float32(1), NormalBlend, Vec2(0f0, 0f0), Vec2(2f0, 0f0))
+        Vetra._fillGradientMasked(img, mask, p, Vetra.blender(NormalBlend), 128)
+        @test getColor(img, 1, 1) == rgbx(128, 0, 0, 128)
+        @test getColor(img, 2, 1) == rgbx(32, 0, 32, 64)
+    end
+
+    # Coverage boundary: outside the path the backdrop is untouched.
+    @testset "mask coverage boundary" begin
+        img = fgFresh(16, 16; white = true)
+        p = newPath()
+        rect(p, 0f0, 0f0, 8f0, 8f0)
+        fillPath(img, p,
+            fgLinear(1f0, NormalBlend, Vec2(0f0, 0f0), Vec2(8f0, 0f0)))
+        @test getColor(img, 1, 1) == rgbx(255, 0, 0, 255)
+        @test getColor(img, 16, 16) == rgbx(255, 255, 255, 255)
+    end
+
+    # Error boundaries (same messages as the pre-T022 pipeline).
+    @testset "validation" begin
+        img = fgFresh(2, 2)
+        p3 = fgLinear(1f0, NormalBlend, Vec2(0f0, 0f0), Vec2(4f0, 0f0))
+        p3.gradientHandlePositions =
+            [Vec2(0f0, 0f0), Vec2(4f0, 0f0), Vec2(2f0, 2f0)]
+        try
+            fillPath(img, fgFullRect(2, 2), p3)
+            @test false
+        catch e
+            @test e.msg == "Linear gradient requires 2 handles"
+        end
+        p0 = fgLinear(1f0, NormalBlend, Vec2(0f0, 0f0), Vec2(4f0, 0f0))
+        p0.gradientStops = ColorStop[]
+        try
+            fillPath(img, fgFullRect(2, 2), p0)
+            @test false
+        catch e
+            @test e.msg == "Gradient must have at least 1 color stop"
+        end
+        r2 = Paint(RadialGradientPaint)
+        r2.gradientHandlePositions = [Vec2(0f0, 0f0), Vec2(1f0, 0f0)]
+        r2.gradientStops = fgStops()
+        try
+            fillPath(img, fgFullRect(2, 2), r2)
+            @test false
+        catch e
+            @test e.msg == "Radial gradient requires 3 handles"
+        end
+        a2 = Paint(AngularGradientPaint)
+        a2.gradientHandlePositions = [Vec2(0f0, 0f0), Vec2(1f0, 0f0)]
+        a2.gradientStops = fgStops()
+        try
+            fillPath(img, fgFullRect(2, 2), a2)
+            @test false
+        catch e
+            @test e.msg == "Angular gradient requires 2 handles"
+        end
+        # Zero stops for the radial/angular fused variants (same message as
+        # the pre-T022 pipeline, reached via fillPath).
+        for kind in (RadialGradientPaint, AngularGradientPaint)
+            zs = Paint(kind)
+            zs.gradientHandlePositions =
+                [Vec2(0f0, 0f0), Vec2(1f0, 0f0), Vec2(1f0, 1f0)]
+            try
+                fillPath(img, fgFullRect(2, 2), zs)
+                @test false
+            catch e
+                @test e.msg == "Gradient must have at least 1 color stop"
+            end
+        end
+        # Non-finite stop positions: deliberate early error (the old
+        # 2-buffer pipeline threw an accidental InexactError mid-fill);
+        # the destination must stay untouched either way.
+        for pos in (NaN32, Float32(Inf))
+            img = fgFresh(2, 2)
+            pnf = fgLinear(1f0, NormalBlend, Vec2(0f0, 0f0), Vec2(4f0, 0f0))
+            pnf.gradientStops = [ColorStop(rgba(255, 0, 0, 255), 0f0),
+                ColorStop(rgba(0, 0, 255, 255), pos)]
+            try
+                fillPath(img, fgFullRect(2, 2), pnf)
+                @test false
+            catch e
+                @test e.msg == "Gradient stop positions must be finite"
+            end
+            @test all(v -> v == 0x00, img.data)
+        end
+        # Dispatcher parity with `fillGradient` (a solid paint is not a
+        # gradient): white-box call of the fused dispatch.
+        @test_throws ArgumentError Vetra._fillGradientMasked(
+            img, fgFresh(2, 2), Paint(rgba(1, 2, 3, 4)),
+            Vetra.blender(NormalBlend), 255)
+    end
+end

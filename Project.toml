@@ -1,7 +1,7 @@
 name = "Vetra"
 uuid = "273bb84c-244c-4f17-9eb9-5a651004d3c7"
 authors = ["Vetra.jl contributors"]
-version = "0.0.1"
+version = "0.1.0"
 
 [compat]
 julia = "1.10"
@@ -12,6 +12,7 @@ SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 PNGFiles = "f57f5aa1-a3ce-4bc8-8ab9-96f992907883"
 XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
 JpegTurbo = "b835a17e-a41a-41e7-81f0-2f016b05efe0"
+ColorTypes = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
 
 [targets]
-test = ["Test", "SHA", "PNGFiles", "XML", "JpegTurbo"]
+test = ["Test", "SHA", "PNGFiles", "XML", "JpegTurbo", "ColorTypes"]

@@ -82,9 +82,8 @@ Edit **`docs/tutorial.jl`**, never the generated files:
 - Lines starting with `# ` are prose.
 - Plain Julia lines are executable code.
 - `##` starts a comment that stays inside the rendered code block.
-- A closing `TutorialFigure(image)` in a cell gives it a PNG display in
-  both formats. That small adapter keeps the chart code clean and does not
-  touch Vetra's API.
+- A closing bare `Image` expression in a cell gives it a PNG display in
+  both formats (Vetra's built-in `show` methods, T016).
 
 Rerun `docs/make_tutorial.jl` afterwards; it overwrites both generated
 outputs. The benchmark and full-suite commands in section 12 remain shell
@@ -103,3 +102,11 @@ For environment errors, rerun the setup commands; for a missing font, run
 `scripts/fetch_upstream.jl`; for a notebook on the wrong environment, check
 `Base.active_project()` in the kernel — it should point at
 `docs/Project.toml`.
+
+## Next
+
+- Copy a single finished pattern (sparkline, gauge, KPI card, candles,
+  annotation, diagram, dashboard, social card) from the
+  [cookbook](cookbook.jl); its rendered previews are in
+  [INDEX.md](INDEX.md) → [gallery](build/gallery.html).
+- The full documentation map is in [INDEX.md](INDEX.md).

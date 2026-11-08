@@ -25,13 +25,12 @@ The `JpegTurbo` module loaded by Vetra.__init__, or a clear install hint
 only on use.
 """
 function _requireJpegTurbo()
-    try
-        return Base.root_module(_JPEGTURBO_PKGID)
-    catch
+    if Base.locate_package(_JPEGTURBO_PKGID) === nothing
         throw(ErrorException(
             "JPEG support is opt-in: add the JpegTurbo package to your " *
             "environment (Pkg.add(\"JpegTurbo\")) and retry"))
     end
+    return Base.require(_JPEGTURBO_PKGID)
 end
 
 """

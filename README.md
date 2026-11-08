@@ -26,6 +26,12 @@ crypto OHLC candlestick chart step by step, render it to PNG, and build a
 small SVG backend. Executed Markdown and a Jupyter notebook with inline
 images generate from one Literate.jl source.
 
+For copy-paste patterns (sparkline, gauge, KPI card, candlesticks, image
+annotation, scientific diagram, dashboard thumbnail, social card), use the
+[cookbook](docs/cookbook.jl) and its rendered
+[gallery](docs/build/gallery.html). All documentation entry points are
+listed in [docs/INDEX.md](docs/INDEX.md).
+
 Requires Julia **1.10+** (developed and tested on 1.10 and 1.13). The
 package is not yet registered (see docs/HANDOFF.md), so add it from a
 checkout:
@@ -52,16 +58,16 @@ fill(img, rgb(245, 244, 250))     # straight colors via rgb/rgba/rgbx
 
 ctx = Context(img)                # all context drawing mutates ctx.image
 ctx.fillStyle = "#FF5C00"
-fillRect(ctx, 12f0, 12f0, 90f0, 60f0)
-translate(ctx, 10f0, 40f0)
-rotate(ctx, 0.3f0)
+fillRect(ctx, 12, 12, 90, 60)     # ordinary numbers work; Float32 inside
+translate(ctx, 10, 40)
+rotate(ctx, 0.3)
 ctx.strokeStyle = rgb(0, 128, 255)
-ctx.lineWidth = 4f0
-strokeRect(ctx, 0f0, 0f0, 60f0, 60f0)
+ctx.lineWidth = 4
+strokeRect(ctx, 0, 0, 60, 60)
 
 ctx.font = "path/to/Roboto-Regular.ttf"  # a TTF/glyf font path (see below)
-ctx.fontSize = 24f0
-fillText(ctx, "Hello, Vetra", 12f0, 120f0)
+ctx.fontSize = 24
+fillText(ctx, "Hello, Vetra", 12, 120)
 
 writeFile(img, "out.png")         # PNG/BMP/QOI/PPM write; magic-byte read
 ```
@@ -97,6 +103,16 @@ TTF/glyf fonts (cmap 4/12, `kern` v0 + GPOS pair-position, simple +
 composite glyphs). CFF-outline fonts, TTC collections and SVG fonts raise
 `ArgumentError` by design. `ctx.font` takes a font file path and is cached
 per path; `readTypeface`/`parseTtf` load directly from bytes.
+
+## Color-matrix interop (opt-in ColorTypes)
+
+Exchange images with the standard Julia color-matrix ecosystem
+(decision D024): `toColors(img)` returns a `Matrix{RGBA{N0f8}}` of
+straight-alpha colors (`[row, col]`, row 1 = top), and `fromColors(m)`
+imports a 2-D matrix of `RGB`/`RGBA` colors (N0f8 bytes or 0..1 floats,
+clamped) as a premultiplied `Image`. Both use the same boundary
+conversions as PNG export/decode, so matrix bytes equal PNG payload
+bytes. `Pkg.add("ColorTypes")` enables it; the core loads without it.
 
 ## Tests and coverage
 
@@ -189,6 +205,18 @@ as proof of zero allocation. Generated coverage and allocation files are ignored
 For repeatable end-to-end comparisons use the [benchmark harness](benchmark/README.md).
 See Julia's [performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/)
 for function barriers, type stability, and measurement guidance.
+
+## Roadmap and contributing
+
+The [forward roadmap](docs/ROADMAP.md) covers easier numeric arguments, Julia
+image interoperability, notebook display, a visual cookbook, release preparation,
+application benchmarks, recording with SVG/PDF export, richer text, and JPEG/WebP.
+These are planned additions; current support is listed in
+[Compatibility](docs/COMPATIBILITY.md).
+
+Agents and contributors should start with [AGENTS.md](AGENTS.md), the
+[task board](TASKS.md), and the [handoff](docs/HANDOFF.md), then claim one ready
+task. Each spec includes dependencies, scope, acceptance criteria, and checks.
 
 ## License
 

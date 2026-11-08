@@ -162,6 +162,8 @@ function applyOpacity(image::Image, opacity::Float32)
     end
     return nothing
 end
+applyOpacity(image::Image, opacity::Real) = # T014
+    applyOpacity(image, Float32(opacity))
 
 """
 Copy the (x, y, w, h) sub-rectangle of `image` (upstream `subImage`);
@@ -823,6 +825,9 @@ blur(image::Image, radius::Float32, outOfBounds::ColorRGBA) =
     blur(image, radius, rgbx(outOfBounds))
 blur(image::Image, radius::Float32, outOfBounds::ColorRGB) =
     blur(image, radius, rgbx(outOfBounds))
+blur(image::Image, radius::Real, outOfBounds::ColorRGBX =
+    ColorRGBX(0x00, 0x00, 0x00, 0x00)) = # T014
+    blur(image, Float32(radius), outOfBounds)
 
 """
 Resize to (width, height) (upstream `resize`): a copy when the size is
@@ -946,6 +951,8 @@ function spread(image::Image, spread::Float32)
     end
     return nothing
 end
+spread(image::Image, s::Real) = # T014
+    spread(image, Float32(s))
 
 """
 Build a shadow image (upstream `shadow`): the source at `offset`
@@ -967,6 +974,8 @@ function shadow(image::Image, offset::Vec2, spreadPx::Float32, blurPx::Float32, 
     draw(result, mask; blendMode = MaskBlend)
     return result
 end
+shadow(image::Image, offset::Vec2, spreadPx::Real, blurPx::Real, color) = # T014
+    shadow(image, offset, Float32(spreadPx), Float32(blurPx), color)
 
 """
 Sub-image or padded super image (upstream `superImage`): inside the

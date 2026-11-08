@@ -216,12 +216,16 @@ end
 isPointInPath(ctx::Context, path::Path, x::Float32, y::Float32,
     windingRule = NonZero) =
     isPointInPath(ctx, path, Vec2(x, y), windingRule)
+isPointInPath(ctx::Context, path::Path, x::Real, y::Real, windingRule = NonZero) = # T014
+    isPointInPath(ctx, path, Vec2(Float32(x), Float32(y)), windingRule)
 
 isPointInPath(ctx::Context, pos::Vec2, windingRule = NonZero) =
     isPointInPath(ctx, ctx.path, pos, windingRule)
 
 isPointInPath(ctx::Context, x::Float32, y::Float32, windingRule = NonZero) =
     isPointInPath(ctx, ctx.path, Vec2(x, y), windingRule)
+isPointInPath(ctx::Context, x::Real, y::Real, windingRule = NonZero) = # T014
+    isPointInPath(ctx, ctx.path, Vec2(Float32(x), Float32(y)), windingRule)
 
 """`ctx.mat = ctx.mat * m` -- the new matrix is applied to points first
 (upstream `transform`)."""
@@ -237,6 +241,7 @@ end
 
 translate(ctx::Context, x::Float32, y::Float32) =
     translate(ctx, Vec2(x, y))
+translate(ctx::Context, x::Real, y::Real) = translate(ctx, Vec2(x, y)) # T014
 
 function scale(ctx::Context, v::Vec2)
     ctx.mat = ctx.mat * scale(v)
@@ -245,12 +250,15 @@ end
 
 scale(ctx::Context, x::Float32, y::Float32) =
     scale(ctx, Vec2(x, y))
+scale(ctx::Context, x::Real, y::Real) = scale(ctx, Vec2(x, y)) # T014
 
 """`ctx.mat = ctx.mat * rotate(angle)` (upstream `rotate`, radians)."""
 function rotate(ctx::Context, angle::Float32)
     ctx.mat = ctx.mat * rotate(angle)
     return nothing
 end
+"""Ordinary-number form (T014); the `Vec2` wrappers below convert the same way."""
+rotate(ctx::Context, angle::Real) = rotate(ctx, Float32(angle))
 
 # ---------- path command wrappers ----------
 
@@ -267,6 +275,7 @@ end
 
 moveTo(ctx::Context, x::Float32, y::Float32) =
     moveTo(ctx, Vec2(x, y))
+moveTo(ctx::Context, x::Real, y::Real) = moveTo(ctx, Vec2(x, y)) # T014
 
 function lineTo(ctx::Context, v::Vec2)
     lineTo(ctx.path, v)
@@ -275,6 +284,7 @@ end
 
 lineTo(ctx::Context, x::Float32, y::Float32) =
     lineTo(ctx, Vec2(x, y))
+lineTo(ctx::Context, x::Real, y::Real) = lineTo(ctx, Vec2(x, y)) # T014
 
 function bezierCurveTo(ctx::Context, c1::Vec2, c2::Vec2, to::Vec2)
     bezierCurveTo(ctx.path, c1, c2, to)
@@ -287,6 +297,9 @@ function bezierCurveTo(
 )
     return bezierCurveTo(ctx, Vec2(c1x, c1y), Vec2(c2x, c2y), Vec2(x, y))
 end
+bezierCurveTo(ctx::Context, c1x::Real, c1y::Real, c2x::Real, c2y::Real,
+    x::Real, y::Real) = # T014
+    bezierCurveTo(ctx, Vec2(c1x, c1y), Vec2(c2x, c2y), Vec2(x, y))
 
 function quadraticCurveTo(ctx::Context, c::Vec2, to::Vec2)
     quadraticCurveTo(ctx.path, c, to)
@@ -298,6 +311,8 @@ function quadraticCurveTo(
 )
     return quadraticCurveTo(ctx, Vec2(cpx, cpy), Vec2(x, y))
 end
+quadraticCurveTo(ctx::Context, cpx::Real, cpy::Real, x::Real, y::Real) = # T014
+    quadraticCurveTo(ctx, Vec2(cpx, cpy), Vec2(x, y))
 
 function arc(
     ctx::Context, x::Float32, y::Float32, r::Float32, a0::Float32, a1::Float32;
@@ -306,6 +321,8 @@ function arc(
     arc(ctx.path, x, y, r, a0, a1; ccw = ccw)
     return nothing
 end
+arc(ctx::Context, x::Real, y::Real, r::Real, a0::Real, a1::Real; ccw::Bool = false) = # T014
+    arc(ctx.path, x, y, r, a0, a1; ccw = ccw)
 
 function arc(ctx::Context, pos::Vec2, r::Float32, a::Vec2; ccw::Bool = false)
     arc(ctx.path, pos, r, a; ccw = ccw)
@@ -319,6 +336,8 @@ function arcTo(
     arcTo(ctx.path, x1, y1, x2, y2, radius)
     return nothing
 end
+arcTo(ctx::Context, x1::Real, y1::Real, x2::Real, y2::Real, radius::Real) = # T014
+    arcTo(ctx.path, x1, y1, x2, y2, radius)
 
 function arcTo(ctx::Context, a::Vec2, b::Vec2, r::Float32)
     arcTo(ctx.path, a, b, r)
@@ -339,6 +358,10 @@ function rect(ctx::Context, x::Float32, y::Float32, w::Float32, h::Float32)
     rect(ctx.path, x, y, w, h)
     return nothing
 end
+function rect(ctx::Context, x::Real, y::Real, w::Real, h::Real)
+    rect(ctx.path, x, y, w, h)
+    return nothing
+end
 
 function ellipse(ctx::Context, c::Vec2, rx::Float32, ry::Float32)
     ellipse(ctx.path, c, rx, ry)
@@ -346,6 +369,10 @@ function ellipse(ctx::Context, c::Vec2, rx::Float32, ry::Float32)
 end
 
 function ellipse(ctx::Context, x::Float32, y::Float32, rx::Float32, ry::Float32)
+    ellipse(ctx.path, x, y, rx, ry)
+    return nothing
+end
+function ellipse(ctx::Context, x::Real, y::Real, rx::Real, ry::Real)
     ellipse(ctx.path, x, y, rx, ry)
     return nothing
 end
@@ -364,8 +391,19 @@ function roundedRect(
     roundedRect(ctx.path, r, nw, ne, se, sw)
     return nothing
 end
+function roundedRect(
+    ctx::Context, x::Real, y::Real, w::Real, h::Real, nw::Real, ne::Real,
+    se::Real, sw::Real
+)
+    roundedRect(ctx.path, x, y, w, h, nw, ne, se, sw)
+    return nothing
+end
 
 function circle(ctx::Context, cx::Float32, cy::Float32, r::Float32)
+    circle(ctx.path, cx, cy, r)
+    return nothing
+end
+function circle(ctx::Context, cx::Real, cy::Real, r::Real)
     circle(ctx.path, cx, cy, r)
     return nothing
 end
@@ -376,6 +414,10 @@ function circle(ctx::Context, c::Circle)
 end
 
 function polygon(ctx::Context, x::Float32, y::Float32, size::Float32, sides::Int)
+    polygon(ctx.path, x, y, size, sides)
+    return nothing
+end
+function polygon(ctx::Context, x::Real, y::Real, size::Real, sides::Int)
     polygon(ctx.path, x, y, size, sides)
     return nothing
 end
@@ -522,6 +564,8 @@ function clearRect(ctx::Context, x::Float32, y::Float32, w::Float32, h::Float32)
     clearRect(ctx, rect(x, y, w, h))
     return nothing
 end
+clearRect(ctx::Context, x::Real, y::Real, w::Real, h::Real) = # T014
+    clearRect(ctx, rect(x, y, w, h))
 
 """Fill a rect per fillStyle (upstream `fillRect`): fresh path, rect, fill."""
 function fillRect(ctx::Context, r::Rect)
@@ -535,6 +579,8 @@ function fillRect(ctx::Context, x::Float32, y::Float32, w::Float32, h::Float32)
     fillRect(ctx, rect(x, y, w, h))
     return nothing
 end
+fillRect(ctx::Context, x::Real, y::Real, w::Real, h::Real) = # T014
+    fillRect(ctx, rect(x, y, w, h))
 
 """Stroke a rect per strokeStyle (upstream `strokeRect`)."""
 function strokeRect(ctx::Context, r::Rect)
@@ -548,6 +594,8 @@ function strokeRect(ctx::Context, x::Float32, y::Float32, w::Float32, h::Float32
     strokeRect(ctx, rect(x, y, w, h))
     return nothing
 end
+strokeRect(ctx::Context, x::Real, y::Real, w::Real, h::Real) = # T014
+    strokeRect(ctx, rect(x, y, w, h))
 
 """
 Draw `image` into the destination rect `(dx, dy, dWidth, dHeight)` of the
@@ -576,6 +624,12 @@ function drawImage(ctx::Context, image::Image, dx::Float32, dy::Float32)
     drawImage(ctx, image, dx, dy, Float32(image.width), Float32(image.height))
     return nothing
 end
+drawImage(ctx::Context, image::Image, dx::Real, dy::Real) = # T014
+    drawImage(ctx, image, Float32(dx), Float32(dy))
+drawImage(ctx::Context, image::Image, dx::Real, dy::Real,
+    dWidth::Real, dHeight::Real) = # T014
+    drawImage(ctx, image, Float32(dx), Float32(dy), Float32(dWidth),
+        Float32(dHeight))
 
 function drawImage(ctx::Context, image::Image, pos::Vec2)
     drawImage(ctx, image, pos.x, pos.y)
@@ -600,6 +654,17 @@ function drawImage(
     sub = subImage(image,
         Int(trunc(sx)), Int(trunc(sy)), Int(trunc(sWidth)), Int(trunc(sHeight)))
     drawImage(ctx, sub, dx, dy, Float32(sub.width), Float32(sub.height))
+    return nothing
+end
+function drawImage(
+    ctx::Context, image::Image,
+    sx::Real, sy::Real, sWidth::Real, sHeight::Real,
+    dx::Real, dy::Real, dWidth::Real, dHeight::Real
+)
+    drawImage(
+        ctx, image,
+        Float32(sx), Float32(sy), Float32(sWidth), Float32(sHeight),
+        Float32(dx), Float32(dy), Float32(dWidth), Float32(dHeight))
     return nothing
 end
 
@@ -628,6 +693,8 @@ function strokeSegment(
     strokeSegment(ctx, segment(Vec2(ax, ay), Vec2(bx, by)))
     return nothing
 end
+strokeSegment(ctx::Context, ax::Real, ay::Real, bx::Real, by::Real) = # T014
+    strokeSegment(ctx, segment(Vec2(ax, ay), Vec2(bx, by)))
 
 # ---------- text (T009; upstream contexts.nim L50-52, L179-259, L469-513) ----------
 
@@ -710,6 +777,8 @@ function fillText(ctx::Context, text::String, x::Float32, y::Float32)
     fillText(ctx, text, Vec2(x, y))
     return nothing
 end
+fillText(ctx::Context, text::String, x::Real, y::Real) = # T014
+    fillText(ctx, text, Vec2(x, y))
 
 """Upstream `strokeText(ctx, image, text, at)` (alphabetic-baseline
 adjustment, current stroke settings, then the image-level `strokeText`)."""
@@ -757,6 +826,8 @@ function strokeText(ctx::Context, text::String, x::Float32, y::Float32)
     strokeText(ctx, text, Vec2(x, y))
     return nothing
 end
+strokeText(ctx::Context, text::String, x::Real, y::Real) = # T014
+    strokeText(ctx, text, Vec2(x, y))
 
 """Upstream `measureText(ctx, text)`: the typeset width in pixels."""
 function measureText(ctx::Context, text::String)

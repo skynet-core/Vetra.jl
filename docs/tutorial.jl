@@ -56,18 +56,10 @@
 # exports land in `artifacts/tutorial/` (gitignored); the SVG round trip in
 # section 11 stays in memory.
 #
-# A short display adapter gives chart figures a PNG representation in both
-# Markdown and notebook outputs. It keeps the rendering code itself clean.
+# Chart cells close with the `Image` itself: Vetra's built-in PNG display
+# (T016) renders it inline in both Markdown and notebook outputs.
 
 using Vetra
-
-struct TutorialFigure
-    image::Image
-end
-Base.show(io::IO, ::MIME"image/png", figure::TutorialFigure) =
-    write(io, encodePNG(figure.image))
-Base.show(io::IO, ::MIME"text/plain", figure::TutorialFigure) =
-    print(io, "Vetra image: ", width(figure.image), " × ", height(figure.image))
 
 root = dirname(dirname(pathof(Vetra)))
 outdir = joinpath(root, "artifacts", "tutorial")
@@ -349,7 +341,7 @@ end
 pngPath = joinpath(outdir, "btc-chart.png")
 writeFile(img, pngPath)
 @assert isfile(pngPath) && filesize(pngPath) > 10_000
-TutorialFigure(img)
+img
 
 #
 # That is the finished chart rendered by Vetra. Sections 9–11 take the
@@ -571,7 +563,7 @@ for ch in ((on.r, getColor(img, 11, bottomY).r),
            (on.b, getColor(img, 11, bottomY).b))
     @assert abs(Int(ch[1]) - Int(ch[2])) <= 1
 end
-TutorialFigure(readback)
+readback
 
 #
 # The readback is what the library renders from our SVG — grid dashes,

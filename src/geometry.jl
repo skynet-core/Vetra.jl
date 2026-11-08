@@ -24,6 +24,14 @@ end
 """Zero vector (upstream `vec2()`)."""
 Vec2() = Vec2(Float32(0), Float32(0))
 
+"""
+Construct from ordinary Julia numbers (T014): one `Float32` conversion per
+component, then the specialized constructor. Dispatch prefers the `Float32`
+constructor when both components are already `Float32`, so existing callers
+pay nothing.
+"""
+Vec2(x::Real, y::Real) = Vec2(Float32(x), Float32(y))
+
 function +(a::Vec2, b::Vec2)
     return Vec2(a.x + b.x, a.y + b.y)
 end
@@ -114,6 +122,9 @@ end
 
 rect(x::Float32, y::Float32, w::Float32, h::Float32) = Rect(x, y, w, h)
 rect(pos::Vec2, size::Vec2) = Rect(pos.x, pos.y, size.x, size.y)
+"""Component-wise number form (T014): converts once, then dispatches."""
+rect(x::Real, y::Real, w::Real, h::Real) =
+    Rect(Float32(x), Float32(y), Float32(w), Float32(h))
 
 xy(r::Rect) = Vec2(r.x, r.y)
 wh(r::Rect) = Vec2(r.w, r.h)
@@ -159,6 +170,8 @@ struct Circle
 end
 
 circle(pos::Vec2, radius::Float32) = Circle(pos, radius)
+"""Number form (T014): converts the radius once, then dispatches."""
+circle(pos::Vec2, radius::Real) = Circle(pos, Float32(radius))
 
 """`bumpy.Segment` (stroke geometry)."""
 struct Segment
@@ -231,6 +244,9 @@ function rotate(angle::Float32)
     z = Float32(0)
     return Mat3((c, s, z, -s, c, z, z, z, Float32(1)))
 end
+
+"""Rotation matrix from an ordinary number (T014; radians)."""
+rotate(angle::Real) = rotate(Float32(angle))
 
 """
 Composition with upstream order (vmath `*`, ~line 1291): the *second*

@@ -588,16 +588,332 @@ function fillGradient(image::Image, paint::Paint)
     throw(ArgumentError("Paint must be a gradient"))
 end
 
+# ---------- T022 single-buffer gradient fill ----------
+#
+# For a non-solid gradient paint the former pipeline needed two full-canvas
+# buffers: the coverage `mask` plus a `fillImg` canvas that the gradient was
+# drawn into before `applyOpacity(mask, ·)` + `draw(fillImg, mask;
+# MaskBlend)` + `draw(image, fillImg; paint.blendMode)` cut it out. These
+# variants instead sample the gradient and perform that exact arithmetic
+# (applyOpacity's `o = roundHalfAway(Float32(255) * opacity)` scaling, then
+# blendMask's `UInt8(Int(ch) * k ÷ 255)`, then the paint's blend) without
+# the fill canvas, so only the coverage mask is a full-canvas allocation
+# (the row scratch below is 4*width bytes). `paint.opacity` must be 1
+# when called (the caller restores it after); `o` carries the saved
+# opacity; stop positions must be finite (validated in the dispatch, so
+# errors leave the image untouched as the old pipeline did). The
+# byte-exact oracle gate pins the result.
+#
+# Loop shape (measured at 1080p): a single merged sample+cut+blend loop
+# ran ~5 ms slower than the separate passes, so every geometry runs three
+# simple passes over one reused row scratch buffer (4*width bytes, owned
+# by this call): the geometry loop samples the gradient into the row
+# (horizontal keeps the per-column samples in a second row buffer, since
+# the cut-out mutates the row in place), `_cutRowOut!` applies the mask
+# cut-out (applyOpacity + MaskBlend arithmetic), and `_blendRowInto!`
+# composites the row with blendRect's exact per-pixel branches.
+
+# Mask cut-out pass over one row (T022): `row` holds the raw gradient
+# sample (opacity 1); scale each channel in place by the coverage at
+# `dm[i + 4]` — applyOpacity's `o` scaling, then blendMask's
+# `UInt8(Int(ch) * k ÷ 255)`.
+function _cutRowOut!(row::Vector{UInt8}, dm::Vector{UInt8}, i::Int, w::Int,
+                     o::Int)
+    j = 0
+    @inbounds for x in 0:(w - 1)
+        k = Int(dm[i + 4])
+        if o != 255
+            k = o == 0 ? 0 : k * o ÷ 255
+        end
+        row[j + 1] = UInt8(Int(row[j + 1]) * k ÷ 255)
+        row[j + 2] = UInt8(Int(row[j + 2]) * k ÷ 255)
+        row[j + 3] = UInt8(Int(row[j + 3]) * k ÷ 255)
+        row[j + 4] = UInt8(Int(row[j + 4]) * k ÷ 255)
+        i += 4
+        j += 4
+    end
+    return nothing
+end
+
+# Composite pass over one row (T022): `row` holds the mask-cut gradient
+# bytes; blend them into the image row at `da[i+1..]` with blendRect's
+# exact per-pixel branches for `mode` (the mode branch is hoisted out of
+# the pixel loop, as in blendRect's NormalBlend/OverwriteBlend/generic
+# branches).
+function _blendRowInto!(
+    da::Vector{UInt8}, row::Vector{UInt8}, i::Int, w::Int,
+    blend, mode::BlendMode
+)
+    j = 0
+    if mode === NormalBlend
+        @inbounds for x in 0:(w - 1)
+            if row[j + 4] == 0xff
+                da[i + 1] = row[j + 1]
+                da[i + 2] = row[j + 2]
+                da[i + 3] = row[j + 3]
+                da[i + 4] = row[j + 4]
+            else
+                src = ColorRGBX(row[j + 1], row[j + 2], row[j + 3], row[j + 4])
+                dst = ColorRGBX(da[i + 1], da[i + 2], da[i + 3], da[i + 4])
+                out = blendNormal(dst, src)
+                da[i + 1] = out.r
+                da[i + 2] = out.g
+                da[i + 3] = out.b
+                da[i + 4] = out.a
+            end
+            i += 4
+            j += 4
+        end
+    elseif mode === OverwriteBlend
+        @inbounds for x in 0:(w - 1)
+            da[i + 1] = row[j + 1]
+            da[i + 2] = row[j + 2]
+            da[i + 3] = row[j + 3]
+            da[i + 4] = row[j + 4]
+            i += 4
+            j += 4
+        end
+    else
+        @inbounds for x in 0:(w - 1)
+            src = ColorRGBX(row[j + 1], row[j + 2], row[j + 3], row[j + 4])
+            dst = ColorRGBX(da[i + 1], da[i + 2], da[i + 3], da[i + 4])
+            out = blend(dst, src)
+            da[i + 1] = out.r
+            da[i + 2] = out.g
+            da[i + 3] = out.b
+            da[i + 4] = out.a
+            i += 4
+            j += 4
+        end
+    end
+    return nothing
+end
+
+"""
+Fill `image` with `paint`'s linear gradient, cut out by the coverage in
+`mask` and blended with the paint's mode (upstream `fillGradientLinear`
+geometry, L95-177, single-buffer per the T022 note above).
+"""
+function _fillGradientLinearMasked(
+    image::Image, mask::Image, paint::Paint, blend, o::Int
+)
+    if length(paint.gradientHandlePositions) != 2
+        throw(ArgumentError("Linear gradient requires 2 handles"))
+    end
+    if length(paint.gradientStops) == 0
+        throw(ArgumentError("Gradient must have at least 1 color stop"))
+    end
+    # `t` is the upstream toLineSpace formula inlined (same Float32
+    # operations, same order — no per-pixel Vec2 allocation):
+    # t = (d.y * (y - at.y) + d.x * (x - at.x)) / det.
+    at = paint.gradientHandlePositions[1]
+    to = paint.gradientHandlePositions[2]
+    d = to - at
+    det = d.x * d.x + d.y * d.y
+    da = image.data
+    dm = mask.data
+    w = image.width
+    h = image.height
+    mode = paint.blendMode
+    row = Vector{UInt8}(undef, 4 * w)
+    if at.y == to.y # horizontal: one sample per column, constant across rows
+        # `row` is mutated in place by the cut-out, so keep the raw samples
+        # in `raw` and cut non-destructively into `row` per row.
+        raw = Vector{UInt8}(undef, 4 * w)
+        j = 0
+        for x in 0:(w - 1)
+            t = (d.y * (0f0 - at.y) + d.x * (Float32(x) - at.x)) / det
+            g = gradientColor(paint, t)
+            raw[j + 1] = g.r
+            raw[j + 2] = g.g
+            raw[j + 3] = g.b
+            raw[j + 4] = g.a
+            j += 4
+        end
+        @inbounds for y in 0:(h - 1)
+            i = 4 * y * w
+            j = 0
+            for x in 0:(w - 1)
+                k = Int(dm[i + 4])
+                if o != 255
+                    k = o == 0 ? 0 : k * o ÷ 255
+                end
+                row[j + 1] = UInt8(Int(raw[j + 1]) * k ÷ 255)
+                row[j + 2] = UInt8(Int(raw[j + 2]) * k ÷ 255)
+                row[j + 3] = UInt8(Int(raw[j + 3]) * k ÷ 255)
+                row[j + 4] = UInt8(Int(raw[j + 4]) * k ÷ 255)
+                i += 4
+                j += 4
+            end
+            _blendRowInto!(da, row, 4 * y * w, w, blend, mode)
+        end
+    elseif at.x == to.x # vertical: one sample per row
+        @inbounds for y in 0:(h - 1)
+            t = (d.y * (Float32(y) - at.y) + d.x * (0f0 - at.x)) / det
+            g = gradientColor(paint, t)
+            j = 0
+            for x in 0:(w - 1)
+                row[j + 1] = g.r
+                row[j + 2] = g.g
+                row[j + 3] = g.b
+                row[j + 4] = g.a
+                j += 4
+            end
+            _cutRowOut!(row, dm, 4 * y * w, w, o)
+            _blendRowInto!(da, row, 4 * y * w, w, blend, mode)
+        end
+    else
+        # General: per-pixel t — sample the row, then cut out + composite.
+        @inbounds for y in 0:(h - 1)
+            # y-dependent half of `t` is constant over the row.
+            ty = d.y * (Float32(y) - at.y)
+            j = 0
+            for x in 0:(w - 1)
+                t = (ty + d.x * (Float32(x) - at.x)) / det
+                g = gradientColor(paint, t)
+                row[j + 1] = g.r
+                row[j + 2] = g.g
+                row[j + 3] = g.b
+                row[j + 4] = g.a
+                j += 4
+            end
+            _cutRowOut!(row, dm, 4 * y * w, w, o)
+            _blendRowInto!(da, row, 4 * y * w, w, blend, mode)
+        end
+    end
+    return nothing
+end
+
+"""
+Fill `image` with `paint`'s radial gradient, cut out by the coverage in
+`mask` and blended with `blend` (upstream `fillGradientRadial` geometry,
+L179-209, fused per the T022 note above).
+"""
+function _fillGradientRadialMasked(
+    image::Image, mask::Image, paint::Paint, blend, o::Int
+)
+    if length(paint.gradientHandlePositions) != 3
+        throw(ArgumentError("Radial gradient requires 3 handles"))
+    end
+    if length(paint.gradientStops) == 0
+        throw(ArgumentError("Gradient must have at least 1 color stop"))
+    end
+    center = paint.gradientHandlePositions[1]
+    edge = paint.gradientHandlePositions[2]
+    skew = paint.gradientHandlePositions[3]
+    distanceX = length(center - edge)
+    distanceY = length(center - skew)
+    gradientAngle = fixAngle(angle(normalize(center - edge)))
+    mat = inverse(
+        translate(center) * rotate(gradientAngle) *
+        scale(Vec2(distanceX, distanceY)))
+    da = image.data
+    dm = mask.data
+    w = image.width
+    h = image.height
+    # Per-pixel t: sample the row, then cut out + composite it (T022
+    # note).
+    row = Vector{UInt8}(undef, 4 * w)
+    @inbounds for y in 0:(h - 1)
+        j = 0
+        for x in 0:(w - 1)
+            xy = Vec2(Float32(x), Float32(y))
+            t = length(mat * xy)
+            g = gradientColor(paint, t)
+            row[j + 1] = g.r
+            row[j + 2] = g.g
+            row[j + 3] = g.b
+            row[j + 4] = g.a
+            j += 4
+        end
+        _cutRowOut!(row, dm, 4 * y * w, w, o)
+        _blendRowInto!(da, row, 4 * y * w, w, blend, paint.blendMode)
+    end
+    return nothing
+end
+
+"""
+Fill `image` with `paint`'s angular gradient, cut out by the coverage in
+`mask` and blended with `blend` (upstream `fillGradientAngular` geometry,
+L211-236, fused per the T022 note above).
+"""
+function _fillGradientAngularMasked(
+    image::Image, mask::Image, paint::Paint, blend, o::Int
+)
+    if length(paint.gradientHandlePositions) != 3
+        throw(ArgumentError("Angular gradient requires 2 handles"))
+    end
+    if length(paint.gradientStops) == 0
+        throw(ArgumentError("Gradient must have at least 1 color stop"))
+    end
+    center = paint.gradientHandlePositions[1]
+    edge = paint.gradientHandlePositions[2]
+    f32PI = Float32(pi)
+    gradientAngle = fixAngle(angle(normalize(edge - center)))
+    da = image.data
+    dm = mask.data
+    w = image.width
+    h = image.height
+    # Per-pixel t: sample the row, then cut out + composite it (T022
+    # note).
+    row = Vector{UInt8}(undef, 4 * w)
+    @inbounds for y in 0:(h - 1)
+        j = 0
+        for x in 0:(w - 1)
+            xy = Vec2(Float32(x), Float32(y))
+            a = angle(normalize(xy - center))
+            t = fixAngle(a + gradientAngle + f32PI / Float32(2)) /
+                Float32(2) / f32PI + Float32(0.5)
+            g = gradientColor(paint, t)
+            row[j + 1] = g.r
+            row[j + 2] = g.g
+            row[j + 3] = g.b
+            row[j + 4] = g.a
+            j += 4
+        end
+        _cutRowOut!(row, dm, 4 * y * w, w, o)
+        _blendRowInto!(da, row, 4 * y * w, w, blend, paint.blendMode)
+    end
+    return nothing
+end
+
+"""T022 fused gradient dispatch: validates finite stop positions, mirrors
+`fillGradient`'s kind handling and error, then fills `image` in place
+from the coverage `mask`."""
+function _fillGradientMasked(
+    image::Image, mask::Image, paint::Paint, blend, o::Int
+)
+    # Non-finite stop positions make gradientColor throw (InexactError)
+    # mid-canvas; in the fused path that would leave `image` partially
+    # mutated. Validate before any destination write, so errors leave
+    # the image untouched exactly as the old 2-buffer pipeline did.
+    if any(s -> !isfinite(s.position), paint.gradientStops)
+        throw(ArgumentError("Gradient stop positions must be finite"))
+    end
+    if paint.kind === LinearGradientPaint
+        return _fillGradientLinearMasked(image, mask, paint, blend, o)
+    elseif paint.kind === RadialGradientPaint
+        return _fillGradientRadialMasked(image, mask, paint, blend, o)
+    elseif paint.kind === AngularGradientPaint
+        return _fillGradientAngularMasked(image, mask, paint, blend, o)
+    end
+    throw(ArgumentError("Paint must be a gradient"))
+end
+
 """
 Fill `path` (a `Path` or an SVG path string) with a `Paint` (upstream
 `fillPath`, paths.nim L2109-2158): opacity is clamped to 0..1 in place and
 zero opacity is a no-op. Solid paints fill via the rasterizer exactly as in
 T005 (zero-alpha skipped unless `OverwriteBlend`, which can clear). Non-solid
-paints: the path rasterized white becomes the mask, the image/tiled/gradient
-is drawn opaque into a fill canvas, the paint's opacity scales the mask,
+paints: the path rasterized white becomes the mask. Image and tiled paints
+draw opaque into a fill canvas, the paint's opacity scales the mask,
 `fill.draw(mask, MaskBlend)` composites the cut-out, and
 `image.draw(fill, paint.blendMode)` writes it to `image` (both identity
-transforms, exactly as upstream).
+transforms, exactly as upstream). Gradient paints take the T022 fused
+path: `_fillGradientMasked` samples the gradient, applies the same
+`applyOpacity` + `MaskBlend` cut-out arithmetic per pixel, and blends into
+`image` in row-wise passes over a call-owned row scratch, so only the
+coverage mask is a full-canvas allocation.
 """
 function fillPath(
     image::Image, path, paint::Paint;
@@ -640,12 +956,25 @@ function fillPath(
     end
     # Non-solid (paints.nim `case paint.kind` + mask composite, L2131-2158)
     mask = newImage(image.width, image.height)
-    fillImg = newImage(image.width, image.height)
     fillPath(
         mask, path, ColorRGBX(0xff, 0xff, 0xff, 0xff), # solid white
         transform = transform, windingRule = windingRule)
     savedOpacity = paint.opacity
     paint.opacity = Float32(1)
+    if paint.kind === LinearGradientPaint ||
+            paint.kind === RadialGradientPaint ||
+            paint.kind === AngularGradientPaint
+        # T022: one full-canvas buffer. The gradient is sampled, cut out
+        # by the coverage mask, and blended into `image` in row-wise
+        # passes over a call-owned scratch — the exact arithmetic of the
+        # former `fillGradient` + `applyOpacity` + MaskBlend + composite
+        # pipeline, without the fill canvas.
+        o = roundHalfAway(Float32(255) * savedOpacity)
+        _fillGradientMasked(image, mask, paint, blender(paint.blendMode), o)
+        paint.opacity = savedOpacity
+        return nothing
+    end
+    fillImg = newImage(image.width, image.height)
     if paint.kind === ImagePaint
         if paint.image === nothing
             throw(ArgumentError("ImagePaint requires paint.image"))

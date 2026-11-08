@@ -28,18 +28,18 @@ const _PNGFILES_PKGID = Base.PkgId(
     Base.UUID("f57f5aa1-a3ce-4bc8-8ab9-96f992907883"), "PNGFiles")
 
 """
-The `PNGFiles` module loaded by Vetra.__init__, or a clear install hint
-(D014). Environments without PNGFiles load normally and get this error
-only on use.
+The `PNGFiles` module, loaded on first use (lazy discovery, D028), or a
+clear install hint (D014). Environments without PNGFiles load normally and
+get this error only on use; loading cost is paid once, only by users who
+actually encode/decode PNG.
 """
 function _requirePngFiles()
-    try
-        return Base.root_module(_PNGFILES_PKGID)
-    catch
+    if Base.locate_package(_PNGFILES_PKGID) === nothing
         throw(ErrorException(
             "PNG support is opt-in: add the PNGFiles package to your " *
             "environment (Pkg.add(\"PNGFiles\")) and retry"))
     end
+    return Base.require(_PNGFILES_PKGID)
 end
 
 """`PNGFiles.load` (invokelatest: cross-module keyword call)."""
@@ -137,7 +137,9 @@ function encodePNG(image::Image)
     end
     try
         buf = IOBuffer()
-        png.save(buf, reshape(out, h, w, 4))
+        # invokelatest: PNGFiles may be required (lazy discovery, D028) by
+        # this very call, so `save` can be newer than this method instance.
+        Base.invokelatest(png.save, buf, reshape(out, h, w, 4))
         seekstart(buf)
         return read(buf)
     catch
@@ -170,4 +172,32 @@ function decodePNGDimensions(data::Vector{UInt8})
     w = be32(17)
     h = be32(21)
     return (w, h)
+end
+
+"""
+Concise REPL/notebook text display for `Image` (the default struct display
+would dump the whole pixel buffer).
+"""
+function Base.show(io::IO, ::MIME"text/plain", image::Image)
+    println(io, "Vetra image: ", image.width, "x", image.height,
+        " premultiplied RGBA")
+    return nothing
+end
+
+Base.showable(::MIME"text/plain", ::Image) = true
+
+"""
+PNG display (IJulia/Pluto rich output): encodes through `encodePNG`
+(opt-in PNGFiles, D014). `showable` reports availability so frontends
+fall back to the text display in core-only environments instead of
+showing an error.
+"""
+function Base.show(io::IO, ::MIME"image/png", image::Image)
+    write(io, encodePNG(image))
+    return nothing
+end
+
+function Base.showable(::MIME"image/png", ::Image)
+    # Availability check only — never load the codec (lazy discovery, D028).
+    return Base.locate_package(_PNGFILES_PKGID) !== nothing
 end

@@ -82,8 +82,10 @@ println("Tutorial images are saved in: ", outdir)
 - `fill(img, color)` replaces the whole background.
 - `fillRect(ctx, x, y, width, height)` draws with `ctx.fillStyle`.
 - Drawing coordinates start at the **top-left**: x grows right, y grows down.
-- `24f0` is Julia's `Float32` literal. Use these for drawing coordinates;
-  many context methods require `Float32`. Image dimensions are integers.
+- Plain Julia numbers work for drawing calls (`12`, `0.5`); they are converted
+  to the library's internal `Float32` once at the boundary. `12f0` is the
+  explicit `Float32` literal — use it when you need exact float32 control.
+  Image dimensions are integers.
 
 **Check your result now:** open `first-image.png` in the printed directory.
 You should see a white rectangle with a pale border. The rectangle starts
@@ -538,6 +540,8 @@ you need direct buffer access.
    result on a larger image using `drawImage`.
 
 Next, follow the [OHLC chart tutorial](TUTORIAL.md) for a larger project,
-or explore [examples/showcase.jl](../examples/showcase.jl).
+or copy a finished pattern from the [cookbook](cookbook.jl)
+(sparkline, gauge, KPI card, candlesticks, annotation, diagram, dashboard,
+social card). The full documentation map is in [INDEX.md](INDEX.md).
 See the [compatibility inventory](COMPATIBILITY.md) for supported features
 and edge cases, and the [API guide](API.md) for the drawing model.
