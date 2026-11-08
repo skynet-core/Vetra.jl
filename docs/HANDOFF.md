@@ -29,16 +29,19 @@ regression. PNG encode allocation deferred as codec-bound (23.8 MB @1080p
 = 7.9 MB staging + ~15.8 MB PNGFiles/libpng internals + payload; the
 toStraightAlpha boundary pass is already at the no-aliasing 1-buffer
 minimum). T023 settled the recording contract (D030, docs/RECORDING.md):
-design only, no source changes — a kernel-level display list recorded by a
-one-shot `PictureRecorder`/`RecordingContext`, deep snapshots at the record
-boundary (text lowered to glyph outlines), vector-space replay scaling,
-fail-fast record-boundary errors, and strict v1 SVG/PDF export matrices
-with a documented whole-picture raster fallback; five canonical validation
-scenes + references defined for T024–T026. Full gate: **811,472
-assertions, 98.01% coverage (5662/5777)**. Next ready tasks: T024/T027/
-T030 (T019 awaits an explicit publication request). T013–T022 are committed
-(a961f13) and pushed to origin main; T023 is committed in its own task
-commit; the package is unregistered (General `P/Vetra` = 404, re-checked
+design only — a kernel-level display list recorded by a one-shot
+`PictureRecorder`/`RecordingContext`, deep snapshots at the record boundary
+(text lowered to glyph outlines), vector-space replay scaling, fail-fast
+record-boundary errors, and strict v1 SVG/PDF export matrices with a
+documented whole-picture raster fallback. T024 implemented it
+(`src/recordings.jl` + 5 exports + `drawPicture`): record/replay is
+byte-identical to direct CPU drawing on 11 contract scenes, scaling is
+vector (area-justified coverage, not a raster enlargement), snapshots
+survive source mutation, and record-boundary errors fail fast. Full gate:
+**811,552 assertions, 98.13% coverage (5939/6052)**. Next ready tasks:
+T025/T027/T030 (T019 awaits an explicit publication request). T013–T024
+are committed and pushed to origin main (protocol: commit+push after each
+task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
 
 ## Changes
@@ -109,14 +112,14 @@ them before loading Vetra, or restart Julia after installation.
 
 ## Next step and limits
 
-No active implementation task. Next ready: [T024]
-(../tasks/T024-recording-replay.md) — implement the D030 recording contract
-(display list + CPU replay) against the five canonical validation scenes in
-docs/RECORDING.md §8, with the shared validation gate. The other ready
-design/implementation tasks are
-[T027](../tasks/T027-text-design.md) and
-[T030](../tasks/T030-codec-design.md), which unblock the text
-(T028/T029) and codec (T031/T032) chains.
+No active implementation task. Next ready:
+[T025](../tasks/T025-svg-export.md) — SVG export of the T024 recordings per
+the D030 capability matrix (strict by default, whole-picture
+`rasterFallback` opt-in), validated against docs/RECORDING.md §8 scenes 1–5
+with an independent XML parse + a pinned external SVG renderer. The other
+ready tasks are [T027](../tasks/T027-text-design.md) and
+[T030](../tasks/T030-codec-design.md), which unblock the text (T028/T029)
+and codec (T031/T032) chains.
 Protocol (user, 2026-11-08): commit and push to `origin main` after each
 completed task. T019 (registration/publication) remains gated on an
 explicit user request.
@@ -129,7 +132,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T023)
+## Recent verification (T014–T024)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -198,3 +201,19 @@ release evidence is in [T011](../tasks/T011-release.md),
   source changes, so the T022 gate result stands (98.01%, 5662/5777).
   T024 unblocked; committed and pushed per the commit+publish-after-each-
   task protocol.
+- T024: `src/recordings.jl` (op records, one-shot
+  `PictureRecorder`/`RecordingContext` mirroring the `Context` drawing
+  surface, `drawPicture` replay) + 5 exports + `test/recording_tests.jl`
+  (38 assertions). Record/replay byte-parity vs direct CPU drawing on 11
+  contract scenes (fills/strokes, gradients, transforms, clips,
+  layers+globalAlpha, nested saveLayer-in-clip, drawImage incl. src/dst
+  rect, text, clearRect, save/restore); vector-space scaling (2× and ½×)
+  with area-justified coverage; snapshots survive source mutation;
+  record-boundary errors (TiledImagePaint fill, non-solid strokeStyle,
+  unmatched restore, finished recorder). Cookbook recipe 9 (record once /
+  replay at 480×300 + 960×600) with both PNGs visually inspected; gallery
+  rebuilt. Full gate green: **811,552 assertions, 98.13% (5939/6052)**.
+  Benchmark (800×500 activity card): record 0.36 ms vs direct 2.3 ms;
+  replay ×4 amortizes to ~1.1 ms/render; replay == direct byte-identical.
+  Frozen-build quirk: do-block syntax mis-parses, so `_recWrap` call sites
+  use explicit function literals.

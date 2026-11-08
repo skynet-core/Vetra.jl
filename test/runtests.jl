@@ -65,3 +65,7 @@ include("colormatrices_tests.jl")
 
 # T016: notebook image display (MIME show methods).
 include("notebook_display_tests.jl")
+
+# T024: drawing recordings and CPU replay (D030 contract): replay
+# byte-parity vs direct drawing, snapshots, scaling, record boundaries.
+include("recording_tests.jl")

@@ -37,6 +37,10 @@ const ITEMS = [
         "Header, sparkline, KPI card, and gauge composed into one 480x320 view."),
     ("social-card.png", "Social card",
         "1200x630 Open Graph card: brand pill, title, subtitle, sparkline panel."),
+    ("record-replay-480.png", "Recorded replay (480x300)",
+        "Scene recorded once as a display list and replayed at its native size."),
+    ("record-replay-960.png", "Recorded replay (960x600)",
+        "The same picture replayed at 2x: re-rasterized in vector space, not enlarged."),
 ]
 
 function gallery_html()

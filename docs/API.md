@@ -5,9 +5,10 @@ Flutter's `dart:ui`, with behavior from the pinned pixie revision. Start with
 [Getting started](GETTING_STARTED.md) for executable examples; consult
 [Compatibility](COMPATIBILITY.md) for supported inputs, deviations, and tests.
 Names keep the upstream camelCase spelling. Future GPU and widget APIs are
-not part of the current library. Display-list recording is specified by
-[Recording contract](RECORDING.md) (D030) and is implemented by T024–T026;
-its symbols are not exported until then.
+not part of the current library. Display-list recording follows the
+[Recording contract](RECORDING.md) (D030): recording and CPU replay are
+implemented (T024, see [Recordings](#recordings-d030-docsrecordingmd)),
+SVG/PDF export by T025–T026.
 
 ## Coordinates, storage, and mutation
 
@@ -137,10 +138,10 @@ are unsupported. `encodeBase64`/`decodeBase64` use PNG payloads.
 [Compatibility](COMPATIBILITY.md) for per-format details rather than
 inferring support from a file extension.
 
-## Recordings (contract, T023 — D030, docs/RECORDING.md)
+## Recordings (D030, docs/RECORDING.md)
 
-Drawing recordings are **specified, not yet implemented** (T024–T026).
-The planned surface, once exported:
+Drawing recordings are implemented (T024); the SVG/PDF exporters are
+specified but not yet implemented (T025–T026).
 
 - `PictureRecorder(width, height)` — one-shot; `recorder.ctx` is a
   `RecordingContext` mirroring the `Context` drawing methods
@@ -150,8 +151,8 @@ The planned surface, once exported:
 - `finishRecording(recorder)` → `Picture`; `drawPicture(image, picture;
   tform = mat3())` replays on the CPU — default-size replay is
   byte-identical to direct drawing; other sizes scale the logical canvas
-  in vector space.
-- `writeSvg(file, picture; rasterFallback = false)` and
+  in vector space (re-rasterized, never a raster enlargement).
+- Planned: `writeSvg(file, picture; rasterFallback = false)` and
   `writePdf(file, picture; dpi = 96f0, rasterFallback = false)` — strict
   by default (first unexportable op raises before any file is written);
   `rasterFallback` renders the whole picture to an embedded image.

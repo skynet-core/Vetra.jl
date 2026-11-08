@@ -349,7 +349,8 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     ascent, descent, lineGap, lineHeight, capHeight,
     hasGlyph, fallbackTypeface, getGlyphPath, getAdvance,
     getKerningAdjustment, getLeftSideBearing, isCCW, name,
-    toColors, fromColors
+    toColors, fromColors,
+    Picture, PictureRecorder, RecordingContext, finishRecording, drawPicture
 
 include("paths.jl")
 include("blends.jl")
@@ -361,6 +362,7 @@ include("fontformats/opentype.jl")
 include("fontformats/unicase.jl")
 include("formats/fonts.jl")
 include("context.jl")
+include("recordings.jl")
 include("formats/ppm.jl")
 include("formats/svg.jl")
 include("formats/png.jl")

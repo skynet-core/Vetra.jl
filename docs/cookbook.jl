@@ -534,6 +534,69 @@ save_named(card, "social-card.png")
 card
 
 #
+# ## 9. Record once, replay at two sizes
+#
+# A `PictureRecorder` captures a scene as a display list instead of pixels
+# (T023 contract, D030): the same scene function draws on an immediate
+# `Context` or on the recorder's context. The picture replays into any
+# image, and scaling happens in vector space - the 960x600 replay below is
+# re-rasterized, not an enlarged copy of the 480x300 raster.
+
+function spark_scene(ctx)
+    ctx.fillStyle = rgb(248, 250, 252)
+    fillRect(ctx, 0, 0, 480, 300)
+    ctx.strokeStyle = rgb(37, 99, 235)
+    ctx.lineWidth = 3f0
+    beginPath(ctx)
+    for (i, v) in enumerate(values)
+        x = 20 + (i - 1) * 18
+        y = 260 - v * 1.6
+        if i == 1
+            moveTo(ctx, x, y)
+        else
+            lineTo(ctx, x, y)
+        end
+    end
+    stroke(ctx)
+    ctx.fillStyle = rgb(37, 99, 235)
+    circle(ctx, 20 + 22 * 18, 260 - values[end] * 1.6, 6)
+    fill(ctx)
+    ctx.font = ROBOTO
+    ctx.fontSize = 16f0
+    ctx.fillStyle = rgb(15, 23, 42)
+    fillText(ctx, "24 samples", 20, 40)
+    return nothing
+end
+
+# Direct (raster) reference.
+direct = newImage(480, 300)
+spark_scene(Context(direct))
+
+# Record once.
+recorder = PictureRecorder(480, 300)
+spark_scene(recorder.ctx)
+picture = finishRecording(recorder)
+# Four ops: background FillOp, sparkline StrokeOp, end-dot FillOp, label FillOp.
+@assert length(picture.ops) == 4
+
+# Replay at the recorded size: byte-identical to the direct drawing.
+replay = newImage(480, 300)
+drawPicture(replay, picture)
+@assert replay.data == direct.data
+
+# Replay at 2x: re-rasterized in vector space. The end dot (picture-space
+# center (416, 47.2), radius 6) lands at (832, 94.4), radius 12; pixel
+# center (831.5, 93.5) is fully inside it and (1.5, 1.5) is background.
+zoom = newImage(960, 600)
+drawPicture(zoom, picture)
+@assert getColor(zoom, 832, 94) == rgbx(37, 99, 235, 255)
+@assert getColor(zoom, 2, 2) == rgbx(248, 250, 252, 255)
+save_named(replay, "record-replay-480.png")
+save_named(zoom, "record-replay-960.png")
+
+zoom
+
+#
 # That is the whole cookbook. The named PNGs above are what
 # `docs/make_cookbook.jl` collects into `docs/build/gallery.html`, and the
 # executed Markdown/notebook versions live next to them in

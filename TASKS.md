@@ -42,8 +42,8 @@ resolve its implementation contracts before dependents are marked ready.
 | T021 | [Package and first-render latency](tasks/T021-startup-latency.md) | T020 | done |
 | T022 | [Render allocations and PNG throughput](tasks/T022-render-encode-performance.md) | T020 | done |
 | T023 | [Recording and vector-export design](tasks/T023-recording-design.md) | T013 | done |
-| T024 | [Drawing recordings and CPU replay](tasks/T024-recording-replay.md) | T023 | ready |
-| T025 | [SVG export](tasks/T025-svg-export.md) | T024 | blocked |
+| T024 | [Drawing recordings and CPU replay](tasks/T024-recording-replay.md) | T023 | done |
+| T025 | [SVG export](tasks/T025-svg-export.md) | T024 | ready |
 | T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | blocked |
 | T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | ready |
 | T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | blocked |
@@ -152,10 +152,19 @@ resolve its implementation contracts before dependents are marked ready.
   gradients, no clearRect, no non-Normal blends, no tiling). Five canonical
   validation scenes + per-task references defined for T024–T026; API
   proposal added to docs/API.md. T024 unblocked.
-- No active implementation task. Next ready: T024, T027 or T030.
-  T019 awaits an explicit publication request. T013–T022 changes are
-  committed (a961f13) and pushed to origin main; T023 is committed in the
-  follow-up task commit.
+- T024 complete (2026-11-08): drawing recordings + CPU replay per the D030
+  contract. `src/recordings.jl` (op records, one-shot
+  PictureRecorder/RecordingContext mirroring the Context drawing surface,
+  drawPicture replay), 5 new exports, 38-assertion test suite (A/B
+  byte-parity replay vs direct drawing across 11 contract scenes, vector
+  scaling, snapshots, record-boundary errors). Cookbook recipe 9
+  (record once / replay at 480×300 and 960×600). Gate green:
+  811,552 assertions, 98.13% (5939/6052). Benchmark: record 0.36 ms vs
+  direct 2.3 ms; replay ×4 amortizes to ~1.1 ms/render.
+- No active implementation task. Next ready: T025, T027 or T030.
+  T019 awaits an explicit publication request. All T013–T024 changes
+  are committed and pushed to origin main (protocol: commit+push after
+  each task).
 
 ## Evidence and policies
 
