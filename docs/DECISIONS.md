@@ -826,6 +826,55 @@ boundaries, rounding, and the ImagePaint/TiledImagePaint pipeline are
 unchanged; one fewer allocation per non-solid gradient fill. The row scratch
 is call-local (independent-call behavior, no shared mutable state).
 
+## D030 — Recording contract: kernel-level display list, snapshot ops, strict
+vector export (accepted, 2026-11-08, T023)
+
+Problem: T024–T026 (CPU replay, SVG export, PDF export) need a bounded
+recording contract before coding, and the contract must not disrupt the
+immediate `Context` API or bend the D007 backend seam.
+
+Chosen behavior (full text in docs/RECORDING.md): a recording is a list of
+**core-kernel invocations** in call order (`FillOp`/`StrokeOp`/`DrawImageOp`
+from `fillPath`/`strokePath`/`draw`, plus group ops for layers and the
+globalAlpha wrapper), captured by a one-shot `PictureRecorder(w, h)` with a
+`RecordingContext` that mirrors the `Context` drawing surface. Every op
+stores deep snapshots (path command buffer, paint with copied gradient
+arrays and copied image payload, stroke settings, tform, cumulative clip
+list, text pre-lowered to glyph outline paths at record time), so a
+`Picture` is self-contained and later mutation of source objects is
+irrelevant. CPU replay re-executes the kernel list — default-size replay is
+byte-identical to direct drawing by construction, and non-default sizes
+scale the logical canvas in vector space (never a raster enlargement).
+Record-boundary errors fail fast: TiledImagePaint fills and non-solid stroke
+styles raise `ArgumentError` at the call, no op appended. Export v1 is
+**strict**: SVG (solid/linear/radial, transforms, clipPath, nested groups,
+group-unit `opacity`, base64 PNG images, glyph outlines — no angular
+gradients, no clearRect, no non-Normal blends) and PDF (single page,
+ShadingType 2/3 with the ellipse-to-circle CTM trick, Form XObject
+transparency groups, FlateDecode RGB images via stdlib Compression, same
+unsupported rows) each raise before writing any file, with `rasterFallback
+= true` as the documented opt-in whole-picture raster. Text is outlines
+everywhere (no font embedding, no licensing surface); no new dependencies
+(SVG export is string output; PDF is stdlib only).
+
+Alternatives: recording `Context`-method calls instead of kernel invocations
+(rejected — replay would have to re-derive the context wrappers, duplicating
+semantics); per-op raster fallback in export (rejected — re-creating
+clip/blend context per op is a second renderer; whole-picture fallback is
+simple and honest); `mix-blend-mode` in SVG v1 (rejected — renderer support
+varies; silent loss is forbidden and a documented follow-up is safer); font
+embedding for PDF text (rejected for v1 — outlines are already computed at
+record time and avoid the licensing surface).
+
+Compatibility impact: design only — no public symbols, no raster behavior
+change, no new dependencies. Extends the D011 reserved
+Picture/PictureRecorder seam and the D007 "per-pixel operations a backend
+executes" phrasing (a display list is that op list with the CPU backend as
+reference). Existing `Context` callers are untouched; recording is opt-in.
+
+Evidence: docs/RECORDING.md (contract, capability matrix, canonical
+validation scenes); task record tasks/T023-recording-design.md.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

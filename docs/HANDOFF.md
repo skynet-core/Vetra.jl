@@ -28,10 +28,18 @@ vs T020 targets: 25->17 MB @1080p, 96->64 MB @4K, 173->131 MB
 regression. PNG encode allocation deferred as codec-bound (23.8 MB @1080p
 = 7.9 MB staging + ~15.8 MB PNGFiles/libpng internals + payload; the
 toStraightAlpha boundary pass is already at the no-aliasing 1-buffer
-minimum). Full gate: **811,472 assertions, 98.01% coverage
-(5660/5775)**. Next ready tasks: T023/T027/T030 (T019 awaits an explicit
-publication request). T013–T022 changes are uncommitted; the package is
-unregistered (General `P/Vetra` = 404, re-checked 2026-11-07).
+minimum). T023 settled the recording contract (D030, docs/RECORDING.md):
+design only, no source changes — a kernel-level display list recorded by a
+one-shot `PictureRecorder`/`RecordingContext`, deep snapshots at the record
+boundary (text lowered to glyph outlines), vector-space replay scaling,
+fail-fast record-boundary errors, and strict v1 SVG/PDF export matrices
+with a documented whole-picture raster fallback; five canonical validation
+scenes + references defined for T024–T026. Full gate: **811,472
+assertions, 98.01% coverage (5662/5777)**. Next ready tasks: T024/T027/
+T030 (T019 awaits an explicit publication request). T013–T022 are committed
+(a961f13) and pushed to origin main; T023 is committed in its own task
+commit; the package is unregistered (General `P/Vetra` = 404, re-checked
+2026-11-07).
 
 ## Changes
 
@@ -101,15 +109,17 @@ them before loading Vetra, or restart Julia after installation.
 
 ## Next step and limits
 
-No active implementation task. Next ready: the design tasks
-[T023](../tasks/T023-recording-design.md),
-[T027](../tasks/T027-text-design.md), and
-[T030](../tasks/T030-codec-design.md), which unblock the recording/replay
-(T024/T025/T026), text (T028/T029), and codec (T031/T032) implementation
-chains respectively — pick one, claim it in TASKS.md, and implement it
-against its recorded acceptance criteria with the shared validation gate
-and, where performance claims are in scope, T020's app-suite protocol.
-T019 (registration/publication) remains gated on an explicit user request.
+No active implementation task. Next ready: [T024]
+(../tasks/T024-recording-replay.md) — implement the D030 recording contract
+(display list + CPU replay) against the five canonical validation scenes in
+docs/RECORDING.md §8, with the shared validation gate. The other ready
+design/implementation tasks are
+[T027](../tasks/T027-text-design.md) and
+[T030](../tasks/T030-codec-design.md), which unblock the text
+(T028/T029) and codec (T031/T032) chains.
+Protocol (user, 2026-11-08): commit and push to `origin main` after each
+completed task. T019 (registration/publication) remains gated on an
+explicit user request.
 Planned features are not implemented capabilities; see
 [Compatibility](COMPATIBILITY.md). Fresh installation on Julia 1.10,
 cross-platform CI (Windows/macOS), and the ProfileView GUI were not rerun;
@@ -119,7 +129,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T022)
+## Recent verification (T014–T023)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -178,3 +188,13 @@ release evidence is in [T011](../tasks/T011-release.md),
   Logs: `/tmp/opencode/t022-gate4.log`,
   `/tmp/opencode/t022-app-r1{2,3,4}.log`; raw TSVs
   `benchmark/results/app_2026-11-07_r{12,13,14}.tsv`.
+- T023: recording contract (D030). Design only — `docs/RECORDING.md`
+  (kernel-level display list, `PictureRecorder`/`RecordingContext`, deep
+  snapshots, vector-space replay scaling, strict v1 SVG/PDF export matrices
+  + whole-picture rasterFallback, five canonical validation scenes and
+  per-task references for T024–T026), the D030 decision entry, and the
+  docs/API.md §Recordings proposal (marked specified-not-implemented).
+  Contract walked through all five scenes; `git diff --check` clean; no
+  source changes, so the T022 gate result stands (98.01%, 5662/5777).
+  T024 unblocked; committed and pushed per the commit+publish-after-each-
+  task protocol.

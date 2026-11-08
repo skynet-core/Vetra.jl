@@ -4,8 +4,10 @@ Vetra provides an immediate-mode CPU drawing context inspired by Canvas and
 Flutter's `dart:ui`, with behavior from the pinned pixie revision. Start with
 [Getting started](GETTING_STARTED.md) for executable examples; consult
 [Compatibility](COMPATIBILITY.md) for supported inputs, deviations, and tests.
-Names keep the upstream camelCase spelling. Future GPU, display-list, and
-widget APIs are not part of the current library.
+Names keep the upstream camelCase spelling. Future GPU and widget APIs are
+not part of the current library. Display-list recording is specified by
+[Recording contract](RECORDING.md) (D030) and is implemented by T024–T026;
+its symbols are not exported until then.
 
 ## Coordinates, storage, and mutation
 
@@ -131,6 +133,33 @@ extension, and `encodeImage` accepts a `FileFormat`. PNG read/write requires
 BMP/QOI/PPM read/write and GIF decode are native. JPEG/GIF writing and WebP
 are unsupported. `encodeBase64`/`decodeBase64` use PNG payloads.
 
-`parseSvg` plus `newImage(svg)` rasterizes the supported SVG subset. There
-is no general SVG or PDF writer. See [Compatibility](COMPATIBILITY.md) for
-per-format details rather than inferring support from a file extension.
+`parseSvg` plus `newImage(svg)` rasterizes the supported SVG subset. See
+[Compatibility](COMPATIBILITY.md) for per-format details rather than
+inferring support from a file extension.
+
+## Recordings (contract, T023 — D030, docs/RECORDING.md)
+
+Drawing recordings are **specified, not yet implemented** (T024–T026).
+The planned surface, once exported:
+
+- `PictureRecorder(width, height)` — one-shot; `recorder.ctx` is a
+  `RecordingContext` mirroring the `Context` drawing methods
+  (`fill`, `stroke`, `clip`, `saveLayer`, `drawImage`, `fillText`, …).
+  Recording stores deep snapshots (paths, paints, images; text lowered to
+  glyph outlines), so a `Picture` is self-contained.
+- `finishRecording(recorder)` → `Picture`; `drawPicture(image, picture;
+  tform = mat3())` replays on the CPU — default-size replay is
+  byte-identical to direct drawing; other sizes scale the logical canvas
+  in vector space.
+- `writeSvg(file, picture; rasterFallback = false)` and
+  `writePdf(file, picture; dpi = 96f0, rasterFallback = false)` — strict
+  by default (first unexportable op raises before any file is written);
+  `rasterFallback` renders the whole picture to an embedded image.
+  Capability matrices (what v1 exports: solid/linear/radial fills, solid
+  strokes, transforms, clips, layers, group opacity, images, glyph
+  outlines; what it refuses: angular gradients, `clearRect`, tiling,
+  non-Normal blends) are in [docs/RECORDING.md](RECORDING.md) §6.
+
+Tiled-image fills and non-solid strokes are not recordable (record-boundary
+`ArgumentError`); the immediate `Context` is unchanged and still supports
+them for raster drawing.
