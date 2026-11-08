@@ -160,7 +160,7 @@ the logical units = pixels), all elements in op order.
 | --- | --- | --- |
 | solid fill, NormalBlend | ✓ | `<path fill fill-opacity>` (hex or `rgba()` — reader-compatible) |
 | linear gradient fill, NormalBlend | ✓ | `<linearGradient gradientUnits="userSpaceOnUse">`, stops from `gradientStops` |
-| radial gradient fill, NormalBlend | ✓ | `<radialGradient>` with `rx/ry` + `gradientTransform` for the elliptical skew (derived in T025) |
+| radial gradient fill, NormalBlend | ✓ | `<radialGradient cx=0 cy=0 r=1>` + `gradientTransform = T^-1·M` (T = op tform, M = the raster's ellipse map `translate(center)·rotate(θ)·scale(dX,dY)`) — exact for every invertible T (settled in T025) |
 | angular gradient fill | ✗ | no conic fill in SVG 1.1/2 → strict error / fallback |
 | solid stroke (any cap/join/miter/dash) | ✓ | `stroke`, `stroke-width`, `stroke-linecap/-linejoin`, `stroke-miterlimit`, `stroke-dasharray` |
 | transforms | ✓ | `transform="matrix(…)"` (the recorded op tform) |
@@ -176,7 +176,12 @@ Dependencies: string output only (no new package). PNG embedding needs
 `PNGFiles` (existing opt-in, D014); if absent, image ops raise the install
 hint, not a silent drop. Read-back verification uses the existing pinned
 SVG reader (supplemental — it skips text and requires gradients as direct
-`<g>` children, so the exporter emits that shape).
+`<g>` children, so the exporter emits that shape; implemented in T025,
+derivation + reader deviations + the interior dash-end cap renderer
+difference are recorded in tasks/T025-svg-export.md and
+docs/COMPATIBILITY.md). Linear gradients export as raw canvas handles +
+`gradientTransform = T^-1` (the raster samples them in image space,
+untransformed — pinned upstream semantics).
 
 ### 6.2 PDF (T026)
 

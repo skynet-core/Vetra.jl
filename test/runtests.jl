@@ -69,3 +69,8 @@ include("notebook_display_tests.jl")
 # T024: drawing recordings and CPU replay (D030 contract): replay
 # byte-parity vs direct drawing, snapshots, scaling, record boundaries.
 include("recording_tests.jl")
+
+# T025: SVG export of recorded drawings (D030 §6.1): byte-exact hand-derived
+# documents, strict pre-scan errors, XML structural parse, pinned-reader
+# read-back, headless-Chromium external render.
+include("svg_export_tests.jl")

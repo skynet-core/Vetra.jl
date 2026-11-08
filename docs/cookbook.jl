@@ -597,6 +597,76 @@ save_named(zoom, "record-replay-960.png")
 zoom
 
 #
+# ## 10. Record, replay, and export as SVG
+#
+# The same recorded picture from recipe 9's world renders three ways:
+# as pixels (direct), as pixels (replay - byte-identical), and as an
+# editable standalone SVG (`writeSvg`, T025). The SVG keeps every op as
+# geometry: paths stay paths, the gradient stays a `<linearGradient>`,
+# the dashed line keeps its dash array, and the clip stays a `<clipPath>`.
+
+# The scene: a dark background, a blue->green gradient panel (its
+# canvas-anchored handles export verbatim), a yellow badge clipped to a
+# circle (the clip survives into the SVG), a round-capped dashed divider,
+# and a text label (exported as glyph outline paths, per D030).
+
+function badge_scene(ctx)
+    ctx.fillStyle = rgb(15, 23, 42)
+    fillRect(ctx, 0, 0, 480, 300)
+    lin = Paint(LinearGradientPaint)
+    lin.gradientHandlePositions = [Vec2(20f0, 60f0), Vec2(320f0, 220f0)]
+    lin.gradientStops = [
+        colorStop(rgba(59, 130, 246, 255), 0f0),
+        colorStop(rgba(16, 185, 129, 255), 1f0)]
+    ctx.fillStyle = lin
+    fillRect(ctx, 20, 60, 300, 160)
+    badge = newPath()
+    circle(badge, 390f0, 140f0, 70f0)
+    save(ctx)
+    clip(ctx, badge)
+    ctx.fillStyle = rgb(251, 191, 36)
+    fillRect(ctx, 320, 70, 140, 140)
+    restore(ctx)
+    ctx.strokeStyle = rgb(148, 163, 184)
+    ctx.lineWidth = 2f0
+    ctx.lineCap = RoundCap
+    ctx.lineDash = Float32[6f0, 4f0]
+    beginPath(ctx)
+    moveTo(ctx, 20f0, 250f0)
+    lineTo(ctx, 460f0, 250f0)
+    stroke(ctx)
+    ctx.lineDash = Float32[]
+    ctx.font = ROBOTO
+    ctx.fontSize = 18f0
+    ctx.fillStyle = rgb(226, 232, 240)
+    fillText(ctx, "record -> replay -> svg", 20, 40)
+    return nothing
+end
+
+direct = newImage(480, 300)
+badge_scene(Context(direct))
+recorder = PictureRecorder(480, 300)
+badge_scene(recorder.ctx)
+picture = finishRecording(recorder)
+replay = newImage(480, 300)
+drawPicture(replay, picture)
+@assert replay.data == direct.data
+
+# Export the vector document.
+svg_file = joinpath(outdir, "record.svg")
+svg_doc = writeSvg(svg_file, picture)
+@assert occursin("<linearGradient", svg_doc)
+@assert occursin("clipPath", svg_doc)
+@assert occursin("stroke-dasharray=\"6.0 4.0\"", svg_doc)
+@assert occursin("viewBox=\"0 0 480 300\"", svg_doc)
+
+save_named(replay, "record-10-replay.png")
+
+# The SVG next to the raster: open `record.svg` in any browser or editor
+# to see the same scene as vectors.
+replay
+
+#
 # That is the whole cookbook. The named PNGs above are what
 # `docs/make_cookbook.jl` collects into `docs/build/gallery.html`, and the
 # executed Markdown/notebook versions live next to them in

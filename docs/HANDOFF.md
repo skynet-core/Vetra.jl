@@ -37,9 +37,18 @@ documented whole-picture raster fallback. T024 implemented it
 (`src/recordings.jl` + 5 exports + `drawPicture`): record/replay is
 byte-identical to direct CPU drawing on 11 contract scenes, scaling is
 vector (area-justified coverage, not a raster enlargement), snapshots
-survive source mutation, and record-boundary errors fail fast. Full gate:
-**811,552 assertions, 98.13% coverage (5939/6052)**. Next ready tasks:
-T025/T027/T030 (T019 awaits an explicit publication request). T013–T024
+survive source mutation, and record-boundary errors fail fast. T025 added
+SVG export (`src/formats/svg_write.jl` + `writeSvg`): strict pre-scan with
+named errors and no partial file, exact gradient mapping via
+`gradientTransform` (linear: raw canvas handles + T^-1; radial: unit circle
++ T^-1·M, the raster ellipse map), clipPaths per group scope, group-unit
+opacity, base64-PNG data-URI images (opt-in PNGFiles), and a documented
+whole-picture `rasterFallback`. Verified byte-exactly against hand-derived
+documents, independently with XML, read back through the pinned SVG reader
+(byte-identical for the supported shape), and rendered in headless
+Chromium 156.0.8078.47 with exact geometry checks. Full gate:
+**811,885 assertions, 98.28% coverage (6241/6350)**. Next ready tasks:
+T026/T027/T030 (T019 awaits an explicit publication request). T013–T025
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -113,11 +122,13 @@ them before loading Vetra, or restart Julia after installation.
 ## Next step and limits
 
 No active implementation task. Next ready:
-[T025](../tasks/T025-svg-export.md) — SVG export of the T024 recordings per
-the D030 capability matrix (strict by default, whole-picture
-`rasterFallback` opt-in), validated against docs/RECORDING.md §8 scenes 1–5
-with an independent XML parse + a pinned external SVG renderer. The other
-ready tasks are [T027](../tasks/T027-text-design.md) and
+[T026](../tasks/T026-pdf-export.md) — PDF export of the T024 recordings per
+the D030 capability matrix §6.2 (single page, ShadingType 2/3 with the
+ellipse-to-circle CTM, Form XObject transparency groups, FlateDecode RGB
+images via stdlib `Compression`; same strict contract and whole-picture
+`rasterFallback`), validated with `qpdf --check` + an external PDF
+renderer. The other ready tasks are
+[T027](../tasks/T027-text-design.md) and
 [T030](../tasks/T030-codec-design.md), which unblock the text (T028/T029)
 and codec (T031/T032) chains.
 Protocol (user, 2026-11-08): commit and push to `origin main` after each
@@ -132,7 +143,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T024)
+## Recent verification (T014–T025)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -217,3 +228,28 @@ release evidence is in [T011](../tasks/T011-release.md),
   replay ×4 amortizes to ~1.1 ms/render; replay == direct byte-identical.
   Frozen-build quirk: do-block syntax mis-parses, so `_recWrap` call sites
   use explicit function literals.
+- T025: `src/formats/svg_write.jl` + `writeSvg` export (D030 §6.1
+  contract) + `test/svg_export_tests.jl` (333 assertions). Strict pre-scan
+  (clearRect, angular/ImagePaint fills, non-Normal blends, degenerate /
+  out-of-range / unsorted gradient stops, non-finite geometry,
+  singular-transform gradients → named `ArgumentError`, no file written);
+  exact gradient mapping via `gradientTransform` (linear: raw canvas
+  handles + T^-1; radial: unit circle + T^-1·M, the raster's ellipse map —
+  both proven affine-exact for every invertible T); `clipPath` per group
+  scope (intersecting children), group-unit `opacity`, base64-PNG data-URI
+  images (opt-in PNGFiles), whole-picture `rasterFallback`.
+  Verification: byte-exact minimal document; exact `d` strings for all 19
+  path command kinds; hand-derived `matrix(…)`/`gradientTransform` values;
+  independent XML structural parse (all `url(#id)` refs resolve); pinned
+  SVG reader read-back byte-identical to the replay (identity-transform
+  scene); headless Chromium 156.0.8078.47 (snap; verifier tooling only,
+  no resvg on this machine) render with exact rect/background/dash-body
+  geometry and the justified ≤2-channel gradient sampling tolerance
+  (Vetra samples at integer x, Chromium at pixel centers). Known renderer
+  difference documented: interior dash-end caps (SVG spec vs pinned
+  raster). Cookbook recipe 10 (record → replay → SVG) + 12-item gallery.
+  Frozen-build quirks hit: `Base.base64encode`/`takebuf`/`popen`/
+  `ignorestderr` are stripped (pinned `_base64Encode`/`IOBuffer.data`/
+  string commands used), backtick concatenation mis-parses, and a shared
+  counter reassigned from `pop!` restarted after a group close.
+  Full gate green: **811,885 assertions, 98.28% (6241/6350)**.

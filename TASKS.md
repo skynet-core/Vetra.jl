@@ -43,8 +43,8 @@ resolve its implementation contracts before dependents are marked ready.
 | T022 | [Render allocations and PNG throughput](tasks/T022-render-encode-performance.md) | T020 | done |
 | T023 | [Recording and vector-export design](tasks/T023-recording-design.md) | T013 | done |
 | T024 | [Drawing recordings and CPU replay](tasks/T024-recording-replay.md) | T023 | done |
-| T025 | [SVG export](tasks/T025-svg-export.md) | T024 | ready |
-| T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | blocked |
+| T025 | [SVG export](tasks/T025-svg-export.md) | T024 | done |
+| T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | ready |
 | T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | ready |
 | T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | blocked |
 | T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked |
@@ -161,7 +161,21 @@ resolve its implementation contracts before dependents are marked ready.
   (record once / replay at 480×300 and 960×600). Gate green:
   811,552 assertions, 98.13% (5939/6052). Benchmark: record 0.36 ms vs
   direct 2.3 ms; replay ×4 amortizes to ~1.1 ms/render.
-- No active implementation task. Next ready: T025, T027 or T030.
+- T025 complete (2026-11-08): SVG export of recorded drawings per D030 §6.1.
+  `src/formats/svg_write.jl` + `writeSvg` export: strict pre-scan (clearRect,
+  angular/ImagePaint fills, non-Normal blends, degenerate/unsorted/out-of-
+  range gradient stops, non-finite geometry, singular-transform gradients →
+  named `ArgumentError`, no file written), exact gradient mapping via
+  `gradientTransform` (linear: raw handles + T^-1; radial: unit circle +
+  T^-1·M, the raster ellipse map), `clipPath` per group scope, group-unit
+  `opacity`, base64-PNG data-URI images (opt-in PNGFiles), whole-picture
+  `rasterFallback`. 333-assertion suite (byte-exact documents, hand-derived
+  matrices, independent XML parse, pinned-reader byte-identical read-back,
+  headless-Chromium 156.0.8078.47 exact-geometry render). Cookbook recipe 10
+  (record → replay → SVG, 12 gallery items). Known renderer difference
+  documented: interior dash-end caps (spec vs pinned raster). Gate green:
+  811,885 assertions, 98.28% (6241/6350).
+- No active implementation task. Next ready: T026, T027 or T030.
   T019 awaits an explicit publication request. All T013–T024 changes
   are committed and pushed to origin main (protocol: commit+push after
   each task).

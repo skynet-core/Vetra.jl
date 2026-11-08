@@ -41,6 +41,10 @@ const ITEMS = [
         "Scene recorded once as a display list and replayed at its native size."),
     ("record-replay-960.png", "Recorded replay (960x600)",
         "The same picture replayed at 2x: re-rasterized in vector space, not enlarged."),
+    ("record-10-replay.png", "Replayed raster (480x300)",
+        "A recorded badge scene replayed to pixels: gradient panel, clipped badge, dashed divider."),
+    ("record.svg", "SVG export (vector)",
+        "The same recorded picture exported with writeSvg: paths, linearGradient, clipPath, and dasharray stay editable vectors."),
 ]
 
 function gallery_html()

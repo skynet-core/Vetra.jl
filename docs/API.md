@@ -6,9 +6,9 @@ Flutter's `dart:ui`, with behavior from the pinned pixie revision. Start with
 [Compatibility](COMPATIBILITY.md) for supported inputs, deviations, and tests.
 Names keep the upstream camelCase spelling. Future GPU and widget APIs are
 not part of the current library. Display-list recording follows the
-[Recording contract](RECORDING.md) (D030): recording and CPU replay are
-implemented (T024, see [Recordings](#recordings-d030-docsrecordingmd)),
-SVG/PDF export by T025–T026.
+[Recording contract](RECORDING.md) (D030): recording, CPU replay, and SVG
+export are implemented (T024–T025, see [Recordings](#recordings-d030-docsrecordingmd));
+PDF export by T026.
 
 ## Coordinates, storage, and mutation
 
@@ -140,8 +140,8 @@ inferring support from a file extension.
 
 ## Recordings (D030, docs/RECORDING.md)
 
-Drawing recordings are implemented (T024); the SVG/PDF exporters are
-specified but not yet implemented (T025–T026).
+Drawing recordings are implemented (T024); the SVG exporter is implemented
+(T025); the PDF exporter is specified but not yet implemented (T026).
 
 - `PictureRecorder(width, height)` — one-shot; `recorder.ctx` is a
   `RecordingContext` mirroring the `Context` drawing methods
@@ -152,14 +152,22 @@ specified but not yet implemented (T025–T026).
   tform = mat3())` replays on the CPU — default-size replay is
   byte-identical to direct drawing; other sizes scale the logical canvas
   in vector space (re-rasterized, never a raster enlargement).
-- Planned: `writeSvg(file, picture; rasterFallback = false)` and
-  `writePdf(file, picture; dpi = 96f0, rasterFallback = false)` — strict
-  by default (first unexportable op raises before any file is written);
-  `rasterFallback` renders the whole picture to an embedded image.
-  Capability matrices (what v1 exports: solid/linear/radial fills, solid
-  strokes, transforms, clips, layers, group opacity, images, glyph
-  outlines; what it refuses: angular gradients, `clearRect`, tiling,
-  non-Normal blends) are in [docs/RECORDING.md](RECORDING.md) §6.
+- `writeSvg(file, picture; rasterFallback = false)` → the SVG document
+  text. Strict by default: the first unexportable op (clearRect, angular /
+  ImagePaint fills, non-Normal blends, out-of-range or unsorted gradient
+  stops, non-finite geometry) raises `ArgumentError` naming the op index
+  and no file is written; `rasterFallback` renders the whole picture to a
+  single embedded `<image>` instead. SVG v1: solid/linear/radial fills
+  (gradients exact for invertible op transforms), solid strokes (caps,
+  joins, miter limit, dashes), transforms, `clipPath` (multiple clip
+  children intersect), nested groups with group-unit `opacity`, embedded
+  PNG data-URI images (opt-in `PNGFiles`, D014), and glyph outline paths —
+  no `<text>`. See [Compatibility](COMPATIBILITY.md) for the v1 matrix and
+  `rasterFallback` notes, and [docs/RECORDING.md](RECORDING.md) §6 for the
+  contract.
+- Planned: `writePdf(file, picture; dpi = 96f0, rasterFallback = false)` —
+  same strict contract (first unexportable op raises before any file is
+  written; documented whole-picture `rasterFallback`).
 
 Tiled-image fills and non-solid strokes are not recordable (record-boundary
 `ArgumentError`); the immediate `Context` is unchanged and still supports

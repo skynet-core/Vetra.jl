@@ -140,6 +140,39 @@ by PNG, JPEG, and SVG operations in the codec-enabled test environment.
   `strokeShapes` (first element overwrites, later composite). Requires the
   opt-in `XML` package (D014). Evidence: test/formats_tests.jl
   (14 pinned fixtures), test/formats_synthetic_tests.jl.
+
+ - SVG write: `writeSvg(file, picture; rasterFallback)` (`Picture`
+   recordings, T025) — **new capability** (no upstream writer; W3C SVG 1.1
+   is the export reference; contract in docs/RECORDING.md §6.1). v1 exports:
+   solid/linear/radial fills (Normal blend only), solid strokes (all
+   caps/joins/miter limits/dash arrays — odd dash lists double, as in the
+   raster), transforms as `matrix(…)` on the element, cumulative clips as
+   one intersecting `clipPath` per group scope, nested groups with
+   group-unit `opacity`, embedded images as base64 PNG data-URIs (opt-in
+   `PNGFiles`, D014), text as glyph outline paths (no `<text>`), explicit
+   `width`/`height`/`viewBox`. Strict by default: clearRect, angular /
+   ImagePaint fills, non-Normal blends, coincident/degenerate gradient
+   handles, stop positions outside [0, 1] or unsorted, non-finite
+   geometry, and gradient fills under singular transforms each raise
+   `ArgumentError` naming the op index before any file is written;
+   `rasterFallback = true` renders the whole picture to one embedded
+   `<image>` (identifiable by its data-URI; the PNGFiles opt-in applies).
+   Gradient fills are exact for every invertible op transform via
+   `gradientTransform` (linear: raw handles + `T^-1`; radial: unit circle +
+   `T^-1 * M`, the raster's ellipse map). Known renderer difference: the
+   SVG spec (and e.g. Chromium) draw round/square caps at interior dash
+   ends, which the pinned raster does not (upstream `strokeShapes` caps
+   only the shape ends) — the export is spec-faithful; only interior
+   dash-end cap pixels differ from the replay. Read-back through the
+   pinned reader is supplemental: it re-applies the element transform to
+   `userSpaceOnUse` handles (exact at identity transforms), skips
+   `clipPath`/`radialGradient`/`image` (radial fills raise "Missing SVG
+   resource"), and multiplies group `opacity` into each child paint
+   (per-child, not group-unit). Evidence: test/svg_export_tests.jl
+   (333 assertions incl. a byte-exact document, hand-derived matrix /
+   gradientTransform values, an independent XML structural parse, the
+   pinned-reader read-back, and a headless-Chromium 156.0.8078.47 render
+   with exact hand-derived geometry checks).
 - Fonts and text: `newFont`, `readFont`/`readTypeface`, `parseTtf`/
   `parseOtf`/`parseOpenType`, `fillText`/`strokeText` (Image and Context),
   `measureText`/`TextMetrics`, `typeset`/`layoutBounds`/`computePaths`/

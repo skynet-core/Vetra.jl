@@ -350,7 +350,8 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     hasGlyph, fallbackTypeface, getGlyphPath, getAdvance,
     getKerningAdjustment, getLeftSideBearing, isCCW, name,
     toColors, fromColors,
-    Picture, PictureRecorder, RecordingContext, finishRecording, drawPicture
+    Picture, PictureRecorder, RecordingContext, finishRecording, drawPicture,
+    writeSvg
 
 include("paths.jl")
 include("blends.jl")
@@ -366,6 +367,7 @@ include("recordings.jl")
 include("formats/ppm.jl")
 include("formats/svg.jl")
 include("formats/png.jl")
+include("formats/svg_write.jl")
 include("formats/bmp.jl")
 include("formats/qoi.jl")
 include("formats/gif.jl")
