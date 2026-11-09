@@ -839,6 +839,74 @@ save_named(card, "paragraph-card.png")
 card
 
 #
+# ## 13. JPEG thumbnail export (T031)
+#
+# JPEG is the photographic format: lossy, small, no alpha. `encodeJPEG`
+# composites any transparent pixels over a `background` (default white) —
+# nothing is dropped silently. On the pinned mandrill photo the JPEG
+# thumbnail is ~14% of the PNG size; on a flat gradient scene it is
+# *bigger* than the PNG — that is where JPEG is unsuitable (DCT ringing,
+# no alpha, blocky edges).
+
+function jpegSize(img, q)
+    t0 = time_ns()
+    b = encodeJPEG(img; quality = q)
+    return length(b), (time_ns() - t0) / 1e6
+end
+
+## Photographic case: the pinned mandrill photo (upstream test data),
+## reduced to a 256×256 thumbnail with the existing resize.
+mandrill = readImage(joinpath(root, ".reference", "upstream",
+    "examples", "data", "mandrill.png"))
+@assert (width(mandrill), height(mandrill)) == (512, 512)
+thumbImg = resize(mandrill, 256, 256)
+@assert (width(thumbImg), height(thumbImg)) == (256, 256)
+photoJpg, photoMs = jpegSize(thumbImg, 85)
+photoPng = length(encodePNG(thumbImg))
+println("mandrill thumbnail (256x256): PNG ", photoPng,
+    " B vs JPEG q85 ", photoJpg, " B in ",
+    round(photoMs, digits = 1), " ms")
+@assert photoJpg < photoPng * 0.25 # photographic: JPEG wins big
+
+## Flat-graphics case: a fresh plain gradient scene (no callout text) —
+## smooth colors and hard edges are where JPEG loses to PNG.
+function flatScene()
+    img = newImage(320, 240)
+    ctx = Context(img)
+    sky = Paint(LinearGradientPaint)
+    sky.gradientHandlePositions = [Vec2(0, 0), Vec2(0, 240)]
+    sky.gradientStops = [
+        colorStop(rgb(56, 189, 248), 0f0),
+        colorStop(rgb(224, 242, 254), 1f0),
+    ]
+    ctx.fillStyle = sky
+    fillRect(ctx, 0, 0, 320, 240)
+    sun = newPath()
+    circle(sun, 240, 70, 26)
+    ctx.fillStyle = rgb(253, 224, 71)
+    fill(ctx, sun)
+    ctx.fillStyle = rgb(134, 239, 172)
+    fillRect(ctx, 0, 190, 320, 50)
+    return img
+end
+flat = flatScene()
+flatJpg, _ = jpegSize(flat, 85)
+flatPng = length(encodePNG(flat))
+println("flat gradient scene (320x240): PNG ", flatPng,
+    " B vs JPEG q85 ", flatJpg, " B")
+@assert flatJpg >= flatPng # flat graphics: JPEG is unsuitable
+
+thumb = joinpath(outdir, "annotation-jpeg.jpg")
+writeFile(thumbImg, thumb)
+@assert isfile(thumb) && filesize(thumb) > 500
+back = readImage(thumb)
+@assert (width(back), height(back)) == (256, 256)
+@assert all(Int(getColor(back, x, y).a) == 255
+    for x in 1:16 for y in 1:16) # opaque JPEG output
+
+back
+
+#
 # That is the whole cookbook. The named PNGs above are what
 # `docs/make_cookbook.jl` collects into `docs/build/gallery.html`, and the
 # executed Markdown/notebook versions live next to them in

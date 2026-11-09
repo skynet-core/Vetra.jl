@@ -51,31 +51,39 @@ function decodeJPEG(data::Vector{UInt8})
     h = size(pixels, 1)
     w = size(pixels, 2)
     image = newImage(w, h)
+    Base.invokelatest(_decodeJPEGPixels!, image, pixels, w, h)
+    return image
+end
+
+"""Kernel for `decodeJPEG`: the provider's `[row, col]` color matrix into
+premultiplied `image` bytes (opaque, `a = 255` — JPEG carries no alpha;
+grayscale yields `Gray` colors with a `val` field). Called with
+`Base.invokelatest`: the `N0f8 → Float64` conversion is defined by
+FixedPointNumbers, which may be required (lazy discovery, D028) by this
+very decode call.
+"""
+function _decodeJPEGPixels!(image::Image, pixels, w::Int, h::Int)
     d = image.data
-    n8(c) = UInt8(round(Float64(c) * 255)) # exact for N0f8 (k/255)
     for y in 1:h
         for x in 1:w
             c = pixels[y, x]
-            # Grayscale JPEGs yield Gray colors (a `val` field, no r/g/b).
             if isdefined(c, :val)
-                v = n8(c.val)
-                r = v
-                g = v
-                b = v
+                r = UInt8(round(Float64(c.val) * 255))
+                g = r
+                b = r
             else
-                r = n8(c.r)
-                g = isdefined(c, :g) ? n8(c.g) : r
-                b = isdefined(c, :b) ? n8(c.b) : g
+                r = UInt8(round(Float64(c.r) * 255))
+                g = isdefined(c, :g) ? UInt8(round(Float64(c.g) * 255)) : r
+                b = isdefined(c, :b) ? UInt8(round(Float64(c.b) * 255)) : g
             end
-            p = rgbx(ColorRGBA(r, g, b, 0xff))
             o = 4 * ((y - 1) * w + (x - 1))
-            d[o + 1] = p.r
-            d[o + 2] = p.g
-            d[o + 3] = p.b
-            d[o + 4] = p.a
+            d[o + 1] = r
+            d[o + 2] = g
+            d[o + 3] = b
+            d[o + 4] = 0xff
         end
     end
-    return image
+    return nothing
 end
 
 # ---- native dimensions scan (upstream decodeJpegDimensions) ----
@@ -297,4 +305,72 @@ function decodeJPEGDimensions(data::Vector{UInt8})
     else
         _jpegFail("invalid orientation")
     end
+end
+
+# ---- encode (T031, D032, docs/JPEG_WEBP_CODECS.md §2) ----
+
+"""libjpeg-turbo's MAX_JPEG_DIMENSION: the provider segfaults in
+`jinit_compress_master` at 65501 (C-level, uncatchable — bisected in the
+T030 probe), so the API boundary rejects before encoding."""
+const _JPEG_MAX_DIMENSION = 65500
+
+"""Contract §2.2: composite a premultiplied channel `p8` over background
+`b8` with alpha `a8`. Exact integer, no division by alpha:
+`(p8*255 + b8*(255-a8) + 127) div 255`, clamped to 0..255 (`a8 = 255` →
+`p8`, `a8 = 0` → `b8`)."""
+function _jpegComposite(p8::Int, b8::Int, a8::Int)
+    v = (p8 * 255 + b8 * (255 - a8) + 127) ÷ 255
+    return clamp(v, 0, 255)
+end
+
+"""Kernel for `encodeJPEG`: composite the premultiplied `d` bytes over the
+background into the straight `RGB{N0f8}` matrix `out` (contract §2.2). The
+channel type is read once from the matrix eltype (function barrier, as in
+`toColors`); call via `Base.invokelatest` because ColorTypes may be
+required (lazy discovery, D028) by this very call.
+"""
+function _encodeJPEGMatrix!(out::Matrix{C}, d::Vector{UInt8}, w::Int, h::Int,
+    br::Int, bg::Int, bb::Int) where {C}
+    T = C.parameters[1]
+    for y in 1:h
+        row = 4 * (y - 1) * w
+        for x in 1:w
+            i = row + 4 * (x - 1)
+            a = Int(d[i + 4])
+            out[y, x] = C(
+                T(_jpegComposite(Int(d[i + 1]), br, a) / 255),
+                T(_jpegComposite(Int(d[i + 2]), bg, a) / 255),
+                T(_jpegComposite(Int(d[i + 3]), bb, a) / 255))
+        end
+    end
+    return nothing
+end
+
+"""
+Encode an `Image` as JPEG bytes (T031, D032 — docs/JPEG_WEBP_CODECS.md
+§2). Straight RGB is composited over `background` (default white — the
+contract's transparency policy; alpha is never silently dropped).
+Output is baseline JFIF with the contract-mandated 72×72 dpi density
+(§2.3), no EXIF/Adobe; `quality` is 1..100 (default 92, the provider
+default) and dimensions must be ≤ 65500 per side (§2.4). Out-of-range
+arguments raise named `ArgumentError`s; without `JpegTurbo` the existing
+install hint applies.
+"""
+function encodeJPEG(image::Image; quality::Int = 92,
+    background::ColorRGB = rgb(255, 255, 255))
+    m = _requireJpegTurbo()
+    CT = _requireColorTypes()
+    (1 <= quality <= 100) ||
+        throw(ArgumentError("JPEG quality must be 1..100"))
+    (image.width <= _JPEG_MAX_DIMENSION &&
+        image.height <= _JPEG_MAX_DIMENSION) ||
+        throw(ArgumentError("JPEG dimension exceeds 65500"))
+    w = image.width
+    h = image.height
+    # Provider matrix: ImageCore `[row=y, col=x]`, N0f8 values exact.
+    mat = Matrix{CT.RGB{CT.N0f8}}(undef, h, w)
+    Base.invokelatest(_encodeJPEGMatrix!, mat, image.data, w, h,
+        Int(background.r), Int(background.g), Int(background.b))
+    return Base.invokelatest(m.jpeg_encode, mat; quality = quality,
+        density_unit = 1, X_density = 72, Y_density = 72)
 end

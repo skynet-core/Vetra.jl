@@ -499,7 +499,8 @@ end
             @test encodeImage(img, BmpFormat) == encodeBMP(img)
             @test encodeImage(img, QoiFormat) == encodeQOI(img)
             @test encodeImage(img, PpmFormat) == encodePPM(img)
-            for fmt in (JpegFormat, GifFormat, WebpFormat)
+            @test encodeImage(img, JpegFormat) == encodeJPEG(img) # T031
+            for fmt in (GifFormat, WebpFormat)
                 try
                     encodeImage(img, fmt)
                 catch e
@@ -508,18 +509,20 @@ end
             end
         end
 
-        @testset "writeFile (all four writable formats)" begin
+        @testset "writeFile (all six writable formats)" begin
             dir = mktempdir()
             for (ext, encoder) in [(".png", encodePNG(img)),
                                   (".bmp", encodeBMP(img)),
                                   (".qoi", encodeQOI(img)),
-                                  (".ppm", encodePPM(img))]
+                                  (".ppm", encodePPM(img)),
+                                  (".jpg", encodeJPEG(img)),
+                                  (".jpeg", encodeJPEG(img))]
                 name = joinpath(dir, "t" * ext)
                 writeFile(img, name)
                 @test read(name) == Vector{UInt8}(encoder)
             end
             # known-but-unencodable: the encodeImage error surfaces
-            for ext in (".jpg", ".jpeg", ".webp")
+            for ext in (".webp",)
                 try
                     writeFile(img, joinpath(dir, "t" * ext))
                 catch e

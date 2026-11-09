@@ -62,10 +62,10 @@ has no quadratic path operator), and a documented whole-picture
 `rasterFallback`; the SVG arc x-axis rotation emission was fixed to
 degrees verbatim along the way. Verified with hand-derived geometry
 under gs 10.06.0 + poppler/pdftoppm 26.01.0. Full gate:
-**96.29% coverage (7013/7283)** (T030 is design only — no source
-changes, gate unchanged). Next ready: T031 (T032 also ready; T019 awaits
-an explicit publication request; T029 awaits the provider decision,
-D031 §6, now that T028 is done). T013–T030
+**96.31% coverage (7039/7309)** (T031; T030 was design only — no source
+changes). Next ready: T032 (T019 awaits an explicit
+publication request; T029 awaits the provider decision,
+D031 §6, now that T028 is done). T013–T031
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -139,20 +139,19 @@ them before loading Vetra, or restart Julia after installation.
 ## Next step and limits
 
 No active implementation task. Next ready:
-[T031](../tasks/T031-jpeg-encoding.md) — JPEG encoding per the T030
-contract (docs/JPEG_WEBP_CODECS.md §2, D032): `encodeJPEG` over the
-existing opt-in `JpegTurbo` dependency (premultiplied→straight composite
-over an explicit background, JFIF 72×72 dpi, quality 1..100, dimension
-bound 65500 — the provider segfaults at 65501), validated by hand-derived structure + PyMuPDF/mupdf 1.28.2
-independent-decoder interop (max channel delta ≤ 8, measured 4) + a PSNR
-floor (measured 48.78 dB at q92 on the pinned gradient) — lossy, so
-never byte-exact.
-[T032](../tasks/T032-webp-support.md) is also ready — static WebP
-read/write via the new opt-in `WebP.jl` 0.1.3 + `libwebp_jll` 1.6.1+0
-extra (feature scan first; animation rejected with a named `ArgumentError`
+[T032](../tasks/T032-webp-support.md) — static WebP
+read/write per the T030 contract (docs/JPEG_WEBP_CODECS.md §3, D032) via
+the new opt-in `WebP.jl` 0.1.3 + `libwebp_jll` 1.6.1+0 extra
+(feature scan first; animation rejected with a named `ArgumentError`
 **before** pixel decode — the provider decode crashes the process at C
 level; lossless exactness partition: opaque pixels + alpha exact, RGB
-under α=0 unspecified; pinned gstatic/Wikimedia fixtures carry sha256).
+under α=0 unspecified; pinned gstatic/Wikimedia fixtures carry sha256;
+D019 present/absent + shared-cache loading protocol extended to WebP).
+T031 shipped the JPEG half: `encodeJPEG` (contract §2) over the existing
+opt-in `JpegTurbo` dependency, with mupdf 1.28.2 independent-reader
+interop (max channel delta ≤ 8, measured 4) and the PSNR floor
+(measured 48.78 dB at q92) — plus a latent world-age fix in
+`decodeJPEG` (first-use decode in a fresh process now works).
 T029 (shaping/bidi) remains
 blocked on the provider decision (D031 §6) now that T028 is done.
 Protocol (user, 2026-11-08): commit and push to `origin main` after each
@@ -167,7 +166,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T028, T030)
+## Recent verification (T014–T028, T030–T031)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -437,3 +436,42 @@ release evidence is in [T011](../tasks/T011-release.md),
   (upstream parity), `decodeBase64` gains WebP via the magic dispatch.
   T031/T032 unblocked; COMPATIBILITY/API rows updated to
   specified-not-implemented.
+- T031: JPEG encoding implemented (`encodeJPEG` in
+  `src/formats/jpeg.jl`; `encodeImage`/`writeFile` JpegFormat dispatch in
+  `src/formats/io.jl`; export; `test/jpeg_encode_tests.jl`, 61
+  assertions; cookbook recipe 13). Contract §2 in full: exact integer
+  premultiplied→straight composite over `background` (default white;
+  `out8 = clamp((p8*255 + b8*(255-a8) + 127) div 255)` — no division by
+  alpha, so no undefined case), JFIF baseline with the contract's
+  72×72 dpi density, quality 1..100 (default 92; out-of-range is a named
+  `ArgumentError`, non-Int is a `TypeError`), dimension bound 65500
+  (named error — bisected: the provider segfaults at 65501 in
+  `jinit_compress_master`, uncatchable). The pixel loop runs in a
+  Vetra-side kernel called via `Base.invokelatest` (D028 world-age
+  safety, same pattern as `toColors`). **Latent bug found + fixed**:
+  `decodeJPEG`'s inline `N0f8 → Float64` conversion hit the same
+  world-age wall on a fresh process (first codec call = JPEG decode
+  → `MethodError: Float64(::N0f8) ... method too new`); the conversion
+  is now in a `_decodeJPEGPixels!` kernel under `invokelatest`
+  (byte-identical output — T008 fixtures green). **Validation**:
+  hand-derived marker walk (SOI, JFIF units=1 72×72, SOF0 via the
+  existing native dimensions scan, EOI); mupdf 1.28.2 interop
+  (conditional on `VETRA_MUPDF_PY`; page rect = 64×48 pt, 72-dpi pixmap
+  = 64×48, max channel delta 4 ≤ 8); PSNR 48.78 dB at q92 ≥ 40 floor,
+  q10 strictly worse; transparent → solid background exact
+  (10,20,30); half-alpha §2.2 examples exact (255 over white, 128 over
+  black); `encodeImage(JpegFormat) == encodeJPEG(img)` (deterministic);
+  six writable extensions incl. `.jpg`/`.jpeg`; `encodeBase64` stays
+  PNG-only while `decodeBase64` accepts a JPEG payload. **T008 dispatch
+  tests updated** (JPEG out of the "unencodable" loop, into the
+  writable list — the try/catch assertions were silently vanishing,
+  dropping the suite count 796459 → 796456; restored with real
+  assertions). Codec-loading protocol extended: absent environment →
+  `encodeJPEG` raises the install hint; codec-enabled →
+  `decodeJPEGDimensions(encodeJPEG(img)) == (2, 3)`. **Benchmark**
+  (warm medians, log `/tmp/opencode/t031_bench.jl`): mandrill 512×512
+  photo — JPEG q85 105142 B / 3.39 ms vs PNG 732157 B / 17.13 ms
+  (0.144×); 256×256 thumbnail — 26559 B / 0.82 ms vs 180278 B /
+  3.83 ms (0.147×); flat 320×240 gradient scene — JPEG 4333 B vs PNG
+  2411 B (1.797× — the unsuitable case, noted in recipe 13). Gate
+  green: **96.31% coverage (7039/7309)**; T008 suite back to 796459.

@@ -70,12 +70,14 @@ what the pixie modules themselves use (see docs/NUMERICAL_CONTRACT.md).
 
 ## Images, formats, text (T006, T008, T009)
 
-Optional PNG/JPEG/SVG packages are discovered and loaded during runtime
-module initialization (D019), including when the precompile cache was built
-in a core-only environment. Absent packages still produce install hints on
-format use; installed packages that fail to load propagate their actual error.
-Evidence: `test/codec_loading_tests.jl` covers core-only cache reuse followed
-by PNG, JPEG, and SVG operations in the codec-enabled test environment.
+Optional PNG/JPEG/SVG packages are discovered lazily on first use (D028,
+superseding D019's eager module-initialization load), including when the
+precompile cache was built in a core-only environment. Absent packages
+still produce install hints on format use (decode and encode alike);
+installed packages that fail to load propagate their actual error.
+Evidence: `test/codec_loading_tests.jl` covers core-only cache reuse
+followed by PNG, JPEG (decode and encode), and SVG operations in the
+codec-enabled test environment.
 
 - Examples: square, line, heart (`examples/*.jl`, shared builders in
   `examples/common.jl`) — **implemented** (T006); each matches its pinned
@@ -118,14 +120,22 @@ by PNG, JPEG, and SVG operations in the codec-enabled test environment.
   orientation 1-8 (dimensions orientation-aware); pixels differ from the
   upstream stb-derived fixtures by at most 8 per channel (recorded,
   measured on the 4 oracle fixtures). Evidence: test/formats_tests.jl.
-  **Encoding is specified** (T030, D032, docs/JPEG_WEBP_CODECS.md §2):
+  **Encoding is implemented** (T031, D032, docs/JPEG_WEBP_CODECS.md §2):
   `encodeJPEG` via the same opt-in `JpegTurbo` — premultiplied→straight
   composite over an explicit `background` (default white, exact integer
   formula), JFIF with contract-mandated 72×72 dpi density, quality
-  1..100 (default 92), no EXIF/Adobe written; validation is structure +
-  PyMuPDF/mupdf 1.28.2 interop (max channel delta ≤ 8, measured 4) +
-  PSNR floor (measured 48.78 dB at q92) — lossy, so never byte-exact.
-  Implemented by T031; until then JPEG writes raise, as upstream.
+  1..100 (default 92), no EXIF/Adobe written, dimension bound 65500
+  (the provider segfaults at 65501 — rejected before encode).
+  Validation: hand-derived marker structure, PyMuPDF/mupdf 1.28.2
+  independent-reader interop (page rect = dimensions at 72 dpi; max
+  channel delta ≤ 8, measured 4) and a PSNR floor (≥ 40 dB at q92,
+  measured 48.78 dB) — lossy, so never byte-exact. Also fixed a latent
+  world-age defect in `decodeJPEG` found while validating: the
+  N0f8→Float64 conversion now runs in an `invokelatest` kernel (D028
+  pattern), so first-use JPEG decode in a fresh process works.
+  Evidence: test/jpeg_encode_tests.jl (61 assertions incl. mupdf
+  interop), test/formats_tests.jl (encode dispatch + six writable
+  formats).
 - base64: `encodeBase64` / `decodeBase64`
   (`pixie/imagebase64.nim`) — **implemented** (T008), native port: strict
   RFC-4648 validation, data-URL passthrough, PNG payload. Evidence:
@@ -148,9 +158,8 @@ by PNG, JPEG, and SVG operations in the codec-enabled test environment.
 - Dispatch: `decodeImage` / `encodeImage` / `readImage` / `readImageDimensions`
   / `writeFile` (`pixie/pixie.nim`) — **implemented** (T008): magic-byte
   dispatch for PNG/JPEG/BMP/QOI/GIF/PPM/SVG, extension-driven write for
-  PNG/BMP/QOI/PPM (JPEG/GIF/WebP writes raise, as upstream — the JPEG and
-  WebP branches become live with T031/T032, and WebP gains a decode magic
-  branch, RIFF+WEBP, in T032).
+  PNG/BMP/QOI/PPM/JPEG (T031) — GIF/WebP writes still raise; WebP gains
+  read/write + the RIFF+WEBP decode magic branch in T032.
 - SVG: `parseSvg` + `newImage(svg)` (`pixie/fileformats/svg.nim`) —
   **implemented** (T008), the pinned subset: viewBox, `rect` (incl.
   rx/ry), `circle`, `ellipse`, `line`, `polyline`, `polygon`, `path`

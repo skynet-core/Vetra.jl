@@ -52,10 +52,11 @@ API, artifacts, license, Julia 1.10)
 - **WebP = `WebP.jl` 0.1.3** (stemann/WebP.jl, MIT, last push
   2026-06-24; registry julia compat "1"; deps CEnum/ColorTypes/FileIO/
   FixedPointNumbers/ImageCore — all MIT) + **`libwebp_jll` 1.6.1+0**
-  (libwebp BSD-3, 18 platform artifacts, same list). The General
+  (libwebp BSD, 18 platform artifacts, same list). The General
   registry contains exactly one WebP package (2026-11-09 sweep), so no
   alternative candidate existed. New opt-in extra (T032 adds the
-  `[extras]`/`__init__`/install-hint plumbing per D019).
+  `[extras]` entry + the `_requireWebP` install-hint helper, lazy
+  discovery per D028 — no `__init__` change).
 - Alternatives rejected (D032): native WebP port (VP8/VP8L+alpha+RIFF
   surface; the D014 "no stable package" rationale no longer holds);
   direct `ccall` to libwebp_jll (duplicates the thin tested wrapper);

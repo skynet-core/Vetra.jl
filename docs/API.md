@@ -151,15 +151,14 @@ single-line behavior is unchanged.
 `readImage`/`decodeImage` detect formats by contents; `writeFile` selects by
 extension, and `encodeImage` accepts a `FileFormat`. PNG read/write requires
 `PNGFiles`; JPEG read/write requires `JpegTurbo`; SVG parsing requires
-`XML`. BMP/QOI/PPM read/write and GIF decode are native. JPEG writing and
-WebP read/write are specified by the T030 codec contracts
-(docs/JPEG_WEBP_CODECS.md, D032) and implemented by T031 (JPEG encoding:
-`encodeJPEG` — premultiplied→straight composite over an explicit
-background, JFIF 72 dpi, quality 1..100) and T032 (static WebP:
-`decodeWebP`/`decodeWebPDimensions`/`encodeWebP` — animation raises a
-named error before decode). Until those ship, JPEG/WebP writes and WebP
-decoding still raise; GIF writing remains unsupported (D014).
-`encodeBase64` uses a PNG payload; `decodeBase64`
+`XML`. BMP/QOI/PPM read/write and GIF decode are native. JPEG writing is
+implemented (T031, D032, docs/JPEG_WEBP_CODECS.md §2): `encodeJPEG`
+composites premultiplied pixels over an explicit `background` (default
+white), writes JFIF at 72×72 dpi, and takes `quality` 1..100. WebP
+read/write is specified (T030 contracts, §3) and implemented by T032
+(static subset; animation raises a named error before decode). Until
+T032 ships, WebP writes/decoding still raise; GIF writing remains
+unsupported (D014). `encodeBase64` uses a PNG payload; `decodeBase64`
 accepts a payload of any format `decodeImage` recognizes.
 
 `parseSvg` plus `newImage(svg)` rasterizes the supported SVG subset. See

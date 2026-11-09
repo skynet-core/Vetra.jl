@@ -49,6 +49,8 @@ const ITEMS = [
         "A gradient report scene exported as scale-independent vector PDFs at 96 and 288 dpi (writePdf); this is its replayed raster."),
     ("paragraph-card.png", "Paragraph card (T028)",
         "A text-heavy card: wrapped body with mixed styled runs at an absolute line height, a clipped box, and a footnote paragraph (Paragraph/layoutParagraph/fillParagraph)."),
+    ("annotation-jpeg.jpg", "JPEG thumbnail (T031)",
+        "The pinned mandrill photo resized to 256x256 and exported with encodeJPEG (premultiplied composited over white, JFIF 72 dpi, default quality 92): on photographic content JPEG is ~14% of the PNG size; on flat graphics it is not."),
 ]
 
 function gallery_html()

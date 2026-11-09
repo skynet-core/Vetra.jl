@@ -25,6 +25,14 @@
                 @assert e isa ErrorException &&
                     occursin("Color-matrix interop is opt-in", e.msg)
             end
+            # T031: JPEG encoding shares the opt-in package + hint.
+            try
+                encodeJPEG(newImage(2, 3))
+                error("JPEG encode should require its optional package")
+            catch e
+                @assert e isa ErrorException &&
+                    occursin("JPEG support is opt-in", e.msg)
+            end
             # T016: display falls back to text in a core-only environment.
             @assert Base.showable(MIME("image/png"), newImage(2, 3)) === false
             @assert Base.showable(MIME("text/plain"), newImage(2, 3)) === true
@@ -39,6 +47,9 @@
             jpeg = readImage($(repr(joinpath(root, ".reference", "upstream",
                 "tests", "fileformats", "jpeg", "masters", "mandrill.jpg"))))
             @assert width(jpeg) > 0
+            # T031: the encoder round-trips dimensions through the
+            # existing decoder in the codec-enabled environment.
+            @assert decodeJPEGDimensions(encodeJPEG(image)) == (2, 3)
             """
         for (env, code) in ((root, core), (project, codecs))
             cmd = `$(Base.julia_cmd()) --startup-file=no --project=$env -e $code`

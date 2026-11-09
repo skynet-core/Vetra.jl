@@ -3,11 +3,13 @@
 # decodeImage, readImageDimensions, readImage, encodeImage, writeFile)
 # and pixie/imagebase64.nim (encodeBase64, decodeBase64, getPayload).
 #
-# D014 (extended): all seven upstream read formats are supported. PNG
-# (PNGFiles), SVG (XML) and JPEG (JpegTurbo) are opt-in codec packages;
-# PPM, BMP, QOI and GIF are native ports. Upstream only encodes PNG, BMP,
-# QOI and PPM: encodeImage raises "Unsupported file format" for Jpeg/Gif/
-# Webp, as does writeFile for those extensions.
+# D014 (extended by D032/T031): all seven upstream read formats are
+# supported. PNG (PNGFiles), SVG (XML) and JPEG (JpegTurbo) are opt-in
+# codec packages; PPM, BMP, QOI and GIF are native ports. Upstream only
+# encodes PNG, BMP, QOI and PPM; T031 adds JPEG encoding (encodeImage
+# JpegFormat → encodeJPEG, opt-in JpegTurbo). Gif/Webp encoding still
+# raises "Unsupported file format", as does writeFile for those
+# extensions (WebP write is specified for T032).
 #
 # Pinned upstream quirks kept:
 # - decodeImageDimensions has no XML/SVG case: SVG bytes raise
@@ -131,8 +133,10 @@ end
 
 """
 Encode an image to bytes (upstream `encodeImage`). PNG, BMP, QOI and PPM
-are implemented; JpegFormat, GifFormat and WebpFormat raise
-`ArgumentError("Unsupported file format")`, as upstream does.
+are implemented natively; JpegFormat is implemented via the opt-in
+`JpegTurbo` package (T031, D032); GifFormat and WebpFormat raise
+`ArgumentError("Unsupported file format")`, as upstream does for GIF
+(WebP write is specified for T032).
 """
 function encodeImage(image::Image, format::FileFormat)
     if format === PngFormat
@@ -143,6 +147,8 @@ function encodeImage(image::Image, format::FileFormat)
         return encodeQOI(image)
     elseif format === PpmFormat
         return encodePPM(image)
+    elseif format === JpegFormat
+        return encodeJPEG(image)
     else
         throw(ArgumentError("Unsupported file format"))
     end
@@ -151,7 +157,9 @@ end
 """
 Write an image to a file, the format chosen by the file extension
 (upstream `writeFile`). Unknown extensions raise `ArgumentError("Unsupported
-file extension")`; known-but-deferred ones reach the `encodeImage` error.
+file extension")`; JPEG writes via `encodeJPEG` (T031), and the
+still-deferred GIF/WebP writes reach the `encodeImage` error (WebP from
+T032).
 """
 function writeFile(image::Image, path::String)
     ext = lowercase(splitext(basename(path))[2])

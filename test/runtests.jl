@@ -84,3 +84,9 @@ include("pdf_export_tests.jl")
 # clusters, hand-derived line boxes from hhea/hmtx, wrap/NBSP/char-split
 # invariants, alignment offsets, clip/ellipsis, image + context render.
 include("paragraph_tests.jl")
+
+# T031: JPEG encoding (D032, docs/JPEG_WEBP_CODECS.md §2): marker
+# structure (JFIF 72×72 dpi), exact composite conversion, dimension/
+# quality validation, dispatch + base64, mupdf independent-reader
+# interop, PSNR floor.
+include("jpeg_encode_tests.jl")

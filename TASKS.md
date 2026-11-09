@@ -3,7 +3,7 @@
 The pinned-scope port and cleanup (T000–T013) are complete. The user-approved
 [adoption and advanced-graphics roadmap](docs/ROADMAP.md) adds T014–T032.
 Status values: `ready`, `blocked`, `in_progress`, `done`. Work on one selected
-task; for a general continuation take the first ready row. **Next: T031.**
+task; for a general continuation take the first ready row. **Next: T032.**
 
 ## Completed foundation
 
@@ -49,7 +49,7 @@ resolve its implementation contracts before dependents are marked ready.
 | T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | done |
 | T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked (provider decision, D031 §6) |
 | T030 | [JPEG/WebP codec contracts](tasks/T030-codec-design.md) | T013 | done |
-| T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | ready |
+| T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | done |
 | T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | ready |
 
 ## Current work
@@ -253,9 +253,25 @@ resolve its implementation contracts before dependents are marked ready.
   the machine; recorded limitation). All provider facts verified in
   isolated scratch environments (commands + versions in the task
   record). T031/T032 unblocked.
-- No active implementation task. Next ready: T031.
+- T031 complete (2026-11-09): JPEG encoding implemented
+  (`encodeJPEG` in src/formats/jpeg.jl + `encodeImage`/`writeFile`
+  JpegFormat dispatch + export; test/jpeg_encode_tests.jl, 61 assertions;
+  cookbook recipe 13). Per the T030 contract: exact integer
+  premultiplied→straight composite over `background` (default white),
+  JFIF 72×72 dpi, quality 1..100 (default 92), dimension bound 65500
+  (named error — the provider segfaults at 65501). Validation: hand-
+  derived marker structure, mupdf 1.28.2 independent-reader interop
+  (conditional on `VETRA_MUPDF_PY`; page rect = dimensions at 72 dpi,
+  max channel delta ≤ 8 — measured 4), PSNR floor ≥ 40 dB (measured
+  48.78), transparent-input compositing exact. Also fixed a latent
+  world-age defect in `decodeJPEG` (N0f8→Float64 now in an
+  `invokelatest` kernel — D028 pattern): first-use JPEG decode in a
+  fresh process now works. T008 dispatch tests updated to the six
+  writable formats (count restored: 796459). Gate green: 96.31%
+  coverage (7039/7309).
+- No active implementation task. Next ready: T032.
   T019 awaits an explicit publication request; T029 awaits the
-  provider decision (D031 §6) now that T028 is done. All T013–T030
+  provider decision (D031 §6) now that T028 is done. All T013–T031
   changes are committed and pushed to origin main (protocol:
   commit+push after each task).
 

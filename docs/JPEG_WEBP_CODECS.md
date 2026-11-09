@@ -19,12 +19,12 @@ document is the behavior contract T031/T032 must satisfy.
 | `JpegTurbo` (JuliaIO) | 0.1.6 | JPEG encode + decode | MIT (pkg); libjpeg-turbo BSD (binary) | `JpegTurbo_jll` 3.2.1+0 | 18: linux x86_64/aarch64/armv7l/armv6l/i686/powerpc64le/riscv64 glibc+musl, freebsd x86_64, macos x86_64+aarch64, windows x86_64+i686 |
 | `WebP` (stemann) | 0.1.3 | WebP encode + decode | MIT (pkg); libwebp BSD (binary) | `libwebp_jll` 1.6.1+0 | 18: same platform list |
 
-Both stay opt-in: the renderer core is dependency-free; codecs load at
-runtime through the D019 `Vetra.__init__` mechanism with an install hint
-when absent (JPEG reuses `_requireJpegTurbo`; T032 adds `_requireWebP`,
-a `Project.toml` `[extras]`/test-target entry, and the `__init__`
-codec-list entry). Julia compatibility: `JpegTurbo` 1.6.0–1, `WebP` "1" —
-both cover the pinned 1.10 floor. Registry check (2026-11-09): the
+Both stay opt-in: the renderer core is dependency-free; codecs are
+discovered lazily on first use (D028) with an install hint when absent
+(JPEG reuses `_requireJpegTurbo`; T032 adds `_requireWebP` plus a
+`Project.toml` `[extras]`/test-target entry — no `__init__` change).
+Julia compatibility: `JpegTurbo` 1.6.0–1, `WebP` "1" — both cover the
+pinned 1.10 floor. Registry check (2026-11-09): the
 General registry contains exactly one WebP package (`W/WebP`,
 stemann/WebP.jl, last push 2026-06-24); no second JPEG package is needed
 because the decode dependency already encodes.
@@ -190,8 +190,9 @@ encodeWebP(image::Image; lossy::Bool = true,
 
 ### 3.4 Errors
 
-- `WebP` absent → `_requireWebP()` install hint (T032 adds it to the
-  D019 `__init__` codec list, `[extras]`, and the codec-loading tests).
+- `WebP` absent → `_requireWebP()` install hint (T032 adds the
+  `_requireWebP` helper — lazy discovery per D028 — the `[extras]`
+  entry, and the codec-loading tests).
 - Invalid or truncated WebP → the named `ArgumentError` from the feature
   scan, raised **before** the crash-prone decode.
 
