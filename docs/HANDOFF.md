@@ -63,7 +63,8 @@ has no quadratic path operator), and a documented whole-picture
 degrees verbatim along the way. Verified with hand-derived geometry
 under gs 10.06.0 + poppler/pdftoppm 26.01.0. Full gate:
 **96.25% coverage (6718/6980)**. Next ready tasks:
-T027/T030 (T019 awaits an explicit publication request). T013–T026
+T028/T030 (T019 awaits an explicit publication request; T029 awaits
+T028 + the provider decision, D031 §6). T013–T027
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -158,7 +159,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T026)
+## Recent verification (T014–T027)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -321,3 +322,37 @@ release evidence is in [T011](../tasks/T011-release.md),
   down from 98.28% because the new writer's relative-command branches —
   unreachable via the public path API, kept for parity with the SVG
   writer — are exercised only structurally).
+- T027: paragraph layout and shaping contract (D031, `docs/TEXT_LAYOUT.md`;
+  design only, no source changes — the T026 gate result stands).
+  Investigated the 2026 package landscape: the General registry (full
+  package-name sweep, 2026-11-09) has **no maintained Julia shaping
+  provider** — `HarfKit.jl`/`Pango.jl` are delisted, `FreeType`/`Cairo`
+  do not shape, JLL wrappers exist (`HarfBuzz_jll` v8.5.1+0) but a JLL
+  alone is not an API; system `libharfbuzz` present but no CLI tools.
+  Contract: **T028 core-only** (zero new dependencies) — additive
+  `Paragraph`/`ParagraphLayout`/`fillParagraph` over the existing
+  `Span`/`typeset` machinery (the existing `Font` already carries
+  per-run style, `Typeface.fallbacks` already does recursive per-rune
+  fallback — T028 adds box/overflow, paragraph line height, v1 wrap
+  opportunities [white-space + explicit `\n`, no UAX#14 — recorded
+  shortcut], `withFallback`, `.notdef`/zero-advance missing-glyph
+  policy, metrics, vendored UAX#29-subset grapheme clusters [BMP,
+  recorded provenance; per-codepoint fallback outside the subset]).
+  **T029 specified but provider-gated**: shaper interface (raw font
+  bytes + codepoints + script/language/direction → per-cluster
+  GID/advance/offset), additive `glyphPathByGid` (GID → outline by
+  direct loca/glyf index — pinned parser data sufficient; CFF/TTC stay
+  unsupported under every option), UAX#9 paragraph-level base direction
+  with logical→visual permutation exposed; options (a) re-emerged
+  binding / (b) HarfBuzz_jll + thin `ccall` / (c) pure-Julia UAX#9 +
+  GSUB-subset (needs an explicit D015 extension) / (d) defer recorded;
+  **T029 blocked until one is chosen** (no provider preselected per the
+  task spec). Test fonts: existing pinned fixtures for T028; new pinned
+  OFL 1.1 Noto Sans Arabic + Devanagari for T029; shaping expectations
+  from a pinned external reference (`hb-shape`/equivalent) or hand
+  derivation — never the code under test; separate suites
+  `test/paragraph_tests.jl` (T028) / `test/shaping_tests.jl` (T029).
+  Seven worked examples traced in the doc (wrapped Latin, mixed-size
+  runs, fallback, Arabic joining, Indic conjunct, mixed RTL/LTR,
+  combining marks). API proposal in docs/API.md marked
+  specified-not-implemented.

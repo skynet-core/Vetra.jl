@@ -45,9 +45,9 @@ resolve its implementation contracts before dependents are marked ready.
 | T024 | [Drawing recordings and CPU replay](tasks/T024-recording-replay.md) | T023 | done |
 | T025 | [SVG export](tasks/T025-svg-export.md) | T024 | done |
 | T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | done |
-| T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | ready |
-| T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | blocked |
-| T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked |
+| T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | done |
+| T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | ready |
+| T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked (T028 + provider decision, D031 §6) |
 | T030 | [JPEG/WebP codec contracts](tasks/T030-codec-design.md) | T013 | ready |
 | T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | blocked |
 | T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | blocked |
@@ -198,8 +198,28 @@ resolve its implementation contracts before dependents are marked ready.
   emission (degrees verbatim; the buffer's unit is degrees). Cookbook
   recipe 11 (report graphic exported at 96/288 dpi, 13 gallery items).
   Gate green: 96.25% coverage (6718/6980).
-- No active implementation task. Next ready: T027 or T030.
-  T019 awaits an explicit publication request. All T013–T026 changes
+- T027 complete (2026-11-09): paragraph layout and shaping contract
+  (D031, docs/TEXT_LAYOUT.md). Design only, no source changes. T028
+  specified as core-only (zero new dependencies): additive
+  `Paragraph`/`layoutParagraph`/`fillParagraph` over the existing
+  `Span`/`typeset` machinery — box/overflow, v1 wrap opportunities
+  (white-space + explicit `\n`; no UAX#14, recorded shortcut),
+  paragraph line height, styled runs, `withFallback` over the existing
+  `Typeface.fallbacks` chain + `.notdef`/zero-advance missing-glyph
+  policy, metrics, vendored UAX#29-subset grapheme clusters. T029
+  specified but provider-gated: shaper interface (raw font bytes →
+  per-cluster GID/advance/offset), additive `glyphPathByGid`
+  (GID → outline, the pinned parser's data is sufficient), UAX#9
+  paragraph-level direction with logical→visual permutation; **no
+  provider adopted** — the General registry (swept 2026-11-09) has no
+  maintained Julia shaping package (`HarfKit`/`Pango` delisted;
+  options (a)–(d) recorded), so T029 stays blocked. Test fonts:
+  existing pinned fixtures (T028) + pinned OFL Noto Sans Arabic/
+  Devanagari (T029); shaping expectations from a pinned external
+  reference or hand derivation. T028 unblocked.
+- No active implementation task. Next ready: T028 or T030.
+  T019 awaits an explicit publication request; T029 awaits T028 +
+  the provider decision (D031 §6). All T013–T027 changes
   are committed and pushed to origin main (protocol: commit+push after
   each task).
 

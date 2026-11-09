@@ -875,6 +875,66 @@ reference). Existing `Context` callers are untouched; recording is opt-in.
 Evidence: docs/RECORDING.md (contract, capability matrix, canonical
 validation scenes); task record tasks/T023-recording-design.md.
 
+## D031 — Paragraph layout and shaping contract; T028 core-only, T029
+provider-gated (accepted, 2026-11-09, T027)
+
+Problem: T028–T029 need a bounded text contract that adds wrapping,
+styled runs, fallback, cluster indices, shaping, and bidi without
+silently changing the pinned T009 font/layout API (`typeset`/
+`measureText`/`layoutBounds`/`computePaths`/`fillText`/`strokeText`
+stay byte-exact, per docs/TEXT_LAYOUT.md §10).
+
+Chosen behavior (full text in docs/TEXT_LAYOUT.md): **T028 ships
+core-only with zero new dependencies** — an additive `Paragraph`/
+`ParagraphLayout` layer over the existing `typeset` machinery (width/
+height/overflow box, v1 wrap opportunities = white-space set + explicit
+`\n` with no UAX#14 mid-word breaking, paragraph-level line height,
+existing alignment enums, styled runs = existing `Span`/`Font`,
+fallback = the existing `Typeface.fallbacks` chain formalized by
+`withFallback` + a `.notdef`/zero-advance missing-glyph policy,
+metrics, and vendored UAX#29-subset grapheme clusters with a
+documented per-codepoint fallback). **T029 is specified but
+provider-gated**: the shaper interface (raw font bytes + codepoints +
+script/language/direction → per-cluster GID/advance/offset; GID →
+native outline by direct loca/glyf index via additive
+`glyphPathByGid`), UAX#9 direction model (paragraph-level base
+direction, logical cluster indices, visual permutation exposed), and
+behavior requirements (Arabic joining, Indic conjuncts, combining
+marks, missing glyphs) are fixed by contract, but **no provider is
+adopted**: the General registry (checked 2026-11-09) has no maintained
+Julia shaping package (`HarfKit.jl`/`Pango.jl` delisted; full package-
+name sweep of the registry tree; FreeType/Cairo exist but do not
+shape), so options (a) re-emerged binding, (b) `HarfBuzz_jll` (v8.5.1+0)
++ thin `ccall` bindings, (c) pure-Julia UAX#9 + GSUB-subset shaper
+(needs an explicit D015 extension for a GSUB reader), (d) defer are
+recorded and T029 stays blocked until one is chosen. T028 renders LTR
+only; RTL raises a named `ArgumentError`. Test fonts: existing pinned
+fixtures for T028; new pinned OFL Noto Sans Arabic + Noto Sans
+Devanagari for T029; shaping expectations from a pinned external
+reference (`hb-shape` or equivalent) or hand derivation — never from
+the code under test.
+
+Alternatives that matter: a full UAX#29/UAX#14 reimplementation in core
+(rejected — table surface and CJK/emoji correctness cost outweigh the
+v1 use cases; the shortcut is recorded in the doc); adopting
+`HarfBuzz_jll` + own bindings immediately (rejected without a
+separate dependency-policy decision — it is a binary dependency,
+D030-style minimalism applies); making T029 optional-shaper with a
+silent unshaped fallback (rejected — silent no-join Arabic is exactly
+the "silent loss" the export contract forbids; the named error is the
+honest v1 state).
+
+Compatibility impact: design only — no public symbols, no raster
+behavior change, no new dependencies. Also supersedes D030's
+"FlateDecode RGB images via stdlib Compression" note for the PDF
+writer: the frozen build has no stdlib `Compression` and T026 shipped
+uncompressed streams (recorded in tasks/T026-pdf-export.md and
+docs/RECORDING.md §6.2).
+
+Evidence: docs/TEXT_LAYOUT.md (contract, registry sweep, provider
+options, worked examples, reference protocol); task record
+tasks/T027-text-design.md.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives
