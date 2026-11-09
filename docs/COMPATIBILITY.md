@@ -113,22 +113,44 @@ by PNG, JPEG, and SVG operations in the codec-enabled test environment.
   out-of-range palette indices skip to transparent. Evidence:
   test/formats_tests.jl (4 pinned fixtures), test/formats_synthetic_tests.jl.
 - JPEG: `decodeJPEG` / `decodeJPEGDimensions`
-  (`pixie/fileformats/jpeg.nim`) — **decode only** (T008) via the opt-in
+  (`pixie/fileformats/jpeg.nim`) — **decode** (T008) via the opt-in
   `JpegTurbo` package (D014): marker scan with resync, FF-stuffing, Exif
   orientation 1-8 (dimensions orientation-aware); pixels differ from the
   upstream stb-derived fixtures by at most 8 per channel (recorded,
   measured on the 4 oracle fixtures). Evidence: test/formats_tests.jl.
+  **Encoding is specified** (T030, D032, docs/JPEG_WEBP_CODECS.md §2):
+  `encodeJPEG` via the same opt-in `JpegTurbo` — premultiplied→straight
+  composite over an explicit `background` (default white, exact integer
+  formula), JFIF with contract-mandated 72×72 dpi density, quality
+  1..100 (default 92), no EXIF/Adobe written; validation is structure +
+  PyMuPDF/mupdf 1.28.2 interop (max channel delta ≤ 8, measured 4) +
+  PSNR floor (measured 48.78 dB at q92) — lossy, so never byte-exact.
+  Implemented by T031; until then JPEG writes raise, as upstream.
 - base64: `encodeBase64` / `decodeBase64`
   (`pixie/imagebase64.nim`) — **implemented** (T008), native port: strict
   RFC-4648 validation, data-URL passthrough, PNG payload. Evidence:
   test/formats_tests.jl, test/formats_synthetic_tests.jl.
-- WebP: `pixie/fileformats/webp.nim` — **not implemented** (deferred; no
-  stable Julia package, native port not scheduled; `WebpFormat` dispatch
-  raises "Unsupported file format" as upstream).
+- WebP: `pixie/fileformats/webp.nim` — **specified, not implemented**
+  (T030, D032, docs/JPEG_WEBP_CODECS.md §3; the T008 "deferred — no
+  stable Julia package" wording is superseded: `WebP.jl` 0.1.3 +
+  `libwebp_jll` 1.6.1+0 selected, opt-in). Static read/write:
+  `decodeWebP`/`decodeWebPDimensions` (feature scan first; premultiplied
+  conversion) and `encodeWebP` (always RGBA; lossy quality 0..100 default
+  75; lossless ignores quality — provider API). Animation raises a named
+  `ArgumentError` **before** pixel decode (the provider decode crashes the
+  process on animated input — verified). Lossless round-trips are exact
+  for opaque pixels and alpha (VP8L approximates RGB under α=0 —
+  recorded); lossy validation is dimensions + PSNR floor, never bytes
+  (no independent WebP decoder on the verification machine — recorded
+  limitation; pinned Google gstatic + Wikimedia fixtures carry sha256).
+  Implemented by T032; until then `WebpFormat` dispatch raises
+  "Unsupported file format" as upstream.
 - Dispatch: `decodeImage` / `encodeImage` / `readImage` / `readImageDimensions`
   / `writeFile` (`pixie/pixie.nim`) — **implemented** (T008): magic-byte
   dispatch for PNG/JPEG/BMP/QOI/GIF/PPM/SVG, extension-driven write for
-  PNG/BMP/QOI/PPM (JPEG/GIF/WebP writes raise, as upstream).
+  PNG/BMP/QOI/PPM (JPEG/GIF/WebP writes raise, as upstream — the JPEG and
+  WebP branches become live with T031/T032, and WebP gains a decode magic
+  branch, RIFF+WEBP, in T032).
 - SVG: `parseSvg` + `newImage(svg)` (`pixie/fileformats/svg.nim`) —
   **implemented** (T008), the pinned subset: viewBox, `rect` (incl.
   rx/ry), `circle`, `ellipse`, `line`, `polyline`, `polygon`, `path`

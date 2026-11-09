@@ -3,7 +3,7 @@
 The pinned-scope port and cleanup (T000–T013) are complete. The user-approved
 [adoption and advanced-graphics roadmap](docs/ROADMAP.md) adds T014–T032.
 Status values: `ready`, `blocked`, `in_progress`, `done`. Work on one selected
-task; for a general continuation take the first ready row. **Next: T030.**
+task; for a general continuation take the first ready row. **Next: T031.**
 
 ## Completed foundation
 
@@ -48,9 +48,9 @@ resolve its implementation contracts before dependents are marked ready.
 | T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | done |
 | T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | done |
 | T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked (provider decision, D031 §6) |
-| T030 | [JPEG/WebP codec contracts](tasks/T030-codec-design.md) | T013 | ready |
-| T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | blocked |
-| T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | blocked |
+| T030 | [JPEG/WebP codec contracts](tasks/T030-codec-design.md) | T013 | done |
+| T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | ready |
+| T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | ready |
 
 ## Current work
 
@@ -236,9 +236,26 @@ resolve its implementation contracts before dependents are marked ready.
   (this build's `String` unit). Cookbook recipe 12 (paragraph card,
   `paragraph-card.png`, 14 gallery items). Large-paragraph timing in the
   task record. Gate green: 96.29% coverage (7013/7283).
-- No active implementation task. Next ready: T030.
+- T030 complete (2026-11-09): JPEG/WebP codec contracts
+  (docs/JPEG_WEBP_CODECS.md) + provider decision (D032, amending D014).
+  Design only, no source changes. JPEG encode = JpegTurbo 0.1.6 (the
+  existing opt-in decode dependency — zero new deps; `encodeJPEG`,
+  premultiplied→straight composite over explicit background, JFIF 72×72
+  dpi as contract, quality 1..100). WebP = WebP.jl 0.1.3 + libwebp_jll
+  1.6.1+0 (new opt-in extra; static subset — animation raises a named
+  error before decode because the provider decode crashes the process at
+  C level, reproduced). Validation policy fixed: JPEG = structure +
+  PyMuPDF/mupdf 1.28.2 interop (max channel delta ≤ 8, measured 4;
+  PSNR floor, measured 48.78 dB at q92); WebP = pinned gstatic/Wikimedia
+  fixtures (sha256 recorded) + round-trip exactness partition (lossless:
+  opaque pixels and alpha exact, RGB under α=0 unspecified — measured
+  81/3072) — lossy is never byte-exact (no independent WebP decoder on
+  the machine; recorded limitation). All provider facts verified in
+  isolated scratch environments (commands + versions in the task
+  record). T031/T032 unblocked.
+- No active implementation task. Next ready: T031.
   T019 awaits an explicit publication request; T029 awaits the
-  provider decision (D031 §6) now that T028 is done. All T013–T028
+  provider decision (D031 §6) now that T028 is done. All T013–T030
   changes are committed and pushed to origin main (protocol:
   commit+push after each task).
 

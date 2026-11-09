@@ -62,9 +62,10 @@ has no quadratic path operator), and a documented whole-picture
 `rasterFallback`; the SVG arc x-axis rotation emission was fixed to
 degrees verbatim along the way. Verified with hand-derived geometry
 under gs 10.06.0 + poppler/pdftoppm 26.01.0. Full gate:
-**96.29% coverage (7013/7283)**. Next ready tasks:
-T030 (T019 awaits an explicit publication request; T029 awaits the
-provider decision, D031 §6, now that T028 is done). T013–T028
+**96.29% coverage (7013/7283)** (T030 is design only — no source
+changes, gate unchanged). Next ready: T031 (T032 also ready; T019 awaits
+an explicit publication request; T029 awaits the provider decision,
+D031 §6, now that T028 is done). T013–T030
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -138,8 +139,21 @@ them before loading Vetra, or restart Julia after installation.
 ## Next step and limits
 
 No active implementation task. Next ready:
-[T030](../tasks/T030-codec-design.md) — JPEG/WebP codec contracts, which
-unblocks T031 (JPEG encoding) and T032 (WebP). T029 (shaping/bidi) remains
+[T031](../tasks/T031-jpeg-encoding.md) — JPEG encoding per the T030
+contract (docs/JPEG_WEBP_CODECS.md §2, D032): `encodeJPEG` over the
+existing opt-in `JpegTurbo` dependency (premultiplied→straight composite
+over an explicit background, JFIF 72×72 dpi, quality 1..100, dimension
+bound 65500 — the provider segfaults at 65501), validated by hand-derived structure + PyMuPDF/mupdf 1.28.2
+independent-decoder interop (max channel delta ≤ 8, measured 4) + a PSNR
+floor (measured 48.78 dB at q92 on the pinned gradient) — lossy, so
+never byte-exact.
+[T032](../tasks/T032-webp-support.md) is also ready — static WebP
+read/write via the new opt-in `WebP.jl` 0.1.3 + `libwebp_jll` 1.6.1+0
+extra (feature scan first; animation rejected with a named `ArgumentError`
+**before** pixel decode — the provider decode crashes the process at C
+level; lossless exactness partition: opaque pixels + alpha exact, RGB
+under α=0 unspecified; pinned gstatic/Wikimedia fixtures carry sha256).
+T029 (shaping/bidi) remains
 blocked on the provider decision (D031 §6) now that T028 is done.
 Protocol (user, 2026-11-08): commit and push to `origin main` after each
 completed task. T019 (registration/publication) remains gated on an
@@ -153,7 +167,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T028)
+## Recent verification (T014–T028, T030)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -382,3 +396,44 @@ release evidence is in [T011](../tasks/T011-release.md),
   20,000 words @ 800 px — layout ~24 ms (pinned engine ~14 ms of it),
   fill ~1.14 s for 3.28 M ink px (shared glyph-fill cost, log
   `/tmp/opencode/t028-bench.jl`). Gate green: **96.29% (7013/7283)**.
+- T030: JPEG/WebP codec contracts + provider decision
+  (docs/JPEG_WEBP_CODECS.md, D032 amending D014; design only, no source
+  changes — gate unchanged at **96.29% (7013/7283)**).
+  **Providers verified in isolated scratch environments**
+  (`/tmp/opencode/codecprobe`, commands + versions in the task record):
+  JPEG encode = `JpegTurbo` 0.1.6 (JpegTurbo_jll 3.2.1+0; the existing
+  opt-in decode dependency — zero new deps; `jpeg_encode` confirmed with
+  quality/JFIF-header/density kwargs); WebP = `WebP.jl` 0.1.3 +
+  `libwebp_jll` 1.6.1+0 (the registry's only WebP package, MIT, pushed
+  2026-06-24, 18 platform artifacts; new opt-in extra for T032).
+  **Contract decisions**: `encodeJPEG(image; quality=92,
+  background=white)` — exact integer premultiplied→straight composite
+  (`out8 = clamp((p8*255 + b8*(255-a8) + 127) div 255)`, no division by
+  alpha), JFIF with **contract-mandated 72×72 dpi** (without it mupdf
+  assumes 96 dpi and scales the page 0.75× — measured on all four
+  header variants), quality 1..100, no EXIF/Adobe, dimension bound
+  65500 (the provider segfaults at 65501 — bisected); `encodeWebP(image;
+  lossy=true, quality=75)` always RGBA (lossless ignores quality —
+  provider API), dimension bound 16383 (the provider silently returns
+  an empty vector at 16384 — verified);
+  WebP decode = feature scan first, **animation rejected with a named
+  `ArgumentError` before pixel decode** (reproduced: `WebP.decode` on an
+  animated file crashes the Julia process at C level — uncatchable),
+  straight→premultiplied via the house formula. **Validation policy
+  (lossy is never byte-exact)**: JPEG = hand-derived marker structure +
+  PyMuPDF/mupdf 1.28.2 interop (page rect = SOF at 72 dpi; pixmap max
+  channel delta ≤ 8, measured 4; PSNR floor, measured 48.78 dB at q92) +
+  conversion worked examples; WebP = pinned Google gstatic gallery
+  fixtures (lossy VP8 368×550, lossless VP8L 301×400) + Wikimedia
+  animated fixture, all with URL + byte size + sha256, plus the
+  round-trip exactness partition (lossless: alpha exact everywhere, RGB
+  exact where α>0, unspecified where α=0 — measured 81/3072 mismatches,
+  all in the α=0 corner). Recorded limitation: no independent WebP
+  decoder on the verification machine (no ffmpeg/cwebp/dwebp/ImageMagick/
+  PIL; mupdf refuses WebP) → WebP decode pixels are fixture-dimension-only
+  assertions. **Test plan**: extend the D019 present/absent + shared-cache
+  codec-loading protocol to WebP; RIFF+WEBP magic dispatch in
+  `decodeImage`/`decodeImageDimensions`; `encodeBase64` stays PNG-only
+  (upstream parity), `decodeBase64` gains WebP via the magic dispatch.
+  T031/T032 unblocked; COMPATIBILITY/API rows updated to
+  specified-not-implemented.

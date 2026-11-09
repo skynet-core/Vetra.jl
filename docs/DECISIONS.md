@@ -269,22 +269,27 @@ keep the renderer core dependency-free; dependency use must be opt-in").
 
 Chosen behavior, per format:
 - **PNG** — decode + encode via `PNGFiles` (opt-in package).
-- **JPEG** — decode via `JpegTurbo` (opt-in package); no encoder, as
-  upstream. Pixels are compared against the upstream stb-derived fixtures
-  with a recorded max channel delta of 8 (measured: mandrill 5,
-  progressive 5, exif_overrun 4, grayscale 1); dimensions are exact and
-  Exif-orientation-aware.
+- **JPEG** — decode via `JpegTurbo` (opt-in package). Pixels are compared
+  against the upstream stb-derived fixtures with a recorded max channel
+  delta of 8 (measured: mandrill 5, progressive 5, exif_overrun 4,
+  grayscale 1); dimensions are exact and Exif-orientation-aware. Encoding
+  was added by T031 per D032 (same opt-in package, contract
+  docs/JPEG_WEBP_CODECS.md §2).
 - **SVG** — XML parse via the `XML` package (opt-in) feeding the native
   `svg.nim`-subset port (`parseSvg` + `newImage(svg)`).
 - **BMP, QOI, GIF, PPM, base64** — native scalar ports, no packages
   (GIF decode-only, as upstream; QOI preserves the upstream op-tag
   quirk: RGB=0xFE, RGBA=0xFF, INDEX = raw hash byte).
-- **WebP** — deferred (no stable Julia package; native port unscheduled);
+- **WebP** — deferred at T008 (no stable Julia package at the time;
+  native port unscheduled). Superseded by D032 (T030): static WebP
+  read/write via the opt-in `WebP.jl` package (libwebp_jll), contract
+  docs/JPEG_WEBP_CODECS.md §3, implemented by T032. Until T032 ships,
   `WebpFormat` dispatch raises `ArgumentError("Unsupported file format")`,
   matching upstream `encodeImage`.
 
 Opt-in mechanics (D014 extension of the T008 design): the three packages
-are `[extras]`, not `[deps]`; `Project.toml` gains no hard dependency.
+(four after D032 adds `WebP.jl` for T032) are `[extras]`, not `[deps]`;
+`Project.toml` gains no hard dependency.
 The original precompile-time loading mechanism below is superseded by D019.
 `Vetra` requires each package eagerly **at module load when present**
 (`Base.require` behind a try/catch in `src/formats/{png,jpeg,svg}.jl`);
@@ -934,6 +939,66 @@ docs/RECORDING.md §6.2).
 Evidence: docs/TEXT_LAYOUT.md (contract, registry sweep, provider
 options, worked examples, reference protocol); task record
 tasks/T027-text-design.md.
+
+## D032 — JPEG/WebP encode providers and codec contracts (accepted,
+2026-11-09, T030)
+
+Problem: T031 (JPEG encoding) and T032 (static WebP read/write) need
+maintainable, artifact-backed codec paths that are Julia 1.10 compatible
+and do not add hard dependencies (D008/D014/D019). D014 deferred WebP
+("no stable Julia package") and left JPEG decode-only "as upstream"; both
+needed an explicit decision before the format APIs exist.
+
+Chosen behavior (full text in docs/JPEG_WEBP_CODECS.md):
+- **JPEG encode = `JpegTurbo` 0.1.6** — the same opt-in package as T008
+  decode (no new dependency; `jpeg_encode` verified in an isolated
+  scratch environment). `encodeJPEG(image; quality = 92,
+  background = white)`: exact integer premultiplied→straight composite
+  (§2.2), JFIF with explicit 72×72 dpi density as contract (§2.3 —
+  without it, independent tools like mupdf assume 96 dpi and scale the
+  page 0.75×, measured), quality 1..100, dimension bound 65500 (the
+  provider segfaults at 65501 — bisected, so the API boundary must
+  reject first).
+- **WebP = `WebP.jl` 0.1.3 + `libwebp_jll` 1.6.1+0** — a new opt-in
+  extra (the registry's only WebP package; MIT; julia compat "1"; 18
+  platform artifacts). Static subset only: `decodeWebP`/
+  `decodeWebPDimensions` (feature scan first; **animation is rejected
+  with a named `ArgumentError` before pixel decode** — the provider's
+  decode crashes the Julia process at C level on animated files,
+  reproduced on a pinned fixture) and `encodeWebP(image; lossy = true,
+  quality = 75)` always RGBA (lossless ignores `quality` — the provider
+  API has no lossless quality parameter), dimension bound 16383.
+- **Validation without a second decoder** (no WebP tooling on the
+  machine; mupdf refuses WebP): pinned Google gstatic gallery fixtures
+  (sha256 recorded) for decode dimensions; lossless round-trips exact
+  for opaque pixels and for alpha (VP8L approximates RGB under α=0 —
+  measured 81/3072 mismatches, all in the α=0 corner); lossy validation
+  is dimensions + a PSNR floor only. JPEG interop uses PyMuPDF/mupdf
+  1.28.2 as the independent decoder (max channel delta ≤ 8, measured
+  4; PSNR floor, measured 48.78 dB at q92 on the pinned gradient).
+- Test/docs plan: extend the D019 present/absent + shared-cache
+  protocol to WebP; RIFF+WEBP magic dispatch; COMPATIBILITY/API rows
+  land with T031/T032.
+
+Alternatives that matter: a native WebP port (rejected — VP8/VP8L +
+alpha + RIFF is a far larger surface than the QOI/BMP/GIF ports, and
+D014's "no stable package" rationale no longer holds as of the
+2026-11-09 registry check); direct `ccall` to `libwebp_jll` without
+WebP.jl (rejected — duplicates a thin, tested, registry-shipped wrapper
+layer); a different JPEG encoder (rejected — JpegTurbo is already the
+pinned opt-in decode dependency, so encoding comes with it).
+
+Compatibility impact: design only — no public symbols, no source
+changes, no dependency changes until T031/T032. Amends D014's JPEG
+("no encoder, as upstream") and WebP ("deferred") bullets to point
+here. The `ArgumentError("Unsupported file format")` behavior for
+`.jpg`/`.jpeg`/`.webp` writes and the WebP decode fall-through remain
+until T031/T032 ship.
+
+Evidence: docs/JPEG_WEBP_CODECS.md (contract + probe log §6); scratch
+probes in `/tmp/opencode/codecprobe` (JpegTurbo 0.1.6, WebP 0.1.3,
+JpegTurbo_jll 3.2.1+0, libwebp_jll 1.6.1+0, PyMuPDF 1.28.2; commands
+recorded); task record tasks/T030-codec-design.md.
 
 ## Adding a decision
 
