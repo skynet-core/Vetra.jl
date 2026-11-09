@@ -45,6 +45,8 @@ const ITEMS = [
         "A recorded badge scene replayed to pixels: gradient panel, clipped badge, dashed divider."),
     ("record.svg", "SVG export (vector)",
         "The same recorded picture exported with writeSvg: paths, linearGradient, clipPath, and dasharray stay editable vectors."),
+    ("record-11-replay.png", "Report graphic (replayed raster)",
+        "A gradient report scene exported as scale-independent vector PDFs at 96 and 288 dpi (writePdf); this is its replayed raster."),
 ]
 
 function gallery_html()

@@ -44,7 +44,7 @@ resolve its implementation contracts before dependents are marked ready.
 | T023 | [Recording and vector-export design](tasks/T023-recording-design.md) | T013 | done |
 | T024 | [Drawing recordings and CPU replay](tasks/T024-recording-replay.md) | T023 | done |
 | T025 | [SVG export](tasks/T025-svg-export.md) | T024 | done |
-| T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | ready |
+| T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | done |
 | T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | ready |
 | T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | blocked |
 | T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked |
@@ -175,8 +175,31 @@ resolve its implementation contracts before dependents are marked ready.
   (record → replay → SVG, 12 gallery items). Known renderer difference
   documented: interior dash-end caps (spec vs pinned raster). Gate green:
   811,885 assertions, 98.28% (6241/6350).
-- No active implementation task. Next ready: T026, T027 or T030.
-  T019 awaits an explicit publication request. All T013–T024 changes
+- T026 complete (2026-11-09): PDF export of recorded drawings per D030
+  §6.2. `src/formats/pdf_write.jl` + `writePdf` export (single-page PDF
+  1.4; page = picture size × 72/dpi pt — scale-independent in `dpi`):
+  strict pre-scan (clearRect, angular/ImagePaint fills, non-Normal
+  blends, even-odd gradient fills, degenerate/out-of-range/non-strictly-
+  increasing/semi-transparent gradient stops, non-finite geometry,
+  singular-transform gradients → named `ArgumentError`, no file
+  written), gradients as PDF shadings (linear: repelled element-space
+  handles; radial: CTM exactly the raster ellipse map, path in
+  M^-1∘T space; stops as FunctionType-3 stitching — the spec defines no
+  constant function type), `W n` clip before `sh` (`sh` paints the whole
+  user space, ISO Table 76), group-unit alpha via isolated Form
+  XObjects + `/ca` ExtGState at `Do` time (pinned empirically against
+  both verifiers), raw uncompressed RGB + SMask images, glyph outline
+  text, arcs flattened via the pinned `endpointToCenterArcParams`,
+  quadratics → exact cubic equivalents (PDF has no quadratic path
+  operator), whole-picture `rasterFallback`. 202-assertion suite
+  (document structure self-consistency, hand-derived geometry under gs
+  10.06.0 + poppler/pdftoppm 26.01.0, dpi scale independence, strict
+  errors with no file written). Also fixed the SVG arc x-axis rotation
+  emission (degrees verbatim; the buffer's unit is degrees). Cookbook
+  recipe 11 (report graphic exported at 96/288 dpi, 13 gallery items).
+  Gate green: 96.25% coverage (6718/6980).
+- No active implementation task. Next ready: T027 or T030.
+  T019 awaits an explicit publication request. All T013–T026 changes
   are committed and pushed to origin main (protocol: commit+push after
   each task).
 

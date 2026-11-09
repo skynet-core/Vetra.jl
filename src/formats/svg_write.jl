@@ -63,7 +63,8 @@ _pt(cmds, i) = _n(cmds[i]) * " " * _n(cmds[i + 1])
 The SVG path `d` for the flat command buffer. Same grammar the rasterizer's
 `commandsToShapes` consumes (M/L/H/V/C/S/Q/T/A/Z plus the relative forms,
 S/T reflection and endpoint arcs included), so a renderer's path build
-matches the raster's; arc x-axis rotation is converted radians -> degrees.
+matches the raster's; arc x-axis rotation is stored in degrees
+(upstream unit) and emits verbatim.
 """
 function _svgPathD(p::Path)
     cmds = p.commands
@@ -110,7 +111,9 @@ function _svgPathD(p::Path)
         elseif kind === RTQuad
             push!(out, "t " * c0 * " " * _n(cmds[i + 1]))
         else # Arc || RArc
-            rot = _n(cmds[i + 2] * (Float32(180) / PI_F))
+            # The buffer stores x-axis rotation in degrees (the SVG unit),
+            # so it emits verbatim.
+            rot = _n(cmds[i + 2])
             large = Int(cmds[i + 3]) == 1 ? "1" : "0"
             sweep = Int(cmds[i + 4]) == 1 ? "1" : "0"
             push!(out, (kind === Arc ? "A " : "a ") * c0 * " " *

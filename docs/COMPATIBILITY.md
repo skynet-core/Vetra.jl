@@ -173,6 +173,60 @@ by PNG, JPEG, and SVG operations in the codec-enabled test environment.
    gradientTransform values, an independent XML structural parse, the
    pinned-reader read-back, and a headless-Chromium 156.0.8078.47 render
    with exact hand-derived geometry checks).
+ - PDF write: `writePdf(file, picture; dpi = 96f0, rasterFallback)`
+   (`Picture` recordings, T026) — **new capability** (no upstream
+   writer; ISO 32000-2:2020 (PDF 1.4) is the export reference; contract
+   in docs/RECORDING.md §6.2). Single page sized `W*72/dpi × H*72/dpi`
+   pt, picture units mapped to points (top-left, y-down) by the root
+   CTM — the export is scale-independent in `dpi`. v1 exports:
+   solid/linear/radial fills (Normal blend only) as PDF shadings,
+   solid strokes (all caps/joins/miter limits/dash arrays — odd dash
+   lists double, as in the raster), transforms via `cm`, cumulative
+   non-even-odd clips via `W n`, nested groups with group-unit alpha
+   as isolated Form XObjects (`/Group /S /Transparency /I true` plus
+   the group's `/ca` ExtGState in effect at `Do` time), embedded
+   images as raw uncompressed RGB XObjects with a DeviceGray SMask
+   (no codec dependencies; FlateDecode is a possible follow-up), text
+   as glyph outline paths (no text objects, no font embedding),
+   elliptical arcs flattened to <=90-degree cubic segments via the
+   pinned `endpointToCenterArcParams` (k = (4/3)tan(d/4)), and
+   quadratic segments emitted as the exact cubic equivalent (PDF has
+   no quadratic path operator). Gradient stops: in-range, strictly
+   increasing, opaque, as a FunctionType 3 stitching of Type 2
+   segments (ISO 32000-2 defines no constant function type, so a
+   single stop uses Type 2 with C0 == C1). Strict by default:
+   clearRect, angular / ImagePaint fills, non-Normal blends, even-odd
+   gradient fills, coincident/degenerate gradient handles, stop
+   positions outside [0, 1], non-strictly-increasing or
+   semi-transparent gradient stops, non-finite geometry, and gradient
+   fills under singular transforms each raise `ArgumentError` naming
+   the op index before any file is written; `rasterFallback = true`
+   renders the whole picture to one embedded full-page image.
+   Gradient fills are exact for every invertible op transform (linear:
+   repelled element-space handles; radial: the CTM is exactly the
+   raster's ellipse map, with the path emitted in `M^-1 o T` space).
+   Known renderer differences: (a) `sh` paints the whole (clipped)
+   user space, not the current path (ISO 32000-2 Table 76), so
+   gradient fills clip with `W n` first; (b) the spec (and e.g.
+   Chromium for SVG) draws round/square caps at interior dash ends,
+   which the pinned raster does not — the export is spec-faithful;
+   only interior dash-end cap pixels differ from the replay; (c)
+   per-stop gradient alpha is not portably honored (a 4-component
+   shading function over DeviceRGB is dropped or ignored by the
+   pinned renderers), so it is a strict v1 error — uniform
+   `paint.opacity` works via ExtGState `/ca`. Evidence:
+   test/pdf_export_tests.jl (202 assertions: self-consistent document
+   structure — xref offsets, stream Lengths, trailer — hand-derived
+   geometry at pixel centers under gs 10.06.0 and
+   poppler/pdftoppm 26.01.0, dpi scale independence, arc/quad
+   flattening, group-clip structure, byte-exact image and SMask
+   streams, byte-exact rasterFallback replay, strict errors with no
+   file written). Radial shading pixel checks carry a +/-10 tolerance
+   because the renderers sample shadings with renderer-specific
+   sub-pixel offsets (the spec does not pin shading sampling); the
+   group-unit alpha mechanism was pinned empirically against both
+   verifiers on a hand-derived constant-alpha case before being
+   trusted.
 - Fonts and text: `newFont`, `readFont`/`readTypeface`, `parseTtf`/
   `parseOtf`/`parseOpenType`, `fillText`/`strokeText` (Image and Context),
   `measureText`/`TextMetrics`, `typeset`/`layoutBounds`/`computePaths`/

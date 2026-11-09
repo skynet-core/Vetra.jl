@@ -187,29 +187,39 @@ untransformed — pinned upstream semantics).
 
 Document: single-page PDF 1.4, content units = picture units mapped to
 points via `dpi` (page size = `picture.size * 72 / dpi` pt). The page
-content stream is wrapped in one root Form XObject with
-`/Group /S /Transparency` so a transparent page renders transparent.
+content stream carries one root CTM (scale + y flip: top-left/y-down
+picture space to PDF's bottom-left/y-up page space); vector content is
+emitted directly into the page, groups become Form XObjects.
 
 | element | v1 | mechanism |
 | --- | --- | --- |
-| solid fill/stroke, NormalBlend | ✓ | path operators + `rg`/`RG`/`g`/`G`; opacity via ExtGState `ca`/`CA` |
-| linear gradient | ✓ | `/ShadingType 2` axial shading (function `/FunctionType 2`) |
-| radial gradient (incl. elliptical) | ✓ | `/ShadingType 3`; the elliptical case is drawn under a CTM that maps the ellipse to a unit circle (path + shading in the same transformed space; derived in T026) |
+| solid fill/stroke, NormalBlend | ✓ | path operators + `rg`/`RG`; opacity via ExtGState `ca`/`CA` |
+| linear gradient | ✓ | `/ShadingType 2` axial shading; stops as a FunctionType 3 stitching of Type 2 segments (single stop: Type 2 with C0 == C1 — ISO 32000-2 defines no constant function type) |
+| radial gradient (incl. elliptical) | ✓ | `/ShadingType 3` over a unit circle; the CTM is exactly the raster's ellipse map and the path is emitted in `M^-1 o T` space (derived in T026) |
 | angular gradient | ✗ | no conic shading in the PDF spec → strict error / fallback |
 | transforms | ✓ | CTM (`cm`) |
-| clips (cumulative) | ✓ | successive `W n` clip-path operators (intersecting) |
-| layers + group opacity | ✓ | Form XObjects with `/Group` (group-unit, matching raster layer compositing) |
-| images | ✓ | `/DeviceRGB` XObject, `/FlateDecode` via stdlib `Compression.jl` (no new dependency, no opt-in); premul → straight at the boundary |
+| clips (cumulative) | ✓ | successive `W n` clip-path operators (intersecting); gradient fills clip with `W n` before `sh` (`sh` paints the whole clipped user space, not the current path — Table 76) |
+| layers + group opacity | ✓ | Form XObjects with `/Group /S /Transparency /I true` + the group's `/ca` ExtGState in effect at `Do` time (group-unit, matching raster layer compositing; pinned empirically against both verifiers) |
+| images | ✓ | raw (uncompressed) `/DeviceRGB` XObject + DeviceGray SMask (premul → straight at the boundary); FlateDecode is a possible follow-up |
 | text | ✓ | glyph outline paths (same policy as SVG) |
 | clearRect | ✗ | no erase operator in v1 → strict error / fallback |
 | non-Normal blend modes | ✗ | v1 is normal compositing only → strict error / fallback |
+| even-odd gradient fills | ✗ | `sh` + `W*` is renderer-inconsistent → strict error / fallback |
+| semi-transparent gradient stops | ✗ | 4-component shading functions over DeviceRGB are not portably honored (gs drops the fill, poppler skips, mupdf ignores the alpha) → strict error / fallback |
 
-Dependencies: **none new** — stdlib `Compression` for `FlateDecode`
-(zlib format, which is exactly what `Compression.compress` emits). No
-font embedding anywhere (text is outlines), so no font licensing surface.
-`qpdf --check` (structural) plus an external renderer (mupdf `mutool draw`
-or Ghostscript, validation tooling only) are the independent references;
-neither is a package dependency.
+Strict export contract: the first unexportable op (any ✗ row above,
+plus out-of-range / non-strictly-increasing gradient stops, degenerate
+gradients, non-finite geometry, gradient fills under singular
+transforms) raises `ArgumentError` naming the op index before any file
+is written; `rasterFallback = true` renders the whole picture to one
+embedded full-page image (identifiable, D030 §6).
+
+Dependencies: **none new** — streams are emitted uncompressed (the
+frozen build has no stdlib `Compression`, and D030 bars codec packages
+for this task). No font embedding anywhere (text is outlines), so no
+font licensing surface. Independent references are verification
+tooling only: Ghostscript 10.06.0 and poppler `pdftoppm` 26.01.0
+(neither is a package dependency).
 
 ## 7. Why this does not disrupt the immediate API
 
@@ -260,11 +270,15 @@ Per-task acceptance:
   evaluating complex content), and reads back through the existing Vetra
   SVG reader as a supplemental check. Scene 4's angular-gradient and
   clearRect variants prove the strict error contract (no file written).
-- **T026**: output of scenes 1–5 passes `qpdf --check`, renders in an
-  external PDF renderer with hand-derived page-size/geometry checks,
-  demonstrates scale independence (same vector at two `dpi` values →
-  proportional output), and proves the strict error contract for the
-  unsupported rows of §6.2.
+- **T026**: `test/pdf_export_tests.jl` (202 assertions) — self-
+  consistent document structure (xref offsets, stream Lengths, trailer),
+  hand-derived page size/geometry at pixel centers under two independent
+  renderers (gs 10.06.0, poppler pdftoppm 26.01.0), scale independence
+  (same vector at two `dpi` values → proportional pages, identical
+  re-rasterizations), arc/quad flattening, group-clip structure,
+  byte-exact image/SMask streams, byte-exact `rasterFallback` replay,
+  and the strict error contract for the ✗ rows of §6.2 (no file
+  written).
 
 ## 9. Sources
 

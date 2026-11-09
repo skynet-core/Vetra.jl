@@ -46,9 +46,24 @@ opacity, base64-PNG data-URI images (opt-in PNGFiles), and a documented
 whole-picture `rasterFallback`. Verified byte-exactly against hand-derived
 documents, independently with XML, read back through the pinned SVG reader
 (byte-identical for the supported shape), and rendered in headless
-Chromium 156.0.8078.47 with exact geometry checks. Full gate:
-**811,885 assertions, 98.28% coverage (6241/6350)**. Next ready tasks:
-T026/T027/T030 (T019 awaits an explicit publication request). T013–T025
+Chromium 156.0.8078.47 with exact geometry checks. T026 added PDF export
+(`src/formats/pdf_write.jl` + `writePdf`): single-page PDF 1.4,
+scale-independent via `dpi` (page = picture size × 72/dpi pt), strict
+pre-scan with named errors and no partial file, gradients as PDF
+shadings (linear: repelled element-space handles; radial: CTM exactly
+the raster ellipse map, path in M^-1∘T space; stops as FunctionType-3
+stitching — the spec defines no constant function type), `W n` clip
+before `sh` (shading paints the whole clipped user space, ISO Table
+76), group-unit alpha via isolated Form XObjects + `/ca` ExtGState at
+`Do` time (pinned empirically against both verifiers), raw uncompressed
+RGB + SMask images, glyph outline text, arcs flattened via the pinned
+`endpointToCenterArcParams`, quadratics as exact cubic equivalents (PDF
+has no quadratic path operator), and a documented whole-picture
+`rasterFallback`; the SVG arc x-axis rotation emission was fixed to
+degrees verbatim along the way. Verified with hand-derived geometry
+under gs 10.06.0 + poppler/pdftoppm 26.01.0. Full gate:
+**96.25% coverage (6718/6980)**. Next ready tasks:
+T027/T030 (T019 awaits an explicit publication request). T013–T026
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -143,7 +158,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T025)
+## Recent verification (T014–T026)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -253,3 +268,56 @@ release evidence is in [T011](../tasks/T011-release.md),
   string commands used), backtick concatenation mis-parses, and a shared
   counter reassigned from `pop!` restarted after a group close.
   Full gate green: **811,885 assertions, 98.28% (6241/6350)**.
+- T026: `src/formats/pdf_write.jl` + `writePdf` export (D030 §6.2
+  contract) + `test/pdf_export_tests.jl` (202 assertions, 10 testsets).
+  Strict pre-scan (clearRect, angular/ImagePaint fills, non-Normal
+  blends, even-odd gradient fills, degenerate / out-of-range /
+  non-strictly-increasing / semi-transparent gradient stops, non-finite
+  geometry, singular-transform gradients → named `ArgumentError`, no
+  file written; pre-scan skipped under `rasterFallback`); gradients as
+  PDF shadings — linear with repelled element-space handles
+  (`d' = (|d|²/|Tᵀd|²)·Tᵀd`, `h'1 = T⁻¹h1 + α·d'`, exact for every
+  invertible T), radial under the CTM exactly equal to the raster's
+  ellipse map with the path emitted in `M^-1∘T` space; stops as
+  FunctionType-3 stitchings of Type-2 segments (`Encode` required; the
+  spec defines no constant type, so a single stop is Type-2 with
+  C0 == C1 — numbering settled against ISO 32000-2 Table 38 + poppler
+  26.01.0 `Function.cc` + mupdf 1.28.2 + gs empirically); `W n` clip
+  before `sh` (`sh` paints the whole clipped user space, ISO Table 76 —
+  confirmed in both renderers); group-unit alpha via isolated Form
+  XObjects (`/Group /S /Transparency /I true`) + the group's `/ca`
+  ExtGState in effect at `Do` time, pinned empirically against both
+  verifiers on a hand-crafted constant-alpha case (overlap
+  (191,127,191) gs / (190,127,191) poppler vs per-child
+  (127,191,191)); raw uncompressed RGB + DeviceGray SMask images
+  (`Do` maps the image to the unit square → CTM = imageMat·scale(w,h);
+  FlateDecode deferred — no codec dependencies allowed); arcs flattened
+  via the pinned `endpointToCenterArcParams` (k = (4/3)tan(d/4));
+  quadratics as exact cubic equivalents (PDF has no quadratic path
+  operator — the first emission used SVG's `q`, which gs/poppler/mupdf
+  all silently ignore). Verification: self-consistent document
+  structure (xref offsets, stream Lengths, trailer); hand-derived
+  geometry at pixel centers under gs 10.06.0 + poppler/pdftoppm
+  26.01.0 (verifier tooling only); dpi scale independence (96 vs 144,
+  proportional pages, identical re-rasterizations); byte-exact image
+  and rasterFallback streams; strict errors with no file written.
+  Tolerances documented: radial shading ±10 (renderer-specific
+  sub-pixel sampling offsets up to ~1 px; the spec does not pin shading
+  sampling), stroke-band pixel checks use centers >=0.5 pt inside /
+  >=1.5 pt outside (renderer antialiasing fuzz). Also fixed the SVG arc
+  x-axis rotation emission (the path buffer stores degrees; the T025
+  conversion ×180/π was wrong, uncaught because T025 tested rotation 0
+  only). Cookbook recipe 11 (report graphic exported at 96/288 dpi, two
+  named PDFs) + 13-item gallery; both PDFs render-verified. Frozen-build
+  quirks hit: `position(io)` is 0-based (xref offsets need no +1),
+  range slices with expression starts need parentheses
+  (`v[a + n:(b)]` mis-parses), vector-pattern and regex
+  `findfirst`/`findlast`/`findall` return the matched range (unwrap
+  with `first`), `match`'s `offset` kwarg is stripped (walk suffixes),
+  `SubString` has no `.length` field (use `length(s)`), `String*Int`
+  needs `string`, and a `return` directly in a `@testset` body exits the
+  enclosing testset's whole body (kept testset bodies
+  `return`-free). Full gate green: **96.25% (6718/6980)** (coverage
+  down from 98.28% because the new writer's relative-command branches —
+  unreachable via the public path API, kept for parity with the SVG
+  writer — are exercised only structurally).

@@ -165,9 +165,24 @@ Drawing recordings are implemented (T024); the SVG exporter is implemented
   no `<text>`. See [Compatibility](COMPATIBILITY.md) for the v1 matrix and
   `rasterFallback` notes, and [docs/RECORDING.md](RECORDING.md) §6 for the
   contract.
-- Planned: `writePdf(file, picture; dpi = 96f0, rasterFallback = false)` —
-  same strict contract (first unexportable op raises before any file is
-  written; documented whole-picture `rasterFallback`).
+- `writePdf(file, picture; dpi = 96f0, rasterFallback = false)` → the PDF
+  document bytes. Single-page PDF 1.4; page size is `W*72/dpi × H*72/dpi`
+  points, so `dpi` sets the physical scale of the same vector content
+  (scale-independent). Strict by default: the first unexportable op
+  (clearRect, angular / ImagePaint fills, non-Normal blends, even-odd
+  gradient fills, degenerate gradients, out-of-range, non-strictly-
+  increasing, or semi-transparent gradient stops, non-finite geometry,
+  gradients under singular transforms) raises `ArgumentError` naming the
+  op index and no file is written; `rasterFallback` renders the whole
+  picture to one embedded image instead. PDF v1: solid/linear/radial
+  fills (PDF shadings — gradients exact for invertible op transforms),
+  solid strokes (caps, joins, miter limit, dashes), transforms,
+  non-`even-odd` clips, nested groups with group-unit alpha (isolated
+  Form XObjects), embedded uncompressed image XObjects with SMask, and
+  glyph outline paths — no text objects, no font embedding, no
+  even-odd gradient fills, no angular fills. See
+  [Compatibility](COMPATIBILITY.md) for the v1 matrix and `rasterFallback`
+  notes, and [docs/RECORDING.md](RECORDING.md) §6.2 for the contract.
 
 Tiled-image fills and non-solid strokes are not recordable (record-boundary
 `ArgumentError`); the immediate `Context` is unchanged and still supports

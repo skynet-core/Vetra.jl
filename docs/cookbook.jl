@@ -667,6 +667,82 @@ save_named(replay, "record-10-replay.png")
 replay
 
 #
+# ## 11. Record and export as PDF (scale-independent)
+#
+# The same recorded picture exports as a single-page vector PDF
+# (`writePdf`, T026): paths stay paths, the gradients stay PDF shadings,
+# dashes keep their dash array, and text stays glyph outline paths. Page
+# units are points, and `dpi` picks the physical scale — so the same
+# picture exports at any size with identical vector content.
+
+# A small report graphic: a linear-gradient panel, a radial-gradient
+# dial, a dashed baseline, and a label.
+
+function report_scene(ctx)
+    ctx.fillStyle = rgb(248, 250, 252)
+    fillRect(ctx, 0, 0, 480, 300)
+    lin = Paint(LinearGradientPaint)
+    lin.gradientHandlePositions = [Vec2(0f0, 0f0), Vec2(0f0, 240f0)]
+    lin.gradientStops = [
+        colorStop(rgba(37, 99, 235, 255), 0f0),
+        colorStop(rgba(16, 185, 129, 255), 1f0)]
+    ctx.fillStyle = lin
+    fillRect(ctx, 40, 60, 120, 180)
+    rad = Paint(RadialGradientPaint)
+    rad.gradientHandlePositions = [Vec2(300f0, 150f0), Vec2(230f0, 150f0),
+        Vec2(300f0, 220f0)]
+    rad.gradientStops = [
+        colorStop(rgba(251, 191, 36, 255), 0f0),
+        colorStop(rgba(244, 63, 94, 255), 1f0)]
+    ctx.fillStyle = rad
+    beginPath(ctx)
+    circle(ctx, 300, 150, 70)
+    fill(ctx)
+    ctx.strokeStyle = rgb(51, 65, 85)
+    ctx.lineWidth = 2f0
+    ctx.lineCap = RoundCap
+    ctx.lineDash = Float32[8f0, 4f0]
+    beginPath(ctx)
+    moveTo(ctx, 40f0, 270f0)
+    lineTo(ctx, 440f0, 270f0)
+    stroke(ctx)
+    ctx.lineDash = Float32[]
+    ctx.font = ROBOTO
+    ctx.fontSize = 20f0
+    ctx.fillStyle = rgb(15, 23, 42)
+    fillText(ctx, "report @ any dpi", 40, 40)
+    return nothing
+end
+
+direct = newImage(480, 300)
+report_scene(Context(direct))
+recorder = PictureRecorder(480, 300)
+report_scene(recorder.ctx)
+picture = finishRecording(recorder)
+replay = newImage(480, 300)
+drawPicture(replay, picture)
+@assert replay.data == direct.data
+
+# Two exports of the same picture: 96 dpi and 288 dpi. The 288-dpi page
+# is a quarter of the point size; each re-rasterized at its own dpi is
+# the identical 480x300 picture.
+doc96 = writePdf(joinpath(outdir, "record-11-96.pdf"), picture;
+    dpi = 96f0)
+doc288 = writePdf(joinpath(outdir, "record-11-288.pdf"), picture;
+    dpi = 288f0)
+@assert occursin("/MediaBox [0 0 360.0 225.0]", doc96)
+@assert occursin("/MediaBox [0 0 120.0 75.0]", doc288)
+@assert occursin("/ShadingType 2", doc96)
+@assert occursin("/ShadingType 3", doc288)
+
+save_named(replay, "record-11-replay.png")
+
+# The replayed raster stands in for the PDFs in the gallery; the two
+# vector files (record-11-96.pdf, record-11-288.pdf) live next to it in
+# docs/build/cookbook/.
+replay
+
+#
 # That is the whole cookbook. The named PNGs above are what
 # `docs/make_cookbook.jl` collects into `docs/build/gallery.html`, and the
 # executed Markdown/notebook versions live next to them in

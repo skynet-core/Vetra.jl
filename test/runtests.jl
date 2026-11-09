@@ -74,3 +74,8 @@ include("recording_tests.jl")
 # documents, strict pre-scan errors, XML structural parse, pinned-reader
 # read-back, headless-Chromium external render.
 include("svg_export_tests.jl")
+
+# T026: PDF export of recorded drawings (D030 §6.2): self-consistent
+# document structure, gs + poppler render of hand-derived geometry, scale
+# independence, arc flattening, strict pre-scan errors, rasterFallback.
+include("pdf_export_tests.jl")

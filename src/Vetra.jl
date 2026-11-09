@@ -351,7 +351,7 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     getKerningAdjustment, getLeftSideBearing, isCCW, name,
     toColors, fromColors,
     Picture, PictureRecorder, RecordingContext, finishRecording, drawPicture,
-    writeSvg
+    writeSvg, writePdf
 
 include("paths.jl")
 include("blends.jl")
@@ -368,6 +368,7 @@ include("formats/ppm.jl")
 include("formats/svg.jl")
 include("formats/png.jl")
 include("formats/svg_write.jl")
+include("formats/pdf_write.jl")
 include("formats/bmp.jl")
 include("formats/qoi.jl")
 include("formats/gif.jl")
