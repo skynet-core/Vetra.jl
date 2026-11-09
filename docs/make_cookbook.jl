@@ -47,6 +47,8 @@ const ITEMS = [
         "The same recorded picture exported with writeSvg: paths, linearGradient, clipPath, and dasharray stay editable vectors."),
     ("record-11-replay.png", "Report graphic (replayed raster)",
         "A gradient report scene exported as scale-independent vector PDFs at 96 and 288 dpi (writePdf); this is its replayed raster."),
+    ("paragraph-card.png", "Paragraph card (T028)",
+        "A text-heavy card: wrapped body with mixed styled runs at an absolute line height, a clipped box, and a footnote paragraph (Paragraph/layoutParagraph/fillParagraph)."),
 ]
 
 function gallery_html()

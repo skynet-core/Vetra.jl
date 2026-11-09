@@ -349,6 +349,12 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     ascent, descent, lineGap, lineHeight, capHeight,
     hasGlyph, fallbackTypeface, getGlyphPath, getAdvance,
     getKerningAdjustment, getLeftSideBearing, isCCW, name,
+    withFallback,
+    Paragraph, Cluster, ParagraphLine, ParagraphMetrics, ParagraphLayout,
+    OverflowPolicy, ClipOverflow, EllipsisOverflow,
+    TextDirection, LeftToRight, RightToLeft,
+    newParagraph, layoutParagraph, paragraphMetrics,
+    fillParagraph, strokeParagraph,
     toColors, fromColors,
     Picture, PictureRecorder, RecordingContext, finishRecording, drawPicture,
     writeSvg, writePdf
@@ -363,6 +369,7 @@ include("fontformats/opentype.jl")
 include("fontformats/unicase.jl")
 include("formats/fonts.jl")
 include("context.jl")
+include("formats/paragraph.jl")
 include("recordings.jl")
 include("formats/ppm.jl")
 include("formats/svg.jl")

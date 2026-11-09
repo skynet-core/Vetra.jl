@@ -3,7 +3,7 @@
 The pinned-scope port and cleanup (T000–T013) are complete. The user-approved
 [adoption and advanced-graphics roadmap](docs/ROADMAP.md) adds T014–T032.
 Status values: `ready`, `blocked`, `in_progress`, `done`. Work on one selected
-task; for a general continuation take the first ready row. **Next: T014.**
+task; for a general continuation take the first ready row. **Next: T030.**
 
 ## Completed foundation
 
@@ -46,8 +46,8 @@ resolve its implementation contracts before dependents are marked ready.
 | T025 | [SVG export](tasks/T025-svg-export.md) | T024 | done |
 | T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | done |
 | T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | done |
-| T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | ready |
-| T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked (T028 + provider decision, D031 §6) |
+| T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | done |
+| T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked (provider decision, D031 §6) |
 | T030 | [JPEG/WebP codec contracts](tasks/T030-codec-design.md) | T013 | ready |
 | T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | blocked |
 | T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | blocked |
@@ -217,11 +217,30 @@ resolve its implementation contracts before dependents are marked ready.
   existing pinned fixtures (T028) + pinned OFL Noto Sans Arabic/
   Devanagari (T029); shaping expectations from a pinned external
   reference or hand derivation. T028 unblocked.
-- No active implementation task. Next ready: T028 or T030.
-  T019 awaits an explicit publication request; T029 awaits T028 +
-  the provider decision (D031 §6). All T013–T027 changes
-  are committed and pushed to origin main (protocol: commit+push after
-  each task).
+- T028 complete (2026-11-09): paragraph layout implemented
+  (`src/formats/paragraph.jl`, `test/paragraph_tests.jl` 22,760
+  assertions). Additive `Paragraph`/`newParagraph`,
+  `layoutParagraph`/`ParagraphLayout`, `paragraphMetrics`,
+  `fillParagraph`/`strokeParagraph` (Image + Context), and `withFallback`
+  over the pinned `typeset` engine (legacy suites byte-unchanged). Box/
+  overflow (Clip/Ellipsis), v1 wrap (white-space set incl. NBSP +
+  explicit `\n`; long unbreakable runs split character-wise at overflow —
+  the pinned engine behavior; no UAX#14), paragraph absolute `lineHeight`,
+  alignment (effective on constrained dimensions), styled runs, ordered
+  fallback (cycle-checked) with `.notdef`/zero-advance missing glyph,
+  metrics, vendored UAX#29-subset clusters (BMP `Grapheme_Extend` + `Mc`
+  tables, Unicode 16.0.0; ZWJ/ZWNJ/Hangul/control rules). Contract
+  amendments recorded: NBSP is an ordinary wrap position (not no-wrap),
+  unbreakable runs split character-wise (not overflow), alignment is
+  ineffective on zero dimensions, cluster indices are codepoints
+  (this build's `String` unit). Cookbook recipe 12 (paragraph card,
+  `paragraph-card.png`, 14 gallery items). Large-paragraph timing in the
+  task record. Gate green: 96.29% coverage (7013/7283).
+- No active implementation task. Next ready: T030.
+  T019 awaits an explicit publication request; T029 awaits the
+  provider decision (D031 §6) now that T028 is done. All T013–T028
+  changes are committed and pushed to origin main (protocol:
+  commit+push after each task).
 
 ## Evidence and policies
 

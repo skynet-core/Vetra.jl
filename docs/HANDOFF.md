@@ -62,9 +62,9 @@ has no quadratic path operator), and a documented whole-picture
 `rasterFallback`; the SVG arc x-axis rotation emission was fixed to
 degrees verbatim along the way. Verified with hand-derived geometry
 under gs 10.06.0 + poppler/pdftoppm 26.01.0. Full gate:
-**96.25% coverage (6718/6980)**. Next ready tasks:
-T028/T030 (T019 awaits an explicit publication request; T029 awaits
-T028 + the provider decision, D031 §6). T013–T027
+**96.29% coverage (7013/7283)**. Next ready tasks:
+T030 (T019 awaits an explicit publication request; T029 awaits the
+provider decision, D031 §6, now that T028 is done). T013–T028
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -138,15 +138,9 @@ them before loading Vetra, or restart Julia after installation.
 ## Next step and limits
 
 No active implementation task. Next ready:
-[T026](../tasks/T026-pdf-export.md) — PDF export of the T024 recordings per
-the D030 capability matrix §6.2 (single page, ShadingType 2/3 with the
-ellipse-to-circle CTM, Form XObject transparency groups, FlateDecode RGB
-images via stdlib `Compression`; same strict contract and whole-picture
-`rasterFallback`), validated with `qpdf --check` + an external PDF
-renderer. The other ready tasks are
-[T027](../tasks/T027-text-design.md) and
-[T030](../tasks/T030-codec-design.md), which unblock the text (T028/T029)
-and codec (T031/T032) chains.
+[T030](../tasks/T030-codec-design.md) — JPEG/WebP codec contracts, which
+unblocks T031 (JPEG encoding) and T032 (WebP). T029 (shaping/bidi) remains
+blocked on the provider decision (D031 §6) now that T028 is done.
 Protocol (user, 2026-11-08): commit and push to `origin main` after each
 completed task. T019 (registration/publication) remains gated on an
 explicit user request.
@@ -159,7 +153,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T027)
+## Recent verification (T014–T028)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -356,3 +350,35 @@ release evidence is in [T011](../tasks/T011-release.md),
   runs, fallback, Arabic joining, Indic conjunct, mixed RTL/LTR,
   combining marks). API proposal in docs/API.md marked
   specified-not-implemented.
+- T028: paragraph layout implemented (`src/formats/paragraph.jl` +
+  `withFallback` in `src/formats/fonts.jl`; `test/paragraph_tests.jl`,
+  22,760 assertions; cookbook recipe 12 `paragraph-card.png`).
+  **Reuse confirmed in practice**: the layout pass is the pinned
+  `typeset` (absolute `lineHeight` applied by copying each run's `Font`,
+  alignment forced Left/Top on zero dimensions); the new code adds the
+  box/overflow (Clip via a box-sized scratch blit so context
+  transform/clip/globalAlpha/mask apply; Ellipsis drops trailing
+  clusters — fewest first, re-laid-out per trial — until the last line
+  with U+2026 fits, glyph-existence checked on the ellipsis span's
+  effective font, plain clip otherwise), the cluster pass (vendored
+  UAX#29 subset: BMP `Grapheme_Extend` + `Mc` tables, Unicode 16.0.0
+  provenance; ZWJ joins both sides, ZWNJ left only, narrow Hangul
+  `L V* T*`, GB3 control sequences; stdlib `Unicode.graphemes`
+  deliberately not used — likely-cluster semantics differ and it is
+  version-gated), line/metrics objects, and rendering. **Frozen-build
+  String quirk hit and worked around**: `length(s)`/iteration are
+  codepoint-based but `s[i]`/`s[a:b]` are byte-based with boundary
+  checks — cluster indices are codepoints; `_charStarts` converts for
+  slicing. `withFallback` does real cycle detection (a diamond DAG with
+  shared descendants is allowed; a candidate reaching the base graph or
+  an earlier candidate raises `ArgumentError`); `fallbackTypeface` is
+  guaranteed to terminate. Contract amendments recorded in
+  docs/TEXT_LAYOUT.md: NBSP is an ordinary wrap position (not no-wrap),
+  long unbreakable runs split character-wise at overflow (the pinned
+  engine behavior — a wrapping paragraph never overflows its box
+  horizontally except dangling end-of-line SPACE), alignment is
+  ineffective on zero dimensions, cluster indices are codepoints.
+  Legacy `typeset`/render suites byte-unchanged. Large-paragraph timing:
+  20,000 words @ 800 px — layout ~24 ms (pinned engine ~14 ms of it),
+  fill ~1.14 s for 3.28 M ink px (shared glyph-fill cost, log
+  `/tmp/opencode/t028-bench.jl`). Gate green: **96.29% (7013/7283)**.

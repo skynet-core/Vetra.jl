@@ -166,6 +166,49 @@ function fallbackTypeface(tf::Typeface, rune::UInt32)
     return nothing
 end
 
+"""D031 §2.7 (T028): additive fallback-chain constructor. Returns a new
+`Typeface` sharing `tf`'s parsed data whose chain is `tf.fallbacks`
+followed by `chain`. Raises `ArgumentError` when the combined graph
+would cycle — a pre-existing cycle in `tf`'s chain, or a candidate
+reaching the base graph or an earlier candidate (shared descendants of
+candidates are legitimate, not cycles) — so `fallbackTypeface` is
+guaranteed to terminate."""
+function withFallback(tf::Typeface, chain::Vector{Typeface})
+    function cycleWalk(root, seen, errSet)
+        onstack = IdSet{Typeface}()
+        function walk(t)
+            if t in onstack
+                throw(ArgumentError(
+                    "font fallback cycle: typeface appears in its own fallback chain"))
+            end
+            if t in errSet
+                throw(ArgumentError(
+                    "font fallback cycle: typeface already reachable from the base typeface"))
+            end
+            t in seen && return
+            push!(onstack, t)
+            for fb in t.fallbacks
+                walk(fb)
+            end
+            delete!(onstack, t)
+            push!(seen, t)
+        end
+        walk(root)
+        return seen
+    end
+    seenBase = cycleWalk(tf, IdSet{Typeface}(), IdSet{Typeface}())
+    forbidden = IdSet{Typeface}()
+    for t in seenBase
+        push!(forbidden, t)
+    end
+    seenChain = IdSet{Typeface}()
+    for t in chain
+        cycleWalk(t, seenChain, forbidden)
+        push!(forbidden, t)
+    end
+    return Typeface(tf.opentype, tf.filePath, vcat(tf.fallbacks, chain))
+end
+
 """Upstream `getGlyphPath(typeface, rune)`: a fresh path per call
 (`addPath` copies the cached glyph), scaled to the main typeface's ratio."""
 function getGlyphPath(tf::Typeface, rune::UInt32)

@@ -743,6 +743,102 @@ save_named(replay, "record-11-replay.png")
 replay
 
 #
+# ## 12. Paragraph card (wrapped, styled, T028)
+#
+# A text-heavy card composed with the new Paragraph API (D031,
+# docs/TEXT_LAYOUT.md): a body paragraph with mixed styled runs wrapped
+# into a 296px box at an absolute line height, and a smaller footnote
+# paragraph below it. The title still uses the legacy single-line
+# fillText — both text paths coexist. Expected: the page background, the
+# white card, the body ink strictly inside its box, and no ink in the
+# gap between the body and the footnote.
+
+function paragraph_card_image()
+    width = 360
+    height = 250
+    img = newImage(width, height)
+    ctx = Context(img)
+    ctx.fillStyle = rgb(241, 245, 249)
+    fillRect(ctx, 0, 0, width, height)
+    card = newImage(width, height)
+    cardctx = Context(card)
+    cardshape = newPath()
+    roundedRect(cardshape, 12, 12, width - 24, height - 24, 16, 16, 16, 16)
+    cardctx.fillStyle = rgb(255, 255, 255)
+    fill(cardctx, cardshape)
+    drawImage(ctx, shadow(card, Vec2(0, 2), 1, 8, rgba(15, 23, 42, 40)), 0, 0)
+    drawImage(ctx, card, 0, 0)
+    ## Title: legacy single-line text (T009 path).
+    ctx.font = ROBOTO
+    ctx.fontSize = 18f0
+    ctx.fillStyle = rgb(15, 23, 42)
+    fillText(ctx, "Release notes", 32, 40)
+    ## Body: styled runs wrapped into the box (T028 path).
+    tfR = readTypeface(ROBOTO)
+    tfN = readTypeface(NOTO_SANS)
+    fA = Font(tfR, Float32(15), autoLineHeight,
+        [Paint(rgba(51, 65, 85, 255))], NormalCase, false, false, false)
+    fStrong = Font(tfN, Float32(15), autoLineHeight,
+        [Paint(rgba(30, 64, 175, 255))], NormalCase, false, false, false)
+    body = newParagraph([
+        newSpan("Vetra.jl now lays out ", fA),
+        newSpan("paragraphs", fStrong),
+        newSpan(" with wrapped lines, styled runs, ordered font fallback,\n" *
+            "grapheme clusters, and a clipped box.", fA)],
+        width = 296, height = 110, lineHeight = 22,
+        hAlign = LeftAlign, vAlign = TopAlign, overflow = ClipOverflow)
+    lbody = layoutParagraph(body)
+    fillParagraph(ctx, lbody, 32, 56)
+    ## Footnote: a second, smaller paragraph.
+    fFoot = Font(tfR, Float32(12), autoLineHeight,
+        [Paint(rgba(100, 116, 139, 255))], NormalCase, false, false, false)
+    fnote = newParagraph(
+        "Text stays native outlines; nothing is rasterized at layout time.",
+        fFoot, width = 296, hAlign = LeftAlign, overflow = ClipOverflow)
+    fillParagraph(ctx, layoutParagraph(fnote), 32, 208)
+    return img
+end
+
+card = paragraph_card_image()
+@assert (width(card), height(card)) == (360, 250)
+@assert getColor(card, 2, 2) == rgbx(241, 245, 249, 255)  # page background
+@assert getColor(card, 20, 20) == rgbx(255, 255, 255, 255) # card interior
+lcard = layoutParagraph(newParagraph("with wrapped lines, styled runs, " *
+    "ordered font fallback,\ngrapheme clusters, and a clipped box.",
+    Font(readTypeface(ROBOTO), Float32(15), autoLineHeight,
+        [Paint(rgba(51, 65, 85, 255))], NormalCase, false, false, false),
+    width = 296, lineHeight = 22))
+@assert length(lcard.lines) >= 2                    # the body wraps
+@assert lcard.lines[end].width <= Float32(296)      # and honors the box
+## Ink-count helper: pixels on the white card that deviate from white
+## (functions dodge this build's top-level soft scope).
+function inkCount(img, x0, x1, y0, y1)
+    n = 0
+    for y in y0:y1
+        for x in x0:x1
+            c = getColor(img, x, y)
+            if c.r < 250 || c.g < 250 || c.b < 250
+                n += 1
+            end
+        end
+    end
+    return n
+end
+## Body ink lives inside the box [32, 328] x [56, 145] (4 lines x 22px);
+## the band between the body's 110px box and the footnote is card white
+## (the body is clipped to its box, so this is box-guaranteed).
+@assert inkCount(card, 32, 328, 56, 145) > 200
+@assert inkCount(card, 32, 328, 167, 207) == 0
+## The 296px box clips horizontally: card white just outside it.
+@assert inkCount(card, 14, 30, 56, 145) == 0
+@assert inkCount(card, 330, 336, 56, 145) == 0
+## The footnote drew below the band.
+@assert inkCount(card, 32, 328, 208, 230) > 0
+save_named(card, "paragraph-card.png")
+
+card
+
+#
 # That is the whole cookbook. The named PNGs above are what
 # `docs/make_cookbook.jl` collects into `docs/build/gallery.html`, and the
 # executed Markdown/notebook versions live next to them in

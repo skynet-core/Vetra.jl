@@ -97,13 +97,26 @@ replacement.
 ### 2.1 Width constraint and wrapping
 
 - `width > 0` wraps; `width == 0` forces a single line.
-- **Wrap opportunities (v1)**: the existing white-space set
-  (`_otIsWsRune` — TAB..CR, SPACE, NBSP… — NBSP is a *no-wrap* space: it
-  advances but never breaks), explicit `\n` (hard break), and the end of
-  a span. **No mid-word (UAX#14) breaking in v1** — a long unbreakable
-  run overflows the box and the overflow policy applies.
-  `shortcut: no UAX#14 line-breaking, add when a CJK/justified use case
-  lands (T028 follow-up or a new task).`
+- **Wrap opportunities (v1)**: any White_Space rune of the existing set
+  (`_otIsWsRune`, which `_canWrap` uses verbatim — TAB..CR, SPACE, NBSP,
+  U+1680, U+2000..U+200A, U+2028/29, U+202F, U+205F, U+3000) and explicit
+  `\n` (hard break). NBSP and the other non-SPACE whitespace runes are
+  ordinary wrap positions **and** ordinary characters: when one of them
+  would overflow the box it forces the wrap exactly like a letter does
+  (it starts the new line). Only SPACE (U+0020) is exempt from
+  overflow-triggered wrapping: an overflowing SPACE is placed past the
+  box edge and then excluded from the line width (existing behavior).
+  Span boundaries are *not* wrap positions.
+- **Long unbreakable runs split character-wise at the overflow point**
+  (existing `typeset` behavior, not an overflow): when the rune that
+  does not fit has no earlier wrap position on the line, it starts the
+  new line, and the split repeats rune by rune until the run fits. A
+  wrapping paragraph therefore never overflows its box horizontally
+  (except a dangling end-of-line SPACE, which draws no ink);
+  `ClipOverflow` is what binds for the vertical box and for the
+  plain-clip ellipsis fallback (§2.3).
+  `shortcut: no UAX#14 line-breaking (no syllable/mid-word rules), add
+  when a CJK/justified use case lands (T028 follow-up or a new task).`
 - Whitespace handling matches upstream: space advances use the font's
   space glyph; trailing space at a line end is excluded from the line
   width (existing behavior).
@@ -138,9 +151,14 @@ lays out one empty line (ascent/descent from the run's font).
 ### 2.5 Alignment
 
 `hAlign` (Left/Center/Right — existing enums) per line within the box;
-`vAlign` (Top/Center/Bottom — existing) for the whole line block within
+`vAlign` (Top/Middle/Bottom — existing) for the whole line block within
 `height`. Existing `typeset` already implements both; the paragraph
-layer keeps them identical.
+layer keeps them identical. Alignment is only effective when the box
+dimension is constrained: `hAlign` when `width > 0`, `vAlign` when
+`height > 0` — `typeset` offsets content against the `bounds` value, so
+a zero width/height would shift content left/up of the paragraph
+origin. With `width == 0` / `height == 0` the effective alignment is
+LeftAlign / TopAlign.
 
 ### 2.6 Styled runs
 
@@ -168,8 +186,12 @@ sharing across mixed sizes is §2.4.
 
 ### 2.8 Cluster indices
 
-- Cluster indices address *characters* (UTF-8 code units, 1-based,
-  `last` exclusive) within a span — the same indexing `String` uses.
+- Cluster indices address *codepoints* (1-based, `last` exclusive)
+  within a span — the unit `length`/`enumerate` use for `String` in
+  this build. (NOTE: in the frozen build `String[i]` and `s[a:b]` are
+  byte-based with boundary checks, unlike `length`; `paragraph.jl`
+  converts cluster codepoint ranges to byte ranges via a precomputed
+  char-start table before slicing — see `withFallback`/`_ellipsis`.)
   `Cluster` is stable across layout: identical spans + paragraph
   parameters → identical clusters (deterministic, no RNG).
 - Cluster advance (v1 core) = the sum of the codepoint advances of the
@@ -191,32 +213,50 @@ runs' sizes.
 UAX#29 (Grapheme Cluster Boundary) is **not** fully re-implemented. The
 core implements the subset that keeps real text correct:
 
-- GB3 (never break before/after CR/LF/controlled breaks) — existing
-  `_otIsWsRune` + explicit codepoint set;
-- GB97–GB99 (do not break before/after combining marks `Mn/Mc/Me`, and
-  do not break `Control × Extend` sequences) — the vendored
-  Grapheme_Extended_Joinable (`Extend`) + Grapheme_Blocking_Controls
-  tables (compact BMP ranges, a few dozen lines) + full Mn/Mc/Me
-  property from the Unicode standard library's `Unicode` module where
-  available, vendored BMP ranges otherwise;
-- GB9 (do not break Hangul `L V*` / `L V* T*`);
-- ZWJ/ZWNJ (U+200C/U+200D): no break after ZWJ, break after ZWNJ unless
-  followed by Extend/spacing (documented approximation of GB9d/9f);
-- everything else (emoji multi-codepoint sequences beyond the above,
-  regional indicators, SpacingMark in non-BMP): **one cluster per
-  codepoint** (documented fallback; v1 text rendering is unaffected —
-  each codepoint still draws with its own advance).
+- GB3 (never break within CR/LF/control sequences) — the hardcoded Cc
+  ranges (U+0000..U+001F, U+007F..U+009F); `"\r\n"` is one cluster;
+- GB97–GB99 (do not break before `Extend`/`SpacingMark`, do not break
+  after control) — the vendored `Grapheme_Extend` (BMP) + `Mc` (BMP)
+  tables (generated data, provenance §3.2);
+- GB8 (do not break Hangul `L V* T*`) — narrow approximation: no break
+  for `L×{L,V,T}`, `V×T`, and precomposed syllable (U+AC00..U+D7A3)
+  × `{V,T}`;
+- ZWJ (U+200D): no break before *and* after — it joins both neighbours
+  (GB9a via the vendored Extend set + GB9d); ZWNJ (U+200C): no break
+  before, break after — it joins its left neighbour only (documented
+  approximation of GB9f);
+- everything else (emoji multi-codepoint sequences beyond the above —
+  e.g. regional-indicator flag pairs, skin-tone modifiers,
+  non-BMP SpacingMark): **one cluster per codepoint** (documented
+  fallback; v1 text rendering is unaffected — each codepoint still
+  draws with its own advance).
 
-`shortcut: v1 cluster subset (no full UAX#29, no SpacingMark), extend
-when a script use case needs it.`
+The frozen build's stdlib `Unicode` module is **not** used for this:
+it exposes no category API (`Unicode.category` does not exist), and
+`Unicode.graphemes` (where present) implements *likely*-grapheme
+semantics that differ from this subset (e.g. it attaches a ZWJ to its
+left neighbour) — deterministic behaviour must not depend on the Julia
+minor version.
+
+`shortcut: v1 cluster subset (no full UAX#29), extend when a script
+use case needs it.`
 
 ### 3.2 Provenance
 
-Tables are generated from the pinned Unicode version's
-`GraphemeBreakProperty.txt` / `GraphemeBreakLikely.txt` (BMP only) and
-checked by tests against hand-derived cases (see §7, test font T-F2).
-They are data, not code logic: changing the Unicode version is a
-recorded test-fixture change, never a silent behavior change.
+- `_CLUSTER_EXTEND`: derived property `Grapheme_Extend` from
+  `DerivedCoreProperties-16.0.0.txt` (= Me + Mn +
+  Other_Grapheme_Extend), BMP subset (245 ranges), plus
+  U+200C..U+200D appended (the ZWNJ/ZWJ pair is category `Cf`, so the
+  derived property omits it, but GB9a/GB9d require it in the Extend
+  class — recorded in the table header).
+- `_CLUSTER_MC`: general category `Mc` (spacing combining marks) from
+  `UnicodeData-16.0.0.txt`, BMP subset (104 ranges).
+- Cc / Hangul / ZWJ / ZWNJ / CR / LF: hardcoded BMP constants.
+
+Both tables are generated data (source header in `paragraph.jl`),
+checked by tests against hand-derived cases (§7). Changing the Unicode
+version is a recorded test-fixture change, never a silent behavior
+change.
 
 ## 4. Dependency and loading strategy
 

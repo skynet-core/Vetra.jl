@@ -128,21 +128,25 @@ arrays but shares its referenced image.
 TTF/glyf parsing, metrics, kerning, layout, and glyph drawing. CFF outlines,
 TTC collections, SVG fonts, and general Unicode shaping are unsupported.
 
-Paragraph layout is **specified but not yet implemented** (T027 contract,
-D031, docs/TEXT_LAYOUT.md): additive `Paragraph`/`layoutParagraph`/
-`fillParagraph` on top of the existing `Span`/`typeset` machinery —
-width/height/overflow box (`ClipOverflow` default, `EllipsisOverflow`),
-v1 wrapping (white-space + explicit `\n`; no UAX#14 mid-word breaking),
-paragraph-level line height, existing alignment enums, styled runs
-(existing `Span`/`Font`), fallback via the existing `Typeface.fallbacks`
-chain (+ additive `withFallback`) with a `.notdef`/zero-advance
-missing-glyph policy, metrics, and vendored UAX#29-subset grapheme
-clusters. Shaping and bidirectional text are specified (shaper
-interface, GID → outline mapping, UAX#9 direction model) but
-**implementation is provider-gated (T029 blocked)**: no maintained
-Julia shaping package exists in the registry as of 2026-11-09. Until
-then, RTL paragraphs raise a named `ArgumentError` and complex scripts
-draw without joining. Legacy single-line behavior is unchanged.
+Paragraph layout is **implemented** (T028; D031, docs/TEXT_LAYOUT.md):
+additive `Paragraph`/`newParagraph`, `layoutParagraph`/`ParagraphLayout`
+(lines, clusters, and the underlying `Arrangement`), `paragraphMetrics`,
+`fillParagraph`/`strokeParagraph` (Image and Context), and `withFallback`
+on top of the existing `Span`/`typeset` machinery — width/height/overflow
+box (`ClipOverflow` default, `EllipsisOverflow`), v1 wrapping (white-space
+set incl. NBSP + explicit `\n`; long unbreakable runs split
+character-wise at overflow; no UAX#14 mid-word breaking), paragraph-level
+line height, existing alignment enums (effective on constrained
+dimensions), styled runs (existing `Span`/`Font`), fallback via the
+existing `Typeface.fallbacks` chain (cycle-checked) with a
+`.notdef`/zero-advance missing-glyph policy, metrics, and vendored
+UAX#29-subset grapheme clusters (codepoint-indexed). Shaping and
+bidirectional text are specified (shaper interface, GID → outline
+mapping, UAX#9 direction model) but **implementation is provider-gated
+(T029 blocked)**: no maintained Julia shaping package exists in the
+registry as of 2026-11-09. Until then, RTL paragraphs raise a named
+`ArgumentError` and complex scripts draw without joining. Legacy
+single-line behavior is unchanged.
 
 `readImage`/`decodeImage` detect formats by contents; `writeFile` selects by
 extension, and `encodeImage` accepts a `FileFormat`. PNG read/write requires

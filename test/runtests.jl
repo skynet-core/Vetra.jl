@@ -79,3 +79,8 @@ include("svg_export_tests.jl")
 # document structure, gs + poppler render of hand-derived geometry, scale
 # independence, arc flattening, strict pre-scan errors, rasterFallback.
 include("pdf_export_tests.jl")
+
+# T028: paragraph layout (D031, docs/TEXT_LAYOUT.md): UAX#29-subset
+# clusters, hand-derived line boxes from hhea/hmtx, wrap/NBSP/char-split
+# invariants, alignment offsets, clip/ellipsis, image + context render.
+include("paragraph_tests.jl")

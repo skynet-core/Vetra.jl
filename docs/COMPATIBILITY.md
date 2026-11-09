@@ -247,7 +247,9 @@ by PNG, JPEG, and SVG operations in the codec-enabled test environment.
   **Not supported** (raise `ArgumentError`): CFF-outline fonts
   ("Unsupported font CFF outlines"), TTC collections, SVG fonts
   ("Unsupported font format"); text wrapping beyond upstream's
-  single-run line-break algorithm and Unicode shaping are out of scope.
+  single-run line-break algorithm and Unicode shaping stay out of scope
+  for the legacy API (the additive T028 paragraph layer reuses the same
+  line-break engine — see its row below).
   Error mapping: upstream `PixieError` → `ArgumentError`, messages
   verbatim. One intentional deviation (stricter than upstream): the glyf
   instruction-length EOF check bounds the actual instruction range, where
@@ -261,6 +263,33 @@ by PNG, JPEG, and SVG operations in the codec-enabled test environment.
   malformed-byte rejections); fixtures from `sh tools/oracle/build.sh fonts`
   (68 files under test/reference/font_*; Roboto Apache-2.0 + Ubuntu UFL,
   sha256 recorded in fixture meta and verified by tests).
+ - Paragraph layout: `Paragraph`/`newParagraph`, `layoutParagraph`/
+   `ParagraphLayout` (lines, clusters, `Arrangement`), `paragraphMetrics`,
+   `fillParagraph`/`strokeParagraph` (Image and Context), `withFallback`
+   (`src/formats/paragraph.jl`; D031, docs/TEXT_LAYOUT.md) — **implemented**
+   (T028): additive over the T009 `Span`/`typeset` machinery (the layout
+   pass is the pinned `typeset`; legacy `typeset`/`measureText`/
+   `layoutBounds`/`computePaths`/`fillText`/`strokeText` are byte-unchanged,
+   their suites green). Width/height box with `ClipOverflow` (default) /
+   `EllipsisOverflow` (U+2026 when it fits the last line, plain clip
+   otherwise), paragraph-level absolute `lineHeight`, existing alignment
+   enums (effective only on constrained dimensions), styled runs (existing
+   `Span`/`Font`), ordered font fallback via `withFallback` over
+   `Typeface.fallbacks` (cycle-checked; `.notdef`/zero-advance missing
+   glyph), and vendored UAX#29-subset grapheme clusters (BMP
+   `Grapheme_Extend` + `Mc` tables, Unicode 16.0.0 provenance; ZWJ joins
+   both sides, ZWNJ joins left only, Hangul `L V* T*`, control sequences).
+   **Not supported** (v1, documented limits): UAX#14 mid-word/justified
+   breaking (long unbreakable runs split character-wise at overflow — the
+   pinned engine behavior), Unicode shaping and bidirectional text
+   (RTL raises `ArgumentError("RTL requires the T029 shaper")`; complex
+   scripts draw unshaped), regional indicators/skin tones/emoji beyond
+   the cluster subset (one cluster per codepoint). Evidence:
+   test/paragraph_tests.jl (22,760 assertions: hand-derived line boxes
+   from Roboto hhea/hmtx, cluster cases, wrap/NBSP/char-split invariants,
+   alignment offsets, clip + ellipsis pixel checks, image + context
+   render, fallback cycles/termination); large-paragraph timing in
+   tasks/T028-paragraph-layout.md.
 
 ## SIMD
 
