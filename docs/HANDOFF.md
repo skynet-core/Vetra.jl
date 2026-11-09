@@ -62,10 +62,9 @@ has no quadratic path operator), and a documented whole-picture
 `rasterFallback`; the SVG arc x-axis rotation emission was fixed to
 degrees verbatim along the way. Verified with hand-derived geometry
 under gs 10.06.0 + poppler/pdftoppm 26.01.0. Full gate:
-**96.31% coverage (7039/7309)** (T031; T030 was design only — no source
-changes). Next ready: T032 (T019 awaits an explicit
-publication request; T029 awaits the provider decision,
-D031 §6, now that T028 is done). T013–T031
+**96.32% coverage (7110/7382)** (T032). No ready rows: T019 awaits an
+explicit publication request; T029 awaits the provider decision,
+D031 §6, now that T028 is done. T013–T032
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -138,25 +137,33 @@ them before loading Vetra, or restart Julia after installation.
 
 ## Next step and limits
 
-No active implementation task. Next ready:
-[T032](../tasks/T032-webp-support.md) — static WebP
-read/write per the T030 contract (docs/JPEG_WEBP_CODECS.md §3, D032) via
-the new opt-in `WebP.jl` 0.1.3 + `libwebp_jll` 1.6.1+0 extra
-(feature scan first; animation rejected with a named `ArgumentError`
-**before** pixel decode — the provider decode crashes the process at C
-level; lossless exactness partition: opaque pixels + alpha exact, RGB
-under α=0 unspecified; pinned gstatic/Wikimedia fixtures carry sha256;
-D019 present/absent + shared-cache loading protocol extended to WebP).
-T031 shipped the JPEG half: `encodeJPEG` (contract §2) over the existing
-opt-in `JpegTurbo` dependency, with mupdf 1.28.2 independent-reader
-interop (max channel delta ≤ 8, measured 4) and the PSNR floor
-(measured 48.78 dB at q92) — plus a latent world-age fix in
-`decodeJPEG` (first-use decode in a fresh process now works).
-T029 (shaping/bidi) remains
-blocked on the provider decision (D031 §6) now that T028 is done.
+No active implementation task. No ready rows: T019 (registration/
+publication) is gated on an explicit user request; T029 (shaping/bidi)
+remains blocked on the provider decision (D031 §6) now that T028 is
+done. T032 shipped the WebP half: `decodeWebP`/`decodeWebPDimensions`/
+`encodeWebP` per the T030 contract (docs/JPEG_WEBP_CODECS.md §3, D032)
+via the opt-in `WebP.jl` 0.1.3 + `libwebp_jll` 1.6.1+0 extra — success-
+checked feature scan first (the provider's auto-decode ignores the
+scan's return value), animation rejected with a named `ArgumentError`
+**before** pixel decode (the provider decode crashes the process at C
+level on animated input), always-RGBA encode with the 16383 dimension
+bound (the provider silently returns 0 bytes at 16384), lossless
+round-trips byte-exact in the premultiplied API, lossy validated by
+dimensions + PSNR floor (≥ 35 dB at q75, measured 37.67). Decode
+evidence: the 129-file pinned upstream libwebp corpus at the upstream
+`test_webp.nim` dimensions (12 exact expectations) + corpus-wide
+decode/alpha classification; the animation-error path uses the pinned
+Wikimedia fixture (sha256 in its meta). Record: no independent WebP
+pixel decoder on the machine (contract §3.5 limitation). D028 lazy
+loading protocol extended to WebP (absent → install hint, present →
+round-trip). T031 shipped the JPEG half before it: `encodeJPEG`
+(contract §2) over the existing opt-in `JpegTurbo` dependency, with
+mupdf 1.28.2 independent-reader interop (max channel delta ≤ 8,
+measured 4) and the PSNR floor (measured 48.78 dB at q92) — plus a
+latent world-age fix in `decodeJPEG` (first-use decode in a fresh
+process now works).
 Protocol (user, 2026-11-08): commit and push to `origin main` after each
-completed task. T019 (registration/publication) remains gated on an
-explicit user request.
+completed task.
 Planned features are not implemented capabilities; see
 [Compatibility](COMPATIBILITY.md). Fresh installation on Julia 1.10,
 cross-platform CI (Windows/macOS), and the ProfileView GUI were not rerun;
@@ -166,7 +173,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T028, T030–T031)
+## Recent verification (T014–T028, T030–T032)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -475,3 +482,54 @@ release evidence is in [T011](../tasks/T011-release.md),
   3.83 ms (0.147×); flat 320×240 gradient scene — JPEG 4333 B vs PNG
   2411 B (1.797× — the unsuitable case, noted in recipe 13). Gate
   green: **96.31% coverage (7039/7309)**; T008 suite back to 796459.
+ - T032: static WebP read/write implemented (`decodeWebP`/
+   `decodeWebPDimensions`/`encodeWebP` in `src/formats/webp.jl`;
+   RIFF+WEBP magic branches in `decodeImage`/`decodeImageDimensions`;
+   `encodeImage` WebpFormat + `writeFile` `.webp`; exports;
+   `test/webp_tests.jl`, 353 assertions; cookbook recipe 14). Per the
+   T030 contract §3: success-checked `WebPGetFeaturesInternal` scan
+   first (the provider's own auto-decode ignores the scan's return
+   value — unsafe on invalid data; observed rv: 0 = OK, 3/7 =
+   failure), animation rejected with the named
+   `ArgumentError("WebP animation is not supported")` **before** pixel
+   decode (the provider decode crashes the process at C level on
+   animated input — the pinned Wikimedia fixture exercises the path;
+   `decodeWebPDimensions` still reports the 211×211 canvas), invalid/
+   truncated input → `ArgumentError("Invalid WebP, unable to load")`,
+   always-RGBA encode (premul→straight `(p8*255 + a8 div 2) div a8`,
+   clamped; `a8 = 0` → 0), dimension bound 16383 (the provider silently
+   returns 0 bytes at 16384 — rejected first), lossy quality 0..100
+   (the provider's named error; lossless ignores quality). **Decode
+   evidence**: the 129-file pinned upstream libwebp corpus
+   (`.reference/upstream/tests/fileformats/webp/`, per its SOURCE.txt)
+   feature-scans and pixel-decodes at the feature dimensions for every
+   file (provider matrices are `[row=y, col=x]` — confirmed corpus-
+   wide); the 12 exact dimension expectations from upstream
+   `test_webp.nim` all match; corpus alpha classification (89 files
+   RGB → `a = 255`, 40 carry semi/transparent pixels — e.g.
+   `one_color_no_palette` fully transparent, `lossless1` mixes 211284
+   a=0 pixels with opaque). **Encode evidence**: lossless round-trips
+   are byte-exact in the premultiplied API (opaque exact; alpha exact
+   everywhere; RGB where α>0 exact; RGB where α=0 forced to 0 — the
+   contract's straight-domain α=0 non-determinism, measured 81/3072,
+   is unobservable in premul); lossy q75 PSNR ≥ 35 dB on the fixed
+   gradient (measured 37.67; the knob bites, q10 worse); hand-walked
+   RIFF chunk table (VP8L lossless; single VP8 for lossy fully-opaque;
+   VP8X+ALPH+VP8 for lossy with real alpha — observed libwebp_jll
+   1.6.1 order). **Loading**: D028 lazy protocol extended (absent →
+   "WebP support is opt-in" hint; present → lossless byte-exact +
+   dimension round-trips); T008 dispatch tests updated to the seven
+   writable formats (count restored: 796459). Recorded limitation
+   (contract §3.5): no independent WebP pixel decoder on the machine
+   (no ffmpeg/cwebp/dwebp/ImageMagick/PIL; mupdf refuses WebP) →
+   corpus decode gets dimension/classification assertions only.
+   **Benchmark** (warm medians, log `/tmp/opencode/t032_bench.jl`):
+   mandrill 512×512 photo — WebP lossy q75 76648 B / 27.79 ms,
+   lossless 579344 B / 145.72 ms vs PNG 732157 B / 17.26 ms, JPEG q85
+   105142 B / 2.79 ms; 256×256 thumbnail — lossy q75 19162 B / 6.41 ms,
+   lossless 136458 B / 77.28 ms vs PNG 180278 B / 3.72 ms, JPEG q85
+   26559 B / 0.82 ms; decode 512 lossy 5.96 ms, 512 lossless 5.14 ms,
+   256 lossy 1.49 ms; transparent 256×256 card — PNG 1740 B vs WebP
+   lossless 394 B (recipe 14 reports the numbers without claiming
+   universal superiority). Gate green: **96.32% coverage (7110/7382)**;
+   T008 suite 796459.

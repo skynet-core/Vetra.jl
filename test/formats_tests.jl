@@ -500,7 +500,8 @@ end
             @test encodeImage(img, QoiFormat) == encodeQOI(img)
             @test encodeImage(img, PpmFormat) == encodePPM(img)
             @test encodeImage(img, JpegFormat) == encodeJPEG(img) # T031
-            for fmt in (GifFormat, WebpFormat)
+            @test encodeImage(img, WebpFormat) == encodeWebP(img) # T032
+            for fmt in (GifFormat,)
                 try
                     encodeImage(img, fmt)
                 catch e
@@ -509,26 +510,23 @@ end
             end
         end
 
-        @testset "writeFile (all six writable formats)" begin
+        @testset "writeFile (all seven writable formats)" begin
             dir = mktempdir()
             for (ext, encoder) in [(".png", encodePNG(img)),
                                   (".bmp", encodeBMP(img)),
                                   (".qoi", encodeQOI(img)),
                                   (".ppm", encodePPM(img)),
                                   (".jpg", encodeJPEG(img)),
-                                  (".jpeg", encodeJPEG(img))]
+                                  (".jpeg", encodeJPEG(img)),
+                                  (".webp", encodeWebP(img))]
                 name = joinpath(dir, "t" * ext)
                 writeFile(img, name)
                 @test read(name) == Vector{UInt8}(encoder)
             end
-            # known-but-unencodable: the encodeImage error surfaces
-            for ext in (".webp",)
-                try
-                    writeFile(img, joinpath(dir, "t" * ext))
-                catch e
-                    @test e.msg == "Unsupported file format"
-                end
-            end
+            # unknown extensions still raise (existing behavior);
+            # GIF has no write extension at all (D014) — the
+            # GifFormat raise is covered in the encodeImage dispatch
+            # testset above.
             try
                 writeFile(img, joinpath(dir, "t.xyz"))
             catch e

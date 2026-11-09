@@ -331,6 +331,7 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     sRBG, Linear, srgbToLinear, qoiHash,
     decodeGIF, decodeGIFDimensions, Gif,
     decodeJPEG, decodeJPEGDimensions, encodeJPEG,
+    decodeWebP, decodeWebPDimensions, encodeWebP,
     FileFormat, PngFormat, BmpFormat, JpegFormat, GifFormat, QoiFormat,
     PpmFormat, WebpFormat,
     decodeImage, decodeImageDimensions, readImage, readImageDimensions,
@@ -380,6 +381,7 @@ include("formats/bmp.jl")
 include("formats/qoi.jl")
 include("formats/gif.jl")
 include("formats/jpeg.jl")
+include("formats/webp.jl")
 include("formats/io.jl")
 include("colormatrices.jl")
 

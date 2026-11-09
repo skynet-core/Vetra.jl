@@ -1,0 +1,10 @@
+fixture=webp_animated_clock
+source_url=https://upload.wikimedia.org/wikipedia/commons/f/f8/Simple_Animated_Clock.webp
+source=downloaded 2026-11-09; tests need no live network
+width=211
+height=211
+has_alpha=true
+has_animation=true
+byte_length=600504
+sha256_file=c020aacdd11922051d2d509a8a31f1e0edfb8bc9113689923fb638e4a9cdb886
+role=decode input for the animation-rejection path (T032, contract 3.2); feature-scanned only, never pixel-decoded (the provider decode crashes the process at C level on animated input)

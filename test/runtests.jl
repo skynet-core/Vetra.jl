@@ -90,3 +90,9 @@ include("paragraph_tests.jl")
 # quality validation, dispatch + base64, mupdf independent-reader
 # interop, PSNR floor.
 include("jpeg_encode_tests.jl")
+
+# T032: static WebP read/write (D032, docs/JPEG_WEBP_CODECS.md §3):
+# 12 upstream-exact dimensions, the 129-file pinned corpus decode,
+# the animated-fixture named error, round-trip exactness partition,
+# RIFF chunk walk, dispatch + base64.
+include("webp_tests.jl")

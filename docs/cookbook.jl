@@ -907,7 +907,55 @@ back = readImage(thumb)
 back
 
 #
-# That is the whole cookbook. The named PNGs above are what
+# ## 14. Web card export (T032)
+#
+# WebP is the web format: lossless or lossy, with real alpha.
+# `encodeWebP` defaults to lossy quality 75; lossless (`lossy = false`)
+# ignores quality (the provider API has no lossless quality parameter).
+# Unlike JPEG, transparency is preserved, not composited over a
+# background. No format wins universally — the numbers below report
+# where WebP sits relative to PNG and JPEG on a photo and on
+# transparent card content.
+
+function webpSize(img; lossy = true, q = 75)
+    t0 = time_ns()
+    b = encodeWebP(img; lossy = lossy, quality = q)
+    return length(b), (time_ns() - t0) / 1e6
+end
+
+## Representative photo: the recipe-13 mandrill thumbnail.
+photoLl, photoLlMs = webpSize(thumbImg; lossy = false)
+photoWy, photoWyMs = webpSize(thumbImg)
+println("mandrill thumbnail (256x256): WebP lossless ", photoLl,
+    " B in ", round(photoLlMs, digits = 1), " ms | WebP lossy q75 ",
+    photoWy, " B in ", round(photoWyMs, digits = 1), " ms")
+
+## Alpha case: a rounded card on a transparent background.
+card = newImage(256, 256)
+cardctx = Context(card)
+cardshape = newPath()
+roundedRect(cardshape, 16, 16, 224, 224, 24, 24, 24, 24)
+cardctx.fillStyle = rgb(255, 255, 255)
+fill(cardctx, cardshape)
+cardPng = length(encodePNG(card))
+cardLl, _ = webpSize(card; lossy = false)
+println("rounded card (256x256, transparent corners): PNG ", cardPng,
+    " B vs WebP lossless ", cardLl, " B")
+
+wp = joinpath(outdir, "mandrill-webp.webp")
+writeFile(thumbImg, wp)
+@assert isfile(wp) && filesize(wp) == photoWy # deterministic encoder
+t0 = time_ns()
+back = readImage(wp) # decode through the RIFF+WEBP magic
+decMs = (time_ns() - t0) / 1e6
+@assert (width(back), height(back)) == (256, 256)
+println("decode: ", round(decMs, digits = 1), " ms")
+
+back
+
+#
+# That is the whole cookbook. The named images above (PNG, JPEG,
+# WebP) are what
 # `docs/make_cookbook.jl` collects into `docs/build/gallery.html`, and the
 # executed Markdown/notebook versions live next to them in
 # `docs/build/cookbook/`.

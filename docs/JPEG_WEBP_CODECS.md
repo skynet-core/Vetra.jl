@@ -1,13 +1,11 @@
 # JPEG/WebP codec contracts (T030)
 
-Status: contract only (T030). T031 implements JPEG encoding; T032
-implements static WebP read/write. Until then `encodeImage(JpegFormat|
-WebpFormat)` and `writeFile` for `.jpg`/`.jpeg`/`.webp` still raise
-`ArgumentError("Unsupported file format")`, and `decodeImage`/
-`decodeImageDimensions` still fall through to
-`ArgumentError("Unsupported image file format")` on WebP bytes (the JPEG
-SOI dispatch already exists, T008). No placeholder codecs are added by
-this task.
+Status: implemented. T031 shipped the JPEG encode path (`encodeJPEG`;
+`encodeImage(JpegFormat)` and `writeFile` for `.jpg`/`.jpeg` live); T032
+shipped the static WebP path (`decodeWebP`/`decodeWebPDimensions`/
+`encodeWebP`; the `decodeImage`/`decodeImageDimensions` RIFF+WEBP magic
+branches and `writeFile` for `.webp` live). Only GIF writing still raises
+`ArgumentError("Unsupported file format")`, as upstream does.
 
 Providers and mechanics are pinned by D032 (`docs/DECISIONS.md`); this
 document is the behavior contract T031/T032 must satisfy.
@@ -174,7 +172,9 @@ encodeWebP(image::Image; lossy::Bool = true,
   matches that).
 - Always encoded as RGBA (Vetra images always carry an alpha channel; a
   fully opaque image encodes with `a = 255`). The provider picks the
-  chunk types: VP8L for lossless, VP8 + VP8X for lossy-with-alpha.
+  chunk types: VP8L for lossless, VP8X + ALPH + VP8 for lossy-with-alpha
+  (observed libwebp_jll 1.6.1 order; lossy fully-opaque content drops
+  the all-255 alpha and keeps a single VP8 chunk).
 - `quality` is **lossy only**, 0..100 (the provider's range and default;
   out of range raises the provider's named error). Lossless ignores
   `quality` (the provider API has no lossless quality parameter) —
@@ -184,7 +184,8 @@ encodeWebP(image::Image; lossy::Bool = true,
   is required: at 16384 the provider **silently returns an empty
   vector** (verified: 16384×4 → 0 B, no error) — writing that to disk
   would be an empty, unparseable file.
-- Output is a RIFF container: `RIFF` + little-endian file size − 4 +
+- Output is a RIFF container: `RIFF` + little-endian file size − 8
+  (bytes after the size field, per the RIFF spec) +
   `WEBP` + chunk table; T032 tests walk the chunk table by hand
   (fourcc + size per chunk, contiguous to the file end).
 
@@ -201,15 +202,18 @@ encodeWebP(image::Image; lossy::Bool = true,
 No independent WebP decoder exists on the verification machine (checked
 2026-11-09: no ffmpeg, cwebp, dwebp, ImageMagick or PIL; PyMuPDF
 refuses WebP — "Failed to open file … as type webp"). Pixel ground truth
-for *decode* therefore comes from pinned third-party fixtures (§6), and
-*encode* is validated by round-trip policy:
+for *decode* therefore comes from the pinned upstream libwebp corpus
+(§6), and *encode* is validated by round-trip policy:
 
 - **Lossless RGBA round-trip**: alpha exact on every pixel; RGB exact on
-  every pixel with `α > 0`; RGB where `α = 0` is **unspecified** (VP8L
-  preserves alpha exactly but approximates color under full
-  transparency — measured 81/3072 mismatches, all inside the α=0
-  corner, e.g. `r 0.875 → 0.859`, §6). Tests assert exactly that
-  partition, not whole-image equality.
+  every pixel with `α > 0`; the straight RGB where `α = 0` is
+  **unspecified** (VP8L preserves alpha exactly but approximates color
+  under full transparency — measured 81/3072 mismatches, all inside the
+  α=0 corner, e.g. `r 0.875 → 0.859`, §6). That non-determinism is
+  unobservable in the premultiplied API — the premul channels are
+  forced to 0 by the multiply — so T032 asserts the full partition,
+  including RGB == 0 where `α = 0`, which is whole-image byte equality
+  for valid premul input.
 - **Opaque (α = 255) lossless round-trip**: byte-exact (measured
   0/3072 mismatches).
 - **Lossy**: dimensions exact; PSNR floor on the fixed smooth gradient
@@ -217,8 +221,10 @@ for *decode* therefore comes from pinned third-party fixtures (§6), and
   q10 31.99); no byte expectation. Out-of-range quality raises the
   provider's named `ArgumentError("Quality $q is not in the range from
   0 to 100.")` (verified q −1 / 101).
-- **Fixture decode**: exact dimensions per §6; no pixel assertions
-  (recorded limitation — no second decoder).
+- **Fixture decode**: exact dimensions from the 129-file pinned
+  upstream corpus (12 exact expectations per upstream
+  `test_webp.nim`), corpus-wide decode + alpha classification; no
+  pixel assertions (recorded limitation — no second decoder).
 
 ## 4. Codec loading, tests, and docs (both tasks)
 
@@ -296,3 +302,21 @@ Julia 1.13.3; exact commands in the task record):
     animated VP8X, 211×211 (the error-path fixture).
   Fixture placement follows the T029 protocol: bytes + URL + sha256
   recorded in the fixture meta, verified by tests.
+- **T032 corpus probe** — the pinned upstream tree carries the
+  canonical decode corpus: `.reference/upstream/tests/fileformats/webp/`
+  (129 libwebp test files per its SOURCE.txt; the two oversized
+  upstream files intentionally omitted by treeform/pixie).
+  `WebPGetFeaturesInternal` (via the provider Wrapper, ABI 521)
+  succeeded on all 129 with return value **0** on success and
+  nonzero (3 or 7) on invalid/truncated input — the success check is
+  `rv == 0`; the provider's own auto-decode ignores that return value.
+  The 12 exact dimension expectations from upstream `test_webp.nim`
+  all match the feature scan, and every file pixel-decodes at its
+  feature dimensions (provider matrices are `[row=y, col=x]`).
+  Corpus alpha: 89 files decode RGB (no alpha), 40 carry
+  semi/transparent pixels (e.g. `one_color_no_palette.webp` is fully
+  transparent, `lossless1.webp` mixes 211284 a=0 pixels with opaque
+  ones). The corpus contains no animated file, so the pinned Wikimedia
+  fixture is the animation-error case. The gstatic gallery fixtures
+  above remain valid evidence but are superseded as the primary
+  decode source by the in-repo corpus.

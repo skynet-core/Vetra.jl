@@ -150,15 +150,17 @@ single-line behavior is unchanged.
 
 `readImage`/`decodeImage` detect formats by contents; `writeFile` selects by
 extension, and `encodeImage` accepts a `FileFormat`. PNG read/write requires
-`PNGFiles`; JPEG read/write requires `JpegTurbo`; SVG parsing requires
-`XML`. BMP/QOI/PPM read/write and GIF decode are native. JPEG writing is
-implemented (T031, D032, docs/JPEG_WEBP_CODECS.md §2): `encodeJPEG`
-composites premultiplied pixels over an explicit `background` (default
-white), writes JFIF at 72×72 dpi, and takes `quality` 1..100. WebP
-read/write is specified (T030 contracts, §3) and implemented by T032
-(static subset; animation raises a named error before decode). Until
-T032 ships, WebP writes/decoding still raise; GIF writing remains
-unsupported (D014). `encodeBase64` uses a PNG payload; `decodeBase64`
+`PNGFiles`; JPEG read/write requires `JpegTurbo`; WebP read/write requires
+`WebP`; SVG parsing requires `XML`. BMP/QOI/PPM read/write and GIF decode
+are native. JPEG writing is implemented (T031, D032,
+docs/JPEG_WEBP_CODECS.md §2): `encodeJPEG` composites premultiplied
+pixels over an explicit `background` (default white), writes JFIF at
+72×72 dpi, and takes `quality` 1..100. WebP read/write is implemented
+(T032, D032, §3): `decodeWebP`/`decodeWebPDimensions` (static subset;
+animation raises a named error before decode) and `encodeWebP`
+(lossy `quality` 0..100 default 75, or lossless which ignores quality;
+always RGBA; dimension bound 16383). GIF writing remains unsupported
+(D014). `encodeBase64` uses a PNG payload; `decodeBase64`
 accepts a payload of any format `decodeImage` recognizes.
 
 `parseSvg` plus `newImage(svg)` rasterizes the supported SVG subset. See

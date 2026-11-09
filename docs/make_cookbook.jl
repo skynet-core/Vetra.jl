@@ -51,6 +51,8 @@ const ITEMS = [
         "A text-heavy card: wrapped body with mixed styled runs at an absolute line height, a clipped box, and a footnote paragraph (Paragraph/layoutParagraph/fillParagraph)."),
     ("annotation-jpeg.jpg", "JPEG thumbnail (T031)",
         "The pinned mandrill photo resized to 256x256 and exported with encodeJPEG (premultiplied composited over white, JFIF 72 dpi, default quality 92): on photographic content JPEG is ~14% of the PNG size; on flat graphics it is not."),
+    ("mandrill-webp.webp", "WebP export (T032)",
+        "The pinned mandrill thumbnail exported with encodeWebP (lossy quality 75, default; real alpha preserved, no background compositing) — with a lossless mode for flat/transparent content."),
 ]
 
 function gallery_html()

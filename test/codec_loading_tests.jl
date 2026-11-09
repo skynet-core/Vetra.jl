@@ -8,7 +8,8 @@
         core = """
             using Vetra
             for id in (Vetra._PNGFILES_PKGID, Vetra._JPEGTURBO_PKGID,
-                    Vetra._XML_PKGID, Vetra._COLORTYPES_PKGID)
+                    Vetra._XML_PKGID, Vetra._COLORTYPES_PKGID,
+                    Vetra._WEBP_PKGID)
                 @assert Base.locate_package(id) === nothing
             end
             @assert width(newImage(2, 3)) == 2
@@ -33,6 +34,21 @@
                 @assert e isa ErrorException &&
                     occursin("JPEG support is opt-in", e.msg)
             end
+            # T032: WebP read/write share the opt-in package + hint.
+            try
+                decodeWebP(UInt8[0x00])
+                error("WebP decode should require its optional package")
+            catch e
+                @assert e isa ErrorException &&
+                    occursin("WebP support is opt-in", e.msg)
+            end
+            try
+                encodeWebP(newImage(2, 3))
+                error("WebP encode should require its optional package")
+            catch e
+                @assert e isa ErrorException &&
+                    occursin("WebP support is opt-in", e.msg)
+            end
             # T016: display falls back to text in a core-only environment.
             @assert Base.showable(MIME("image/png"), newImage(2, 3)) === false
             @assert Base.showable(MIME("text/plain"), newImage(2, 3)) === true
@@ -50,6 +66,11 @@
             # T031: the encoder round-trips dimensions through the
             # existing decoder in the codec-enabled environment.
             @assert decodeJPEGDimensions(encodeJPEG(image)) == (2, 3)
+            # T032: WebP round-trips in the codec-enabled environment —
+            # losslessly byte-exact on opaque content.
+            @assert decodeWebPDimensions(encodeWebP(image)) == (2, 3)
+            @assert decodeWebP(encodeWebP(image; lossy = false)).data ==
+                image.data
             """
         for (env, code) in ((root, core), (project, codecs))
             cmd = `$(Base.julia_cmd()) --startup-file=no --project=$env -e $code`

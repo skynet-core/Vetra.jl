@@ -283,9 +283,10 @@ Chosen behavior, per format:
 - **WebP** — deferred at T008 (no stable Julia package at the time;
   native port unscheduled). Superseded by D032 (T030): static WebP
   read/write via the opt-in `WebP.jl` package (libwebp_jll), contract
-  docs/JPEG_WEBP_CODECS.md §3, implemented by T032. Until T032 ships,
-  `WebpFormat` dispatch raises `ArgumentError("Unsupported file format")`,
-  matching upstream `encodeImage`.
+  docs/JPEG_WEBP_CODECS.md §3, implemented by T032 (`decodeWebP`/
+  `decodeWebPDimensions`/`encodeWebP`; animation raises a named error
+  before pixel decode; only GIF writing still raises "Unsupported file
+  format", matching upstream).
 
 Opt-in mechanics (D014 extension of the T008 design): the three packages
 (four after D032 adds `WebP.jl` for T032) are `[extras]`, not `[deps]`;

@@ -3,7 +3,8 @@
 The pinned-scope port and cleanup (T000–T013) are complete. The user-approved
 [adoption and advanced-graphics roadmap](docs/ROADMAP.md) adds T014–T032.
 Status values: `ready`, `blocked`, `in_progress`, `done`. Work on one selected
-task; for a general continuation take the first ready row. **Next: T032.**
+task; for a general continuation take the first ready row.
+**No ready rows** (T019 and T029 are blocked — see Current work).
 
 ## Completed foundation
 
@@ -50,7 +51,7 @@ resolve its implementation contracts before dependents are marked ready.
 | T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked (provider decision, D031 §6) |
 | T030 | [JPEG/WebP codec contracts](tasks/T030-codec-design.md) | T013 | done |
 | T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | done |
-| T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | ready |
+| T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | done |
 
 ## Current work
 
@@ -267,13 +268,35 @@ resolve its implementation contracts before dependents are marked ready.
   world-age defect in `decodeJPEG` (N0f8→Float64 now in an
   `invokelatest` kernel — D028 pattern): first-use JPEG decode in a
   fresh process now works. T008 dispatch tests updated to the six
-  writable formats (count restored: 796459). Gate green: 96.31%
-  coverage (7039/7309).
-- No active implementation task. Next ready: T032.
-  T019 awaits an explicit publication request; T029 awaits the
-  provider decision (D031 §6) now that T028 is done. All T013–T031
-  changes are committed and pushed to origin main (protocol:
-  commit+push after each task).
+     writable formats (count restored: 796459). Gate green: 96.31%
+   coverage (7039/7309).
+ - T032 complete (2026-11-09): static WebP read/write implemented
+   (`decodeWebP`/`decodeWebPDimensions`/`encodeWebP` in
+   src/formats/webp.jl + RIFF+WEBP magic dispatch in decodeImage/
+   decodeImageDimensions + encodeImage WebpFormat + exports;
+   test/webp_tests.jl, 353 assertions; cookbook recipe 14). Per the
+   T030 contract: success-checked feature scan first (the provider's
+   auto-decode ignores the scan return value — unsafe on invalid data),
+   animation rejected with a named `ArgumentError` before pixel decode
+   (the provider decode crashes the process at C level — the pinned
+   Wikimedia fixture exercises the path), always-RGBA encode with
+   dimension bound 16383 (the provider silently returns 0 bytes at
+   16384), lossy quality 0..100 (provider's named error), lossless
+   ignores quality. Validation: the 129-file pinned upstream libwebp
+   corpus decodes at the upstream `test_webp.nim` dimensions (12 exact
+   expectations), corpus-wide alpha classification, lossless
+   round-trip byte-exact in the premultiplied API (the contract's
+   straight-domain α=0 non-determinism is unobservable in premul —
+   channels are forced to 0), lossy PSNR ≥ 35 dB at q75 (measured
+   37.67), hand-walked RIFF chunk table. D028 lazy loading extended
+   (codec-loading protocol: absent → install hint, present →
+   round-trip). T008 dispatch tests updated to the seven writable
+   formats (count restored: 796459). Gate green: 96.32% coverage
+   (7110/7382).
+ - No active implementation task. No ready rows: T019 awaits an
+   explicit publication request; T029 awaits the provider decision
+   (D031 §6) now that T028 is done. All T013–T032 changes are committed
+   and pushed to origin main (protocol: commit+push after each task).
 
 ## Evidence and policies
 

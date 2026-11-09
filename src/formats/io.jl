@@ -3,13 +3,14 @@
 # decodeImage, readImageDimensions, readImage, encodeImage, writeFile)
 # and pixie/imagebase64.nim (encodeBase64, decodeBase64, getPayload).
 #
-# D014 (extended by D032/T031): all seven upstream read formats are
-# supported. PNG (PNGFiles), SVG (XML) and JPEG (JpegTurbo) are opt-in
-# codec packages; PPM, BMP, QOI and GIF are native ports. Upstream only
-# encodes PNG, BMP, QOI and PPM; T031 adds JPEG encoding (encodeImage
-# JpegFormat → encodeJPEG, opt-in JpegTurbo). Gif/Webp encoding still
-# raises "Unsupported file format", as does writeFile for those
-# extensions (WebP write is specified for T032).
+# D014 (extended by D032/T031/T032): all seven upstream read formats are
+# supported. PNG (PNGFiles), SVG (XML), JPEG (JpegTurbo) and WebP (WebP)
+# are opt-in codec packages; PPM, BMP, QOI and GIF are native ports.
+# Upstream only encodes PNG, BMP, QOI and PPM; T031 adds JPEG encoding
+# (encodeImage JpegFormat → encodeJPEG, opt-in JpegTurbo) and T032 adds
+# WebP read/write (decodeImage RIFF+WEBP branch, encodeImage WebpFormat
+# → encodeWebP, opt-in WebP). Only Gif encoding still raises
+# "Unsupported file format", as does writeFile for .gif.
 #
 # Pinned upstream quirks kept:
 # - decodeImageDimensions has no XML/SVG case: SVG bytes raise
@@ -69,6 +70,10 @@ function decodeImage(data::Vector{UInt8})
     if length(data) > 9 && String(data[1:2]) in PPM_SIGNATURES
         return decodePPM(data)
     end
+    if length(data) >= 30 && String(data[1:4]) == "RIFF" &&
+            String(data[9:12]) == "WEBP"
+        return decodeWebP(data)
+    end
     throw(ArgumentError("Unsupported image file format"))
 end
 
@@ -94,6 +99,10 @@ function decodeImageDimensions(data::Vector{UInt8})
     end
     if length(data) > 9 && String(data[1:2]) in PPM_SIGNATURES
         return decodePPMDimensions(data)
+    end
+    if length(data) >= 30 && String(data[1:4]) == "RIFF" &&
+            String(data[9:12]) == "WEBP"
+        return decodeWebPDimensions(data)
     end
     throw(ArgumentError("Unsupported image file format"))
 end
@@ -133,10 +142,10 @@ end
 
 """
 Encode an image to bytes (upstream `encodeImage`). PNG, BMP, QOI and PPM
-are implemented natively; JpegFormat is implemented via the opt-in
-`JpegTurbo` package (T031, D032); GifFormat and WebpFormat raise
-`ArgumentError("Unsupported file format")`, as upstream does for GIF
-(WebP write is specified for T032).
+are implemented natively; JpegFormat via the opt-in `JpegTurbo` package
+(T031, D032) and WebpFormat via the opt-in `WebP` package (T032, D032);
+GifFormat raises `ArgumentError("Unsupported file format")`, as upstream
+does for GIF.
 """
 function encodeImage(image::Image, format::FileFormat)
     if format === PngFormat
@@ -149,6 +158,8 @@ function encodeImage(image::Image, format::FileFormat)
         return encodePPM(image)
     elseif format === JpegFormat
         return encodeJPEG(image)
+    elseif format === WebpFormat
+        return encodeWebP(image)
     else
         throw(ArgumentError("Unsupported file format"))
     end
@@ -157,9 +168,9 @@ end
 """
 Write an image to a file, the format chosen by the file extension
 (upstream `writeFile`). Unknown extensions raise `ArgumentError("Unsupported
-file extension")`; JPEG writes via `encodeJPEG` (T031), and the
-still-deferred GIF/WebP writes reach the `encodeImage` error (WebP from
-T032).
+file extension")`; JPEG writes via `encodeJPEG` (T031) and WebP via
+`encodeWebP` (T032); the still-deferred GIF write reaches the
+`encodeImage` error.
 """
 function writeFile(image::Image, path::String)
     ext = lowercase(splitext(basename(path))[2])
