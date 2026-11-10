@@ -235,8 +235,9 @@ through `901b9d7`; validated source/tests/package metadata are identical.
   regression. Timings are recorded without a speed claim.
 - API, migration, compatibility, decision and example documentation is aligned.
   Exact commands, logs, benchmark table and PyMuPDF skip are in
-  `docs/HANDOFF.md`. Remote platform validation after push is pending; existing
-  four-platform results belong to M002. M004 is now ready for assignment.
+  `docs/HANDOFF.md`. Remote run `42913541720` at `f8b2dfe` passed all 10 jobs,
+  including Linux/Windows/macOS/FreeBSD tests and benchmarks; four benchmark
+  artifacts are present. M004 is now ready for assignment.
 
 ## M004 — Correctness audit and reproduced bug fixes
 

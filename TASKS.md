@@ -43,7 +43,7 @@ scope, ownership, dependencies, and acceptance checks:
 | --- | --- | --- |
 | M001 | Baseline, code audit, detailed task contract | done |
 | M002 | Reliable tests and four-platform test/benchmark CI | done (all 10 CI jobs passed) |
-| M003 | Julia-native API and package integration | done (independently approved; both Julia gates and benchmark smoke pass) |
+| M003 | Julia-native API and package integration | done (independently approved; local gates and all 10 four-platform CI jobs pass) |
 | M004 | Correctness audit and reproduced bug fixes | ready (unassigned) |
 | M005 | New README, interactive docs, GitHub Pages publication | moved to R098/R099 |
 | M006 | Remove obsolete port scaffolding | moved to R086 |
@@ -66,6 +66,9 @@ including full tests/coverage and benchmark smoke, with all four benchmark
 artifacts uploaded. Completed M003 implementation is retained at
 `/home/vasyl/.local/share/opencode/worktree/e72bb3/julia-native-api`
 (branch `modernization/native-api`); no active writer until the next assignment.
+M003 revision `f8b2dfe` passed all 10 jobs in
+[run 42913541720](https://github.com/skynet-core/Vetra.jl/actions/runs/42913541720):
+Linux, Windows, macOS and FreeBSD tests/benchmarks, with four benchmark artifacts.
 
 ## Historical board (retired after M006 consolidation)
 

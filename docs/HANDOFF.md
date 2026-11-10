@@ -199,8 +199,15 @@ increased: six match, PNG totals are slightly lower (the implementer's all-eight
 equality was not reproduced). The earlier +16-byte fill/stroke regression is
 gone. Shared-host five-sample timings are observations, not a speed claim:
 draw's minimum stayed 0.232→0.231 ms despite the median variation. No kernel
-optimization is inferred. M003's remote platform results remain pending after
-push; prior four-platform evidence belongs to M002.
+optimization is inferred.
+
+M003 remote validation is complete at `f8b2dfe`: [run 42913541720](https://github.com/skynet-core/Vetra.jl/actions/runs/42913541720)
+passed **all 10 jobs**. Julia 1.10 and stable tests passed on Linux, Windows and
+macOS; FreeBSD 14.3 / Julia 1.10.13 passed tests and benchmark smoke. All four
+platform benchmark artifacts are present and unexpired. Coordinator verified
+with `gh run watch 42913541720 --exit-status` (exit 0),
+`gh run view 42913541720 --json conclusion,url,jobs` and
+`gh api repos/skynet-core/Vetra.jl/actions/runs/42913541720/artifacts`.
 
 2026-11-10: user requested independent Julia-native identity/API, obsolete
 port-document cleanup, rewritten interactive GitHub Pages documentation, and
