@@ -16,14 +16,15 @@ Pkg.instantiate()
 # previous run; after the run, every src/ Julia file (each one is
 # `include`d by src/Vetra.jl, so a loaded package covers them all) must
 # have produced a .cov. Missing coverage or zero measurable lines is a
-# hard failure, never a silent exclusion.
+# hard failure, never a silent exclusion. (Allocation-profile `.mem`
+# files are unrelated to coverage and are left untouched.)
 srcdir = joinpath(root, "src")
 
 function coverage_artifacts(srcdir::String)
     out = String[]
     for (dir, _, files) in walkdir(srcdir)
         for f in files
-            match(r"^.*\.jl(\.\d+)?\.(cov|mem)$", f) !== nothing &&
+            match(r"^.*\.jl(\.\d+)?\.cov$", f) !== nothing &&
                 push!(out, joinpath(dir, f))
         end
     end

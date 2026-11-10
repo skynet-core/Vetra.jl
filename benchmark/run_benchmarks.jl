@@ -78,13 +78,17 @@ function freshCanvas()
     return ctx
 end
 
+# Each workload returns the image/bytes/metrics it already produces, so
+# the smoke check below (M002) verifies the actual workload outputs
+# instead of re-drawn stand-ins. `bench!` discards the return value.
+
 function fillRectsWork()
     ctx = freshCanvas()
     for i in 0:999
         fillRect(ctx, Float32(mod(37 * i, 246)), Float32(mod(71 * i, 246)),
             10f0, 10f0)
     end
-    return nothing
+    return ctx.image
 end
 
 function strokeLinesWork()
@@ -95,21 +99,20 @@ function strokeLinesWork()
         strokeSegment(ctx, Float32(mod(7 * i, 249)), 0f0,
             Float32(mod(13 * i, 249)), 255f0)
     end
-    return nothing
+    return ctx.image
 end
 
 function blurWork()
     img = newImage(128, 128)
     fill(img, rgb(255, 255, 255))
     blur(img, Float32(3))
-    return nothing
+    return img
 end
 
 function shadowWork()
     img = newImage(128, 128)
     fill(img, rgb(255, 0, 0))
-    shadow(img, Vec2(4f0, 4f0), 2f0, 4f0, rgba(0, 0, 0, 128))
-    return nothing
+    return shadow(img, Vec2(4f0, 4f0), 2f0, 4f0, rgba(0, 0, 0, 128))
 end
 
 function drawWork()
@@ -121,7 +124,7 @@ function drawWork()
         draw(dst, src, translate(Vec2(Float32(mod(13 * i, 128)),
             Float32(mod(29 * i, 128)))))
     end
-    return nothing
+    return dst
 end
 
 function gradientImage()
@@ -141,18 +144,20 @@ end
 
 function pngEncodeWork()
     img = gradientImage()
-    for _ in 1:10
-        encodeImage(img, PngFormat)
+    bytes = encodeImage(img, PngFormat)
+    for _ in 2:10
+        bytes = encodeImage(img, PngFormat)
     end
-    return nothing
+    return (img, bytes)
 end
 
 function pngDecodeWork()
     data = read("test/reference/font_basic1.png")
-    for _ in 1:10
-        decodeImage(data)
+    img = decodeImage(data)
+    for _ in 2:10
+        img = decodeImage(data)
     end
-    return nothing
+    return img
 end
 
 const TEXT = "The quick brown fox jumps over the lazy dog 0123456789"
@@ -165,17 +170,22 @@ function textWork()
     ctx = Context(16, 16)
     ctx.font = tfpath
     ctx.fontSize = Float32(24)
-    for _ in 1:100
-        layoutBounds(font, TEXT)
+    bds = layoutBounds(font, TEXT)
+    for _ in 2:100
+        bds = layoutBounds(font, TEXT)
     end
-    for _ in 1:20
-        measureText(ctx, TEXT)
+    m = measureText(ctx, TEXT)
+    for _ in 2:20
+        m = measureText(ctx, TEXT)
     end
-    return nothing
+    return (bds, m)
 end
 
-# --- smoke correctness (M002; expectations are hand-derived, not
-#     produced by the code under test) ---
+# --- smoke correctness (M002): each check calls the actual workload
+#     above (outside the timing) and asserts independently justified
+#     invariants — premultiplied color algebra, the i=0 workload
+#     geometry, kernel mathematics, and the pinned oracle fixture —
+#     never values observed from the code under test. ---
 
 function smoke_check(cond, what)
     cond || throw(ErrorException("benchmark smoke failed: $what"))
@@ -183,57 +193,105 @@ function smoke_check(cond, what)
 end
 
 function smoke_verify()
-    # fill: the i=0 workload fill covers (0,0)-(9,9); red over black.
-    img = newImage(W, W)
-    fill(img, rgb(0, 0, 0))
-    ctx = Context(img)
-    ctx.fillStyle = Paint(rgba(255, 0, 0, 255))
-    fillRect(ctx, 0f0, 0f0, 10f0, 10f0)
+    # fill_rects: the i=0 fill covers (0,0)-(9,9); opaque red over an
+    # opaque black canvas stays on the black→red premultiplied line
+    # (g = b = 0, r <= a) for every pixel.
+    img = fillRectsWork()
+    smoke_check(img.width == W && img.height == W, "fill: canvas size")
+    d = img.data
+    for k in 1:4:length(d)
+        smoke_check(d[k + 1] == 0 && d[k + 2] == 0 && d[k] <= d[k + 3],
+            "fill: a pixel left the black/red premultiplied line")
+    end
     smoke_check(getColor(img, 5, 5) == ColorRGBX(255, 0, 0, 255),
-        "filled pixel (5,5) must be opaque red")
-    smoke_check(getColor(img, 200, 200) == ColorRGBX(0, 0, 0, 255),
-        "unfilled pixel (200,200) must stay opaque black")
+        "fill: the i=0 fill covers (5,5) with opaque red")
 
-    # blur: uniform white stays near-white at the center (the Float32
-    # kernel weights sum within a few levels of 1 — observed 253
-    # premultiplied — while edges darken toward the transparent
-    # border).
-    b = newImage(128, 128)
-    fill(b, rgb(255, 255, 255))
-    blur(b, Float32(3))
-    cb = getColor(b, 64, 64)
-    smoke_check(cb.r in 250:255 && cb.g in 250:255 && cb.b in 250:255,
-        "blur of uniform white keeps the center near-white")
+    # stroke_lines: the i=0 segment is the full-height vertical line
+    # at x=0; yellow over black stays on the r == g, b == 0
+    # premultiplied line.
+    s = strokeLinesWork()
+    smoke_check(s.width == W && s.height == W, "stroke: canvas size")
+    d = s.data
+    for k in 1:4:length(d)
+        smoke_check(d[k] == d[k + 1] && d[k + 2] == 0 && d[k] <= d[k + 3],
+            "stroke: a pixel left the black/yellow premultiplied line")
+    end
+    smoke_check(getColor(s, 1, 128).r > 0,
+        "stroke: the i=0 line reaches the first column")
 
-    # shadow: the content pixel stays red (halo lands below-right).
-    s = newImage(128, 128)
-    fill(s, rgb(255, 0, 0))
-    shadow(s, Vec2(4f0, 4f0), 2f0, 4f0, rgba(0, 0, 0, 128))
-    smoke_check(getColor(s, 64, 64) == ColorRGBX(255, 0, 0, 255),
-        "shadow keeps the content pixel red")
+    # blur: white stays gray (r == g == b); the interior is attenuated
+    # only by float32 rounding of the (sum-1) kernel weights, while the
+    # corner bleeds toward the transparent border.
+    b = blurWork()
+    d = b.data
+    for k in 1:4:length(d)
+        smoke_check(d[k] == d[k + 1] == d[k + 2] && d[k] <= d[k + 3],
+            "blur: a pixel left the gray premultiplied line")
+    end
+    center = getColor(b, 64, 64)
+    smoke_check(center.r in 245:255, "blur: the interior stays near-white")
+    smoke_check(getColor(b, 1, 1).r < center.r,
+        "blur: the corner is darker than the interior")
 
-    # draw: the red source lands at the origin over the white target.
-    dst = newImage(W, W)
-    fill(dst, rgb(255, 255, 255))
-    src = newImage(128, 128)
-    fill(src, rgb(255, 0, 0))
-    draw(dst, src, translate(Vec2(0f0, 0f0)))
-    smoke_check(getColor(dst, 10, 10) == ColorRGBX(255, 0, 0, 255),
-        "drawn pixel (10,10) must be opaque red")
+    # shadow: per the pinned blendMask contract (upstream blends.nim
+    # L227), the result is the rgba(0,0,0,128) canvas scaled by the
+    # shifted/spread/blurred content alpha — pure black, alpha <= 128,
+    # ~128 deep inside the content, near 0 at the corner outside it.
+    sh = shadowWork()
+    smoke_check(sh.width == 128 && sh.height == 128, "shadow: canvas size")
+    d = sh.data
+    for k in 1:4:length(d)
+        smoke_check(d[k] == 0 && d[k + 1] == 0 && d[k + 2] == 0 &&
+            d[k + 3] <= 128,
+            "shadow: a pixel is not black with alpha <= 128")
+    end
+    smoke_check(getColor(sh, 64, 64).a in 125:128,
+        "shadow: the deep interior keeps the full canvas alpha")
+    smoke_check(getColor(sh, 1, 1).a <= 124,
+        "shadow: the corner outside the content is near-transparent")
 
-    # png round trip: encode -> decode reproduces the stored pixels.
-    back = decodeImage(encodeImage(img, PngFormat))
-    smoke_check(back.width == W && back.height == W,
-        "png round trip keeps dimensions")
-    smoke_check(back.data == img.data, "png round trip keeps pixels")
+    # draw: the i=0 draw places the 128×128 red block at the origin over
+    # opaque white; integer offsets keep every pixel exactly opaque
+    # white or exactly opaque red.
+    dr = drawWork()
+    d = dr.data
+    for k in 1:4:length(d)
+        exact = d[k + 3] == 255 && ((d[k] == 255 && d[k + 1] == 255 &&
+                d[k + 2] == 255) || (d[k] == 255 && d[k + 1] == 0 &&
+                d[k + 2] == 0))
+        smoke_check(exact, "draw: a pixel is not opaque white or red")
+    end
+    smoke_check(getColor(dr, 10, 10) == ColorRGBX(255, 0, 0, 255),
+        "draw: the i=0 block covers (10,10)")
 
-    # text: layout width of a known string is finite and positive.
+    # png_encode: a lossless codec round trip reproduces the
+    # workload's own canvas byte-for-byte.
+    (gimg, bytes) = pngEncodeWork()
+    back = decodeImage(bytes)
+    smoke_check(back.width == gimg.width && back.height == gimg.height,
+        "png encode: the round trip keeps dimensions")
+    smoke_check(back.data == gimg.data, "png encode: the round trip keeps pixels")
+
+    # png_decode: the pinned fixture must equal the pinned oracle bytes
+    # (font_basic1.raw: 200×100, row-major premultiplied RGBA, per the
+    # .meta contract).
+    p = pngDecodeWork()
+    smoke_check(p.width == 200 && p.height == 100, "png decode: fixture size")
+    smoke_check(p.data == read("test/reference/font_basic1.raw"),
+        "png decode: fixture pixels match the pinned oracle")
+
+    # text: layout width is positive, finite, and monotone in the text
+    # (all Roboto advances of the remaining 38 characters are > 0).
+    (bds, m) = textWork()
+    smoke_check(isfinite(bds.x) && bds.x > 0, "text: layout width > 0")
+    smoke_check(m.width > 0 && isfinite(m.width),
+        "text: measureText width > 0")
     tfpath = joinpath(".reference", "upstream", "tests", "fonts",
         "Roboto-Regular_1.ttf")
     font = newFont(readTypeface(tfpath))
     font.size = Float32(24)
-    bds = layoutBounds(font, TEXT)
-    smoke_check(isfinite(bds.x) && bds.x > 0, "text layout width > 0")
+    smoke_check(bds.x > layoutBounds(font, "The quick").x,
+        "text: the width is monotone in the text")
     return nothing
 end
 

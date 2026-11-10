@@ -77,25 +77,20 @@ function _requireHarfBuzz()
     end
     m = Base.require(_HB_PKGID)
     path = Base.invokelatest(_hbLibPath, m)
-    # Libdl.dlopen raises on an unloadable path; report it with the
-    # same message the C_NULL path used to.
-    handle = try
-        Libdl.dlopen(path, Libdl.RTLD_NOW)
-    catch
-        C_NULL
-    end
-    handle === C_NULL &&
-        throw(ErrorException("HarfBuzz_jll loaded but dlopen(\"$path\") failed"))
+    # Libdl diagnostics name the path/symbol and the OS cause; let them
+    # propagate. The handle must outlive the resolved pointers, so it is
+    # closed only when symbol resolution fails (the cache is never
+    # populated).
+    handle = Libdl.dlopen(path, Libdl.RTLD_NOW)
     funcs = Dict{Symbol, Ptr{Cvoid}}()
-    for s in _HB_SYMBOLS
-        f = try
-            Libdl.dlsym(handle, String(s))
-        catch
-            C_NULL
+    loaded = false
+    try
+        for s in _HB_SYMBOLS
+            funcs[s] = Libdl.dlsym(handle, String(s))
         end
-        f === C_NULL &&
-            throw(ErrorException("HarfBuzz: missing symbol $s in $path"))
-        funcs[s] = f
+        loaded = true
+    finally
+        loaded || Libdl.dlclose(handle)
     end
     _HB_FUNCS = funcs
     return nothing

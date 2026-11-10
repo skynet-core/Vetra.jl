@@ -57,9 +57,9 @@ jobs:
           julia_url="https://julialang-s3.julialang.org/bin/freebsd/x64/1.10/julia-1.10.13-freebsd-x86_64.tar.gz"
           julia_sha="2a7bfe9ed8b656e8845e07449c27f45a63d227a31eacfb43f2a9abcd33bf7754"
           mkdir -p /usr/local/julia
-          fetch "$julia_url" -o /tmp/julia.tar.gz
-          echo "$julia_sha  /tmp/julia.tar.gz" > /tmp/julia.sha256
-          sha256 -c /tmp/julia.sha256
+          fetch -o /tmp/julia.tar.gz "$julia_url"
+          # BSD sha256: -c takes the digest string, then the file(s).
+          sha256 -c "$julia_sha" /tmp/julia.tar.gz
           tar -xzf /tmp/julia.tar.gz -C /usr/local/julia --strip-components=1
           /usr/local/julia/bin/julia --version
       - name: Fetch pinned upstream reference (fonts and test assets)
@@ -103,8 +103,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    env:
-      BENCH_ENV: ${{ runner.temp }}/vetra-bench
+    # The benchmark env steps use POSIX syntax; Windows runners default
+    # to PowerShell.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -114,6 +117,8 @@ jobs:
       - name: Fetch pinned upstream reference (fonts)
         run: julia --startup-file=no --project=. scripts/fetch_upstream.jl
       - name: Create benchmark env (Vetra + opt-in PNGFiles)
+        env:
+          BENCH_ENV: ${{ runner.temp }}/vetra-bench
         run: |
           mkdir -p "$BENCH_ENV"
           julia --startup-file=no -e '
@@ -123,6 +128,7 @@ jobs:
             Pkg.add("PNGFiles")'
       - name: Run bounded benchmark smoke
         env:
+          BENCH_ENV: ${{ runner.temp }}/vetra-bench
           VETRA_BENCH_SMOKE: "1"
         run: julia --startup-file=no --project="$BENCH_ENV" benchmark/run_benchmarks.jl
       - name: Save results
