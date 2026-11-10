@@ -109,6 +109,19 @@ Depends on M001. Qwen owns workflow/scripts/test changes; coordinator reviews.
   successful remote matrix/benchmark jobs. Infrastructure failures remain
   explicitly blocked, never hidden with `continue-on-error`.
 
+### M002 implementation and review
+
+Qwen commits `155ac78`/`cc211fb` integrated as `95185c3`/`8bfd7ae`.
+Portable Libdl loading, warmed allocation tests, Julia 1.10 Base.IdSet import,
+fresh coverage checks, six Julia/OS test jobs, FreeBSD 14.3 VM with official
+checksum-pinned Julia 1.10.13, and bounded benchmark checks on all four OSes.
+
+Coordinator review fixed invalid job-level runner context, Windows shell choice,
+BSD checksum syntax, unintended .mem deletion, and shadow/input confusion in
+benchmark checks. `actionlint .github/workflows/ci.yml` and `git diff --check`
+pass. Coordinator full-gate runs are in progress on Julia 1.13.3 and 1.10.13.
+Remote validation is pending: M002 is not yet complete.
+
 ## M003 — Julia-native public API and package integration
 
 Depends on M002 (local implementation may proceed while remote jobs run).
