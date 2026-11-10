@@ -1,5 +1,29 @@
 # Task board
 
+## Active: Julia-native modernization (2026-11-10)
+
+The user's new direction supersedes the port-first roadmap below. Detailed
+scope, ownership, dependencies, and acceptance checks:
+[Modernization tasks](tasks/MODERNIZATION.md).
+
+| Task | Goal | Status |
+| --- | --- | --- |
+| M001 | Baseline, code audit, detailed task contract | in_progress |
+| M002 | Reliable tests and four-platform test/benchmark CI | blocked on M001 |
+| M003 | Julia-native API and package integration | blocked on M002 |
+| M004 | Correctness audit and reproduced bug fixes | blocked on M003 |
+| M005 | New README, interactive docs, GitHub Pages publication | blocked on M004 |
+| M006 | Remove obsolete port scaffolding | blocked on M005 |
+| M007 | Final independent validation | blocked on M002–M006 |
+
+Coordinator: GPT-6 Astra, responsible for validation and integration. Paired
+implementer: `vllm/nvidia/Qwen3.8-27B-NVFP4`. One task at a time; commit and push
+each completed task. Baseline `415c7a0` is clean and already on `origin/main`.
+Latest existing CI run `42741112923` failed (including Julia 1.10 allocation
+equality in `test/numeric_api_tests.jl:126`); Pages is not yet configured.
+
+## Historical board (retired after M006 consolidation)
+
 The pinned-scope port and cleanup (T000–T013) are complete. The user-approved
 [adoption and advanced-graphics roadmap](docs/ROADMAP.md) adds T014–T032.
 Status values: `ready`, `blocked`, `in_progress`, `done`. Work on one selected

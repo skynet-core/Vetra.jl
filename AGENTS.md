@@ -2,6 +2,15 @@
 
 ## Mission and current scope
 
+The 2026-11-10 user direction supersedes the original port-first mission:
+maintain Vetra as an independent Julia-native graphics library. Follow
+`tasks/MODERNIZATION.md` M001–M007 and the active table in TASKS.md. Qwen3.8
+implements; the coordinator reviews and independently validates, then commits
+and pushes each completed task as authorized by the user. Preserve attribution
+and fixture provenance, but fix justified bugs rather than preserve upstream
+quirks. Retain tests, benchmarks, documentation and legal assets when removing
+obsolete port planning records. Package registration remains user-owned.
+
 Build a native Julia port of treeform/pixie, preserving observed behavior at the
 revision in upstream.toml. The board (T000-T011) is complete and released: full
 API per docs/API.md, ~811k-assertion test suite against pinned oracle fixtures,

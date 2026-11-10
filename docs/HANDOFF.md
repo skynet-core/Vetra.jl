@@ -1,5 +1,18 @@
 # Current handoff
 
+## Active direction: Julia-native modernization
+
+2026-11-10: user requested independent Julia-native identity/API, obsolete
+port-document cleanup, rewritten interactive GitHub Pages documentation, and
+working Linux/Windows/macOS/FreeBSD tests and benchmarks. Follow
+`tasks/MODERNIZATION.md` M001–M007 in order. GPT-6 Astra validates; Qwen3.8
+implements. M001 audit and fresh baseline gate are running. Baseline `415c7a0`
+was clean and already pushed. Existing remote CI fails; no Pages site exists.
+Keep registration user-owned. Preserve licenses, attribution, regression
+fixtures and test/benchmark/docs infrastructure during cleanup.
+
+The historical handoff below is evidence to consolidate, not the active plan.
+
 Updated: 2026-11-10
 
 ## State
