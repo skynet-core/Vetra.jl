@@ -1,8 +1,10 @@
 # Recording contract (T023, D030)
 
-Status: **design only**. No symbols in this document are exported until
-T024/T025/T026 implement them (D011: planned APIs live in the docs, not in
-`export`). Raster behavior is unchanged by this contract.
+Status: **implemented by T024/T025/T026**. This is the historical recording
+contract behind the current Picture/RecordingContext and SVG/PDF writers.
+The proposed [Canvas architecture](CANVAS_DESIGN.md) reuses this work but defines
+new frontend semantics and resource contracts explicitly. Planned Canvas APIs
+are not exported until their implementation tasks pass review.
 
 Goal: the smallest coherent geometry-recording contract — record supported
 drawing operations once (a display list), replay them on the CPU into

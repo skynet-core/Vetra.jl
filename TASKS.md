@@ -1,5 +1,38 @@
 # Task board
 
+## Current request: multi-backend 2D Canvas design
+
+**R000 done (approved 2026-11-10):** [architecture](docs/CANVAS_DESIGN.md) and
+[detailed parallel development plan](tasks/CANVAS_ROADMAP.md).
+First-tier targets are CPU, Vulkan.jl GPU, browser Canvas2D, existing image
+formats, Jupyter and PDF; SVG remains supported. The new plan distinguishes
+render backends, codecs and display adapters, with a final interactive tutorial
+published through GitHub Pages CI.
+
+Latest additions: existing GIF/WebP/MP4 frame decoding/editing/encoding,
+recording and concatenation; Matrix/Vector/StaticArray pixel import/export and
+mutable array canvases, with CPU/GPU execution chosen independently. R022/R023
+cover arrays/transfers; R064–R069 cover temporal media. The reviewed plan has 43
+tasks across nine streams. Independent re-review **approved the architecture
+and task plan**, confirming all ten corrections and the 98-edge dependency graph.
+Source review and final independent media consistency review passed with no
+blocking findings. These APIs are not implemented; runtime acceptance belongs
+to the downstream probe tasks.
+
+SOLID and zero-core-change extension are explicit requirements, verified by
+R013's external-package conformance gate. R014 verifies future GUI/plotting-core
+readiness through public host lifecycle, text metrics, recording reuse, precise
+world→local mapping and raster/vector integration, without implementing whole
+GUI or plotting frameworks in core.
+
+Coordinator owns the design and integration. Vulkan, browser/notebook and media
+source research is reviewed, with runtime decisions deferred to implementation
+probes. R040 is ready for explicit assignment. The existing Qwen writer is finishing
+only its bounded M003 task in the
+`modernization/native-api` worktree. New backend implementation is dependency-
+gated by R010's reviewed contracts. M005/M006/M007 are folded into R099/R086/R090
+respectively; the current M003 and M004 correctness work remain prerequisites.
+
 ## Active: Julia-native modernization (2026-11-10)
 
 The user's new direction supersedes the port-first roadmap below. Detailed
@@ -12,9 +45,9 @@ scope, ownership, dependencies, and acceptance checks:
 | M002 | Reliable tests and four-platform test/benchmark CI | done (all 10 CI jobs passed) |
 | M003 | Julia-native API and package integration | in_progress |
 | M004 | Correctness audit and reproduced bug fixes | blocked on M003 |
-| M005 | New README, interactive docs, GitHub Pages publication | blocked on M004 |
-| M006 | Remove obsolete port scaffolding | blocked on M005 |
-| M007 | Final independent validation | blocked on M002–M006 |
+| M005 | New README, interactive docs, GitHub Pages publication | moved to R098/R099 |
+| M006 | Remove obsolete port scaffolding | moved to R086 |
+| M007 | Final independent validation | moved to R090 |
 
 Coordinator: GPT-6 Astra, responsible for validation and integration. Paired
 implementer: `vllm/nvidia/Qwen3.8-27B-NVFP4`. One task at a time; commit and push

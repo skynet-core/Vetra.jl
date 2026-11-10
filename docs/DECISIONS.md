@@ -1079,6 +1079,74 @@ against both versions, symbol-table diff of the 12 used symbols);
 permutation, missing-glyph policy, RTL/LTR paragraph layout and
 render); codec-loading protocol extended to HarfBuzz.
 
+## D034 — Independent 2D Canvas and optional rendering backends
+
+Status: **R000 planning approved; implementation contracts await
+R010 review** (2026-11-10). Design and agent work plan:
+[Canvas](CANVAS_DESIGN.md), [R000–R099](../tasks/CANVAS_ROADMAP.md).
+
+The user requested a renderer-independent Canvas covering CPU, GPU through
+**Vulkan.jl**, browser Canvas APIs, existing image formats, Jupyter notebooks and
+PDF. 3D is a future milestone. This supersedes the old roadmap's GPU deferral;
+it does not claim any new backend is implemented.
+
+Direction:
+
+- SOLID is enforced through separated responsibilities, small public versioned
+  protocols and provider-owned multiple dispatch. New backends/codecs/storage/
+  media/display integrations require no core source/metadata/registry edits;
+  R013 proves this with external packages and reusable conformance tests. New
+  semantic primitives still require reviewed contract evolution.
+- Design for use beneath future GUI and plotting libraries: host-owned event
+  loops/surfaces, headless metrics, reusable recordings/assets, geometric hit
+  tests, conservative invalidation and accurate world→local mapping before
+  Float32 render geometry. R014 tests external consumers; widgets, event routing,
+  plot models/scales and statistical processing remain consumer responsibilities.
+- Pixel storage and execution are independent: host Matrix/Vector and optional
+  StaticArrays integrate through explicit layouts, copy/borrow/writeback and
+  CPU/GPU transfer boundaries (R022/R023). Immutable static arrays are inputs or
+  newly constructed outputs, not writable targets; float storage does not imply
+  higher internal render precision.
+- Temporal media is a separate optional frame pipeline (R064–R069): decode and
+  edit existing GIF/WebP/MP4 frames, encode, record and concatenate with explicit
+  timing/loop/color/alpha and metadata policies. This supersedes GIF-encode and
+  animation deferrals for the new milestone, while preserving the unsafe-static-
+  WebP rejection guard. Provider/codec choices await runtime probes and review.
+- Media source review identifies WebP inline-helper/library/ABI boundaries and
+  VideoIO duration/seek probes; it does not establish a CFR-only limitation.
+  R064 also resolves the inspected FFmpeg build's nonfree distribution constraint
+  before selecting dependencies. Preserve streaming and explicit timing/matte/
+  track policies; no blanket lossless concatenation or whole-output-buffer API.
+- One Julia-native frontend/state/layout contract emits owned, backend-neutral
+  commands/assets. Concrete backend types execute through multiple dispatch;
+  pixel kernels do not dynamically branch on backend choice.
+- Reuse the CPU kernels, existing recordings, glyph layout and SVG/PDF writers.
+  Distinguish render backends from codecs and notebook display adapters; do not
+  implement a separate renderer for each image file format.
+- Heavy GPU/browser integrations stay optional. R040 verifies Vulkan.jl's real
+  wrapper/shader/platform requirements before R010 freezes package boundaries;
+  a backend's higher Julia minimum must not silently raise the CPU core minimum.
+- Reviewed [Vulkan research](CANVAS_RESEARCH.md) leaves shader selection open:
+  experimental SPIRV.jl exists but the inspected Vulkan compat differs from 0.7;
+  OpenCL Kernel SPIR-V does not establish a Vulkan compute route. Require actual
+  Vulkan-environment shader execution and complementary runtime validation.
+- New Canvas semantics are explicit for coordinate spaces, alpha, sampling,
+  clipping, state, clear, compositing and resource lifetime. Existing Context
+  compatibility is reviewed separately, not silently changed to match a browser.
+- Strict capability errors are the default. Equivalent lowerings and opt-in
+  raster fallback are reported and tested; no hidden CPU rendering in GPU claims.
+- Parallel streams have separate worktrees/owned paths and shared-interface
+  review gates. The coordinator independently validates and approves each task.
+- Final task R099 publishes an executed, genuinely interactive browser tutorial
+  via GitHub Pages CI. R098 supplies the illustrated, executable README.
+  Native Vulkan examples do not pretend to execute on a static web page.
+
+Evidence so far: current source inventory and M002's passing four-platform CPU
+tests/benchmarks (run 42811680553). Vulkan/browser execution, complete Canvas
+conformance and the new tutorial remain future task criteria. Research sources
+and compatibility probes are recorded in the design/plan, not inferred from
+the CPU evidence. Package registration remains user-owned.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

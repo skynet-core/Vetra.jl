@@ -2,6 +2,21 @@
 
 ## Mission and current scope
 
+Latest request (2026-11-10): design a renderer-independent full-2D Canvas with
+CPU, Vulkan.jl GPU, browser Canvas2D, image-codec, Jupyter and PDF targets.
+Include Matrix/Vector/StaticArray pixel interop independently of CPU/GPU
+execution, plus GIF/WebP/MP4 frame decoding, editing, encoding and concatenation.
+Require SOLID public extension contracts with no core edits for new providers,
+and embedding seams for future GUI/plotting libraries (host lifecycle, reusable
+drawing, text metrics and precise data-to-local-coordinate mapping).
+The architecture is `docs/CANVAS_DESIGN.md`; the detailed parallel development
+plan is `tasks/CANVAS_ROADMAP.md`. R000 is planning/review, not a claim of backend
+implementation. Finish the already assigned bounded M003 work; new backend
+implementation follows reviewed R010 contracts and explicit task ownership.
+Use separate worktrees for parallel writers. The coordinator reviews and
+validates each result before approval. R099 (interactive GitHub Pages tutorial)
+is the last task. No 3D implementation in this milestone.
+
 The 2026-11-10 user direction supersedes the original port-first mission:
 maintain Vetra as an independent Julia-native graphics library. Follow
 `tasks/MODERNIZATION.md` M001–M007 and the active table in TASKS.md. Qwen3.8

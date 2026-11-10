@@ -31,9 +31,16 @@ commands, coverage, and deviations. The implementer must not edit `TASKS.md`,
 
 ## Work loop
 
+For the Canvas milestone, use [R000–R099](../tasks/CANVAS_ROADMAP.md): its
+dependency board, stream-owned paths, interface freeze, review gate and handoff
+template supersede the old single-port-task sequencing. The coordinator owns
+shared contracts/exports/metadata and approves implementation only with evidence.
+CPU/GPU/browser/document agents must not fork the drawing-state semantics.
+
 1. Read the entry files, inspect Git status, and select a ready task.
 2. Record ownership and mark the task in progress.
-3. Read the relevant pinned sources. Write down unclear behavior before coding.
+3. Read the shared contracts, connected implementation and relevant primary
+   references. Retain pinned fixture provenance; settle unclear behavior before coding.
 4. Implement and run focused checks; inspect the final diff.
 5. Resolve findings within the task's scope.
 6. Update the task, compatibility inventory, decisions, and handoff with evidence.

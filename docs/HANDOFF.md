@@ -1,5 +1,101 @@
 # Current handoff
 
+## Latest request: Canvas architecture and parallel implementation plan
+
+R000 is **done (approved 2026-11-10)**: `docs/CANVAS_DESIGN.md` and
+`tasks/CANVAS_ROADMAP.md` define
+renderer-independent Canvas, CPU/Vulkan.jl/browser/document execution, existing
+codecs and Jupyter integration. Independent architecture/task-plan review has
+passed; source review and final independent media consistency review are complete
+with no blocking findings.
+Coordinator owns these documents. Qwen continues only
+the bounded M003 implementation in `modernization/native-api`; no competing
+Canvas implementation is authorized in that task. Future streams are gated by
+R010's contract review. Final milestone task R099 publishes the real interactive
+tutorial via GitHub Pages CI; R098 prepares the illustrated README.
+
+User additions incorporated into the plan: GIF/WebP/MP4 existing-frame editing,
+decode/encode/record/concatenate (R064–R069), and Matrix/Vector/StaticArray storage
+independent of CPU/GPU execution (R022/R023). Array contracts cover copy/borrow,
+views/layout/alpha, explicit GPU→host snapshot, immutable static output versus
+mutable targets, and explicit processor changes. Media contracts cover composed
+frames, timing/loops, selection/seeking, re-encoding, original-file preservation
+and explicit handling of unsupported audio tracks.
+
+Further user direction: SOLID and zero-core-change extension are explicit public
+protocol requirements (§3.7), with R013 external-package conformance. Future GUI/
+plotting-core adoption is specified in §3.8 and verified by R014 external consumer
+prototypes. Contracts include headless text/bounds queries, host event-loop and
+surface ownership, reusable recordings, conservative invalidation and high-range
+world→local mapping before Float32 narrowing. There are now 43 task specs.
+
+Media research was steered to include existing-frame editing. Independent plan
+re-review returned **approved** after confirming every correction and independently
+checking all 43 specs/98 edges. Coordinator applied findings 1–10: R013 writer dependency, explicit `(canvas, i, t, dt)`
+recording callback, optional StaticArrays checks, CPU array-target invariants,
+R070 drawn-GPU dependency, non-vacuous media CI status, connected-browser capture
+ownership, a pinned PNGFiles consumer test, importable companion test support and
+Q's integration-consumer paths. The remaining non-blocking R070 media-view note
+now explicitly uses a pinned prerecorded fixture, with engine-generated media
+integration in R099 after R069; it adds no premature encoder dependency.
+Approval covers architecture/task documents only, not providers or execution.
+Next: independently review/validate M003 when its completion report arrives;
+assign the dependency-ready R040 spike explicitly before starting it. R010
+remains gated by R040 and M003. M003 stays bounded in its separate worktree.
+
+Vulkan source research is **reviewed for planning**, with coordinator qualifications
+recorded in `docs/CANVAS_RESEARCH.md`: SPIRV.jl exists (experimental,
+Julia 1.11 / Vulkan 0.6 declared compat), LLVM translator's OpenCL Kernel output
+does not establish Vulkan compute compatibility, Vulkan 0.7 defaults to System
+loader, and SPIR-V validation cannot replace runtime layers. FreeBSD Lavapipe-JLL
+limitations are route-specific, not proof all system Vulkan is unavailable.
+The corrected report was received; coordinator additionally checked pinned stage
+exports, Vulkan extension, execution harness and CI definition. SPIRV.jl is the
+first candidate to probe, not a finalized choice; neither a one-line compat fix,
+the companion Julia minimum nor software/hardware platform support is established.
+R040 now checks nonconstant device work, actual minimum features and the upstream
+disabled-validation concern. Hardware evidence remains required. No runtime probe run.
+
+Browser/notebook source research is also **reviewed for planning**. Independently
+checked BCD/IJulia/JupyterLab sources are in `docs/CANVAS_RESEARCH.md`: Safari
+filters are preference-gated, Firefox has the standard convertToBlob name as
+well as an alias, current conic entries are unflagged, untrusted SVG is rejected
+by the inspected JupyterLab renderer, and no default MP4 MIME factory was found.
+The corrected report was received and incorporated with coordinator qualifications:
+native Canvas can draw full turns (WHATWG steps checked), exact independent simple
+pixel assertions remain, optional vector MIME is retained, and renderer-module
+unit tests do not replace actual kernel/frontend checks. Mapping formulas remain
+conformance-gated proposals. Plan amendments require a static fallback inside
+HTML, trust/frontend tests, correct HTML/JSON escaping, new Canvas semantics and
+independent affine/composition/numeric checks. No new browser/kernel execution
+was performed.
+
+Media source review is **complete for planning**, with the accepted subset and
+rejected proposals recorded in `docs/CANVAS_RESEARCH.md`. Coordinator verified
+exact libwebp upstream provenance and its exported Internal constructors/ABI
+helpers, VideoIO rational reader position and explicit-index writer/duration
+behavior, and FFmpeg artifact/source provenance. Limited Linux symbol/tool and
+sample-metadata checks are explicitly separated from provider acceptance: no
+resolved VideoIO environment, animation FFI lifecycle or four-OS media test ran.
+The odd-size MP4 sample is YUV444; the VFR sample's stream duration differs from
+the final frame end. Neither supports the report's broad timing/dimension claims.
+The inspected FFmpeg build enables nonfree components; R064 owns distribution-
+compatible provider/build selection. No dependencies were added. R064–R069 retain
+streaming, explicit matte/retiming/track policies and staged-output contracts.
+The final independent review approved these amendments and rechecked the
+43-task/98-edge graph without shifting any implementation or ownership gate.
+
+Latest architecture amendment checks passed: inline Python task/spec/DAG/release-closure
+and local link validation found 43 matching tasks, 98 dependency edges, all tasks leading
+to final R099, and 24 valid local links including the research record;
+`git diff --check` passed. No Julia runtime
+gate run for these documentation-only changes; provider/backend acceptance is
+still unverified by this planning work.
+
+Existing M005 docs, M006 cleanup and M007 final validation are folded into
+R099/R086/R090; M003/M004 remain prerequisites. All proposed backend interfaces
+must remain labeled as plans until implemented and validated.
+
 ## Active direction: Julia-native modernization
 
 2026-11-10: user requested independent Julia-native identity/API, obsolete

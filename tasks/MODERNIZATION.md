@@ -1,5 +1,12 @@
 # Julia-native modernization
 
+**Superseded in part by the user's Canvas milestone:** see
+[Canvas architecture](../docs/CANVAS_DESIGN.md) and
+[R000–R099 development plan](CANVAS_ROADMAP.md). Finish the active bounded M003
+and prerequisite M004 correctness work. M005 documentation is folded into the
+final R099 task; M006 cleanup becomes R086; M007 integrated validation becomes
+R090. Their original order below is historical, not the active execution order.
+
 Requested 2026-11-10. Baseline: `415c7a063540ad23fc5dc1be5e11a16759a71a24`,
 already committed and pushed with a clean working tree. Registration remains
 user-owned. Each completed task is reviewed by the coordinator, committed, and
