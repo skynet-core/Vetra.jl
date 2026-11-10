@@ -12,16 +12,12 @@ jobs:
   test:
     name: Julia ${{ matrix.julia }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         julia: ['1.10', '1']
-        os: [ubuntu-latest]
-        include:
-          - julia: '1'
-            os: windows-latest
-          - julia: '1'
-            os: macos-latest
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -33,12 +29,82 @@ jobs:
       - name: Run package tests with bounds checks
         run: julia --startup-file=no --project=. scripts/check.jl
 
-  benchmark:
-    name: Benchmarks (Julia side)
-    # pushes to main only; the Nim reference side (bench_reference.nim) is
-    # local-only, needing the pinned upstream checkout + Nim 2.2.6 toolchain.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # Genuine FreeBSD: a QEMU VM on a GitHub-hosted runner
+  # (vmactions/freebsd-vm@v1; workspace rsynced per step, steps after the
+  # VM start run in the VM via the `freebsd` shell wrapper, which
+  # auto-cd's into the workspace). Julia is the official binary from the
+  # julia.org mirror, URL + SHA256 pinned from
+  # https://julialang-s3.julialang.org/bin/versions.json (2026-11-10).
+  freebsd:
+    name: FreeBSD ${{ matrix.release }} / Julia ${{ matrix.julia }}
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ['14.3']
+        julia: ['1.10.13']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: ${{ matrix.release }}
+      - name: Install official Julia (checksum-pinned)
+        shell: freebsd {0}
+        run: |
+          set -eu
+          julia_url="https://julialang-s3.julialang.org/bin/freebsd/x64/1.10/julia-1.10.13-freebsd-x86_64.tar.gz"
+          julia_sha="2a7bfe9ed8b656e8845e07449c27f45a63d227a31eacfb43f2a9abcd33bf7754"
+          mkdir -p /usr/local/julia
+          fetch "$julia_url" -o /tmp/julia.tar.gz
+          echo "$julia_sha  /tmp/julia.tar.gz" > /tmp/julia.sha256
+          sha256 -c /tmp/julia.sha256
+          tar -xzf /tmp/julia.tar.gz -C /usr/local/julia --strip-components=1
+          /usr/local/julia/bin/julia --version
+      - name: Fetch pinned upstream reference (fonts and test assets)
+        shell: freebsd {0}
+        run: /usr/local/julia/bin/julia --startup-file=no --project=. scripts/fetch_upstream.jl
+      - name: Run package tests with bounds checks
+        shell: freebsd {0}
+        run: /usr/local/julia/bin/julia --startup-file=no --project=. scripts/check.jl
+      - name: Create benchmark env (Vetra + opt-in PNGFiles)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: freebsd {0}
+        run: |
+          set -eu
+          /usr/local/julia/bin/julia --startup-file=no -e '
+            using Pkg
+            Pkg.activate("/tmp/vetra-bench")
+            Pkg.develop(path = pwd())
+            Pkg.add("PNGFiles")'
+      - name: Run bounded benchmark smoke
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: freebsd {0}
+        run: VETRA_BENCH_SMOKE=1 /usr/local/julia/bin/julia --startup-file=no --project=/tmp/vetra-bench benchmark/run_benchmarks.jl
+      - name: Save results
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-smoke-freebsd
+          path: benchmark/results/
+
+  # Bounded smoke of the existing harness (reduced iterations + output
+  # correctness assertions + platform/runtime metadata). Shared-runner
+  # timings are evidence, not a hard wall-clock gate; the full Nim/Julia
+  # comparison stays local (bench_reference.nim needs the pinned upstream
+  # + Nim 2.2.6 toolchain).
+  benchmark:
+    name: Benchmark smoke (Julia side) / ${{ matrix.os }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      BENCH_ENV: ${{ runner.temp }}/vetra-bench
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -48,8 +114,6 @@ jobs:
       - name: Fetch pinned upstream reference (fonts)
         run: julia --startup-file=no --project=. scripts/fetch_upstream.jl
       - name: Create benchmark env (Vetra + opt-in PNGFiles)
-        env:
-          BENCH_ENV: ${{ runner.temp }}/vetra-bench
         run: |
           mkdir -p "$BENCH_ENV"
           julia --startup-file=no -e '
@@ -57,11 +121,12 @@ jobs:
             Pkg.activate(ENV["BENCH_ENV"])
             Pkg.develop(path = pwd())
             Pkg.add("PNGFiles")'
-          echo "BENCH_ENV=$BENCH_ENV" >> "$GITHUB_ENV"
-      - name: Run benchmarks
+      - name: Run bounded benchmark smoke
+        env:
+          VETRA_BENCH_SMOKE: "1"
         run: julia --startup-file=no --project="$BENCH_ENV" benchmark/run_benchmarks.jl
       - name: Save results
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmark-smoke-${{ matrix.os }}
           path: benchmark/results/

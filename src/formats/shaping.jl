@@ -16,8 +16,9 @@
 #   segfaults on all modern versions); hb_face_get_glyph_count (not
 #   hb_face_count_glyphs).
 # ccall library expressions must be constants in this build, so the
-# symbols are resolved once with dlopen/dlsym into function pointers
-# (bare ccall to libc — no Libdl dependency).
+# symbols are resolved once with Libdl.dlopen/dlsym into function
+# pointers (Libdl is portable across the supported OSes; a bare
+# ccall to the `dlopen` symbol does not resolve on Windows).
 #
 # Shaped buffer order: logical for LTR runs, visual (left-to-right) for
 # RTL runs (harfbuzz reverses RTL runs; cluster ids ascend/descend
@@ -76,12 +77,22 @@ function _requireHarfBuzz()
     end
     m = Base.require(_HB_PKGID)
     path = Base.invokelatest(_hbLibPath, m)
-    handle = ccall(:dlopen, Ptr{Cvoid}, (Cstring, Cint), path, 2) # RTLD_NOW
+    # Libdl.dlopen raises on an unloadable path; report it with the
+    # same message the C_NULL path used to.
+    handle = try
+        Libdl.dlopen(path, Libdl.RTLD_NOW)
+    catch
+        C_NULL
+    end
     handle === C_NULL &&
         throw(ErrorException("HarfBuzz_jll loaded but dlopen(\"$path\") failed"))
     funcs = Dict{Symbol, Ptr{Cvoid}}()
     for s in _HB_SYMBOLS
-        f = ccall(:dlsym, Ptr{Cvoid}, (Ptr{Cvoid}, Cstring), handle, String(s))
+        f = try
+            Libdl.dlsym(handle, String(s))
+        catch
+            C_NULL
+        end
         f === C_NULL &&
             throw(ErrorException("HarfBuzz: missing symbol $s in $path"))
         funcs[s] = f

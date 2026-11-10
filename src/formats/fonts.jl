@@ -13,6 +13,10 @@
 #   (start, stop) 1-based inclusive ranges.
 # - Upstream `PixieError` maps to `ArgumentError`.
 
+# `withFallback` (below) needs Base.IdSet, which is not in the global
+# namespace on Julia 1.10.
+import Base: IdSet
+
 const autoLineHeight = Float32(-1) # use the font's default line height
 
 const _LF_RUNE = UInt32(10)

@@ -21,6 +21,9 @@ module Vetra
 # Extend Base generics so image methods coexist with scalar/array methods.
 import Base: *, ceil, diff, fill, copy
 
+# Portable dynamic loading for the optional HarfBuzz provider (shaping.jl).
+import Libdl
+
 # Upstream (Nim) `round` ties away from zero (verified against the pinned
 # toolchain: round(-1.5f) == -2); Julia's default round ties to even.
 # Non-negative inputs (most call sites) are unaffected by the change.

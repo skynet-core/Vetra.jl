@@ -114,6 +114,10 @@ const ROBO = joinpath(@__DIR__, "..", ".reference", "upstream", "tests",
         @test rect(1, 2, 3, 4) == Rect(1f0, 2f0, 3f0, 4f0)
         @test circle(Vec2(5, 5), 3) == Circle(Vec2(5f0, 5f0), 3f0)
         @test rotate(0.5) == rotate(0.5f0)
+        # Warm up both forms first: a first call pays for method
+        # specialization, and those allocations are not comparable.
+        Vec2(1, 2)
+        Vec2(1f0, 2f0)
         a = @allocated Vec2(1, 2)
         b = @allocated Vec2(1f0, 2f0)
         @test a == b
@@ -121,6 +125,11 @@ const ROBO = joinpath(@__DIR__, "..", ".reference", "upstream", "tests",
 
     @testset "dispatch and allocation" begin
         ctx = Context(32, 32)
+        # Warm up both dispatch forms first (see above): the measured
+        # calls must be steady state, so both sides pay identical
+        # steady-state allocations.
+        fillRect(ctx, 10, 10, 10, 10)
+        fillRect(ctx, 10f0, 10f0, 10f0, 10f0)
         a = @allocated fillRect(ctx, 10, 10, 10, 10)
         b = @allocated fillRect(ctx, 10f0, 10f0, 10f0, 10f0)
         @test a == b
