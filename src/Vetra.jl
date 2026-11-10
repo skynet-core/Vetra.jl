@@ -29,8 +29,13 @@ import Base: *, ceil, diff, fill, copy
 # Portable dynamic loading for the optional HarfBuzz provider (shaping.jl).
 import Libdl
 
-# Standard-library generics extended for the owned types (geometry.jl, M003).
+# Standard-library generics extended for the owned types (geometry.jl, M003):
+# `dot`/`normalize` are the actual LinearAlgebra generics (imported before
+# the owned-type methods, so the legacy exports are identical bindings and
+# `using Vetra, LinearAlgebra` stays unambiguous); `rotate!` extends
+# LinearAlgebra.rotate! the same way; det/norm are defined qualified.
 import LinearAlgebra
+import LinearAlgebra: dot, normalize
 import LinearAlgebra.rotate!
 
 # Upstream (Nim) `round` ties away from zero (verified against the pinned
@@ -150,24 +155,6 @@ end
 # ---------- image storage (pixie/common.nim, images.nim) ----------
 
 """
-Bitmap in premultiplied-alpha RGBA, row-major, rows top to bottom, 4 bytes per
-pixel (R, G, B, A). 1-based pixel coordinates.
-
-Array-style access is `img[row, column]` (row 1 = the top scanline, element
-`ColorRGBX`); the legacy `getColor`/`setColor` keep 1-based `(x, y)` order.
-The 2-arg and 3-arg constructors validate the storage contract at the root
-(positive dims, checked byte count, exact data length). `nbytes` stores the
-checked byte count `4 * width * height`; the raw 4-arg constructor is
-low-level and unvalidated.
-"""
-struct Image
-    width::Int
-    height::Int
-    data::Vector{UInt8}
-    nbytes::Int
-end
-
-"""
 Checked `4 * width * height`: the range guard fires before the multiplication,
 which wraps instead of throwing on this platform.
 """
@@ -179,29 +166,40 @@ function _checked_nbytes(width::Int, height::Int)
 end
 
 """
-Construct an `Image` over supplied `data` (row-major, 4 bytes per pixel).
-Validates positive dimensions, the checked `4 * width * height` byte count,
-and `length(data) == 4 * width * height` — the storage contract every
-`Image` in the module honors, so all construction sites (`Base.copy`,
-decoders, ...) inherit the check.
-"""
-function Image(width::Int, height::Int, data::Vector{UInt8})
-    (width > 0 && height > 0) ||
-        throw(ArgumentError("Image width and height must be > 0"))
-    nbytes = _checked_nbytes(width, height)
-    length(data) == nbytes ||
-        throw(ArgumentError(
-            "Image data has $(length(data)) bytes, expected $nbytes " *
-            "(4 * $(width) * $(height))"))
-    return Image(width, height, data, nbytes)
-end
+Bitmap in premultiplied-alpha RGBA, row-major, rows top to bottom, 4 bytes per
+pixel (R, G, B, A). 1-based pixel coordinates.
 
-"""Allocate a zero-initialized (fully transparent) image."""
-function Image(width::Int, height::Int)
-    (width > 0 && height > 0) ||
-        throw(ArgumentError("Image width and height must be > 0"))
-    nbytes = _checked_nbytes(width, height)
-    return Image(width, height, zeros(UInt8, nbytes), nbytes)
+Array-style access is `img[row, column]` (row 1 = the top scanline, element
+`ColorRGBX`) plus `img[i]` in row-major linear order; the legacy
+`getColor`/`setColor` keep 1-based `(x, y)` order, so
+`img[y, x] == getColor(img, x, y)`. `size(img)`, `size(img, d)`, `axes`,
+`ndims`, `eltype`, `length`, `eachindex`, and `img[end]` are defined in
+matrix order (1 = height, 2 = width); `img[i] = c` works for both the
+linear index and `eachindex` positions. The 2-arg and 3-arg inner
+constructors are the only construction path and validate the storage
+contract: positive dimensions, a checked `4 * width * height` byte count,
+and — for supplied storage — an exact data length.
+"""
+struct Image
+    width::Int
+    height::Int
+    data::Vector{UInt8}
+    function Image(width::Int, height::Int, data::Vector{UInt8})
+        (width > 0 && height > 0) ||
+            throw(ArgumentError("Image width and height must be > 0"))
+        nbytes = _checked_nbytes(width, height)
+        length(data) == nbytes ||
+            throw(ArgumentError(
+                "Image data has $(length(data)) bytes, expected $nbytes " *
+                "(4 * $(width) * $(height))"))
+        return new(width, height, data)
+    end
+    """Allocate a zero-initialized (fully transparent) image."""
+    function Image(width::Int, height::Int)
+        (width > 0 && height > 0) ||
+            throw(ArgumentError("Image width and height must be > 0"))
+        return new(width, height, zeros(UInt8, _checked_nbytes(width, height)))
+    end
 end
 
 newImage(width::Int, height::Int) = Image(width, height)
@@ -216,9 +214,21 @@ Base.copy(image::Image) = Image(image.width, image.height, copy(image.data))
 # iteration in storage order (top-left first).
 
 Base.size(image::Image) = (image.height, image.width)
+
+"""`size(img, d)`: 1 = height, 2 = width (matrix order)."""
+function Base.size(image::Image, d::Int)
+    d == 1 && return image.height
+    d == 2 && return image.width
+    throw(BoundsError(image, d))
+end
+
 Base.ndims(::Image) = 2
 Base.eltype(::Type{Image}) = ColorRGBX
 Base.length(image::Image) = image.width * image.height
+Base.axes(image::Image) = (Base.OneTo(image.height), Base.OneTo(image.width))
+
+"""The last linear index (`img[end]` = the bottom-right pixel)."""
+Base.lastindex(image::Image) = image.width * image.height
 
 """`img[row, column]` — matrix order (row 1 = the top scanline)."""
 Base.getindex(image::Image, row::Int, column::Int) =
@@ -234,6 +244,24 @@ end
 
 Base.setindex!(image::Image, color::ColorRGBX, row::Int, column::Int) =
     set_pixel(image, column, row, color)
+
+"""`img[i] = c` — the linear-order inverse of `img[i]`."""
+function Base.setindex!(image::Image, color::ColorRGBX, index::Int)
+    (1 <= index <= image.width * image.height) ||
+        throw(BoundsError(image, index))
+    return set_pixel(image, (index - 1) % image.width + 1,
+        (index - 1) ÷ image.width + 1, color)
+end
+
+"""`img[i] = c` for `i` from `eachindex(img)` (matrix order)."""
+Base.setindex!(image::Image, color::ColorRGBX, i::Base.CartesianIndex{2}) =
+    set_pixel(image, i.I[2], i.I[1], color)
+
+"""
+Matrix-order (row, column) pixel indices, column fastest — the same order as
+the linear index and the storage-order iteration.
+"""
+Base.eachindex(image::Image) = Base.CartesianIndices((image.height, image.width))
 
 """Storage-order iteration over pixels (top-left first)."""
 function Base.iterate(image::Image, state::Int = 1)
@@ -455,7 +483,7 @@ export new_image, minify_by2, magnify_by2, rotate_90, sub_image,
     super_image, opaque_bounds, stroke_shapes, parse_path,
     compute_bounds, compute_paths, layout_bounds, measure_text,
     length_sq, with_fallback, shape_text, layout_paragraph,
-    paragraph_metrics, finish_recording,
+    paragraph_metrics,
     new_font, new_span, new_paragraph, new_paint, new_path,
     color_stop, parse_html_color, parse_svg, parse_ttf, parse_otf,
     parse_open_type, read_image, read_image_dimensions, read_font,
@@ -466,7 +494,7 @@ export new_image, minify_by2, magnify_by2, rotate_90, sub_image,
     decode_webp_dimensions, decode_image, decode_image_dimensions,
     encode_ppm, encode_png, encode_bmp, encode_qoi, encode_jpeg,
     encode_webp, encode_image, encode_base64, decode_base64,
-    to_colors, from_colors, get_transform, get_line_dash,
+    to_colors, from_colors, get_color, get_transform, get_line_dash,
     get_rgba_smooth, get_advance, get_glyph_path,
     get_kerning_adjustment, get_left_side_bearing, is_point_in_path,
     is_ccw, has_glyph, fallback_typeface, glyph_path_by_gid,
@@ -479,7 +507,7 @@ export new_image, minify_by2, magnify_by2, rotate_90, sub_image,
     blend_subtract_mask, blend_exclude_mask, gaussian_kernel,
     srgb_to_linear, qoi_hash, to_straight_alpha,
     to_premultiplied_alpha, miter_limit_to_angle, angle_to_miter_limit,
-    default_miter_limit, fill_gradient, snap_to_pixels, srgb,
+    default_miter_limit, snap_to_pixels, srgb,
     fill!, stroke!, save!, save_layer!, restore!, clip!, begin_path!,
     close_path!, add_path!, move_to!, line_to!, bezier_curve_to!,
     quadratic_curve_to!, elliptical_arc_to!, arc_to!, arc!,
@@ -490,7 +518,8 @@ export new_image, minify_by2, magnify_by2, rotate_90, sub_image,
     fill_text!, stroke_text!, fill_paragraph!, stroke_paragraph!,
     blur!, spread!, invert!, flip_horizontal!, flip_vertical!,
     apply_opacity!, ceil!, set_color!, write_file!, write_ppm!,
-    write_svg!, write_pdf!, translate!, scale!, rotate!, transform!
+    write_svg!, write_pdf!, fill_gradient!, finish_recording!,
+    rect!, translate!, scale!, rotate!, transform!
 
 include("paths.jl")
 include("blends.jl")

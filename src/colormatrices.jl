@@ -77,20 +77,19 @@ Import a 2-D color matrix as an `Image` (D024): `RGB`/`RGBA` of `N0f8`
 `[1, 1]` is the top-left pixel. Straight channels are premultiplied with
 `rgbx` — the PNG decode boundary.
 
-Inputs (M003): any one-based `AbstractMatrix` — plain matrices, `view`s
-(contiguous or strided, no copy), and `transpose`s (rebuilt as a permuted
-matrix: this platform's `Transpose` getindex transforms every indexed
-element, which a color value cannot survive). Views built with index
-arrays (e.g. zero-based or permuted selections) and adjoints raise an
-explicit `ArgumentError`; `copy` them first. 3-D plane layouts raise a
+Inputs (M003): any one-based `AbstractMatrix` of colors — plain matrices,
+`view`s (contiguous or strided, no copy), and top-level `transpose`s
+(materialized via `permutedims`). Inputs with non-one-based axes, views
+selected by index arrays, adjoints, and views built over a transpose raise
+an explicit `ArgumentError`; `copy` them first. 3-D plane layouts raise a
 pointing `ArgumentError`.
 """
 function fromColors(m::AbstractMatrix{C}) where {C}
     CT = _requireColorTypes()
     T = C
     if T === Union{}
-        # A transpose of a color matrix loses its eltype metadata on this
-        # platform (Transpose{Union{}, ...}); resolve it from the base array.
+        # A lazy transpose of a color matrix resolves to a bottom eltype in
+        # this build (Transpose{Union{}, ...}); resolve it from the base.
         base = m
         while base isa SubArray || base isa LinearAlgebra.Transpose ||
             base isa LinearAlgebra.Adjoint
@@ -102,32 +101,19 @@ function fromColors(m::AbstractMatrix{C}) where {C}
         throw(ArgumentError(
             "fromColors: expected a matrix of ColorTypes RGB/RGBA colors, " *
             "got $T"))
+    try
+        Base.require_one_based_indexing(m)
+    catch
+        throw(ArgumentError(
+            "fromColors: expects one-based (1:size) axes, got $(axes(m))"))
+    end
     _fromColorsReadableWithoutCopy(m) ||
         throw(ArgumentError(
-            "fromColors: views with index-array parent indexes are not " *
-            "supported; copy the matrix first"))
-    if m isa LinearAlgebra.Adjoint
-        throw(ArgumentError(
-            "fromColors: adjoint matrices are not supported; use " *
-            "transpose or copy the matrix first"))
-    end
-    # Transpose getindex on this platform applies `transpose` to every
-    # indexed element (identity for numbers, MethodError for colors).
-    # A transpose *under* a view cannot be rebuilt from the outside, so it
-    # is rejected explicitly; a transpose at the top is peeled (odd count
-    # flips the orientation) and rebuilt as a permuted matrix.
-    if m isa SubArray
-        base = m
-        while base isa SubArray
-            base = base.parent
-            if base isa LinearAlgebra.Transpose ||
-                base isa LinearAlgebra.Adjoint
-                throw(ArgumentError(
-                    "fromColors: views over transposes are not supported; " *
-                    "copy the matrix first"))
-            end
-        end
-    end
+            "fromColors: views selected by index arrays, adjoints, and " *
+            "views over transposes are not supported; copy the matrix " *
+            "first"))
+    # A top-level transpose is peeled (odd count flips the orientation) and
+    # materialized as a permuted matrix.
     base = m
     ntrans = 0
     while base isa LinearAlgebra.Transpose
@@ -160,17 +146,22 @@ function fromColors(m::AbstractArray{C,3}) where {C}
         "2-D Matrix of RGB/RGBA colors instead"))
 end
 
-"""True when every view/transpose layer of `m` selects its parent by
-ranges, so the kernel's logical `m[row, column]` reads are valid without a
-copy; false when any layer was built with index arrays."""
+"""True when the kernel's logical `m[row, column]` reads are valid without
+a copy: every `SubArray` layer selects its parent by ranges, there is no
+adjoint, and no transpose sits under a view."""
 function _fromColorsReadableWithoutCopy(m)
+    inView = false
     while true
         if m isa SubArray
+            inView = true
             for idx in m.indices
                 idx isa AbstractRange || return false
             end
             m = m.parent
-        elseif m isa LinearAlgebra.Transpose || m isa LinearAlgebra.Adjoint
+        elseif m isa LinearAlgebra.Adjoint
+            return false
+        elseif m isa LinearAlgebra.Transpose
+            inView && return false
             m = m.parent
         else
             return true

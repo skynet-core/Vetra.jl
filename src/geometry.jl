@@ -104,16 +104,15 @@ end
 
 """
 `v / length(v)` (vmath `normalize`). Zero vector yields NaN components,
-no guard -- mirrors upstream.
+no guard -- mirrors upstream. `dot` and `normalize` extend the actual
+LinearAlgebra generics (imported in Vetra.jl), so `using Vetra,
+LinearAlgebra` resolves both to the identical binding.
 """
 normalize(v::Vec2) = v / length(v)
 
-# LinearAlgebra entry points (M003): the same formulas through the
-# standard-library generics, so `using LinearAlgebra` users get
-# `dot`/`norm`/`normalize` on Vec2 without a wrapper type.
-LinearAlgebra.dot(a::Vec2, b::Vec2) = dot(a, b)
+# LinearAlgebra entry point (M003): the Euclidean norm through the
+# standard-library generic (same formula as legacy `length`).
 LinearAlgebra.norm(v::Vec2) = length(v)
-LinearAlgebra.normalize(v::Vec2) = normalize(v)
 
 """
 90-degree counter-clockwise perpendicular: `(x, y) -> (-y, x)`. Equals

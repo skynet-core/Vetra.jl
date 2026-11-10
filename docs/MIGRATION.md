@@ -13,21 +13,27 @@ this layer is additive.
   name keeps working.
 - A generic that mixes mutating and allocating methods gets a **typed
   adapter** instead of a const alias, so no `!` name ever advertises a pure
-  or allocating overload: `translate!`, `scale!`, `rotate!`, `transform!`,
+  or allocating overload: `ceil!` (Image-only), `rect!`, `translate!`,
+  `scale!`, `rotate!`, `transform!` (context/recording/path forms),
   `circle!`.
 - `fill!` and `rotate!` are defined as **methods of the Base / LinearAlgebra
   generics** (identical bindings), so `using Vetra` cannot make them
   ambiguous for users of `Base.fill!` or `LinearAlgebra.rotate!`.
+- `dot` and `normalize` **are** the actual LinearAlgebra generics (imported
+  into Vetra before the `Vec2` methods are defined), so `using Vetra,
+  LinearAlgebra` resolves both to the identical binding in either load
+  order.
 
 ## Image constructor and array interface
 
-`Image(width, height)` and `Image(width, height, data)` validate the storage
-contract at the root: positive dimensions, a checked `4 * width * height`
-byte count (the multiplication is range-guarded — `Int` overflow wraps on
-this platform, it does not throw), and — for supplied storage — an exact
-byte count. `newImage` delegates to the 2-arg constructor. The raw 4-arg
-constructor `Image(width, height, data, nbytes)` is low-level and
-unvalidated; prefer the 2-arg and 3-arg forms. (The zero-dimension PPM
+`Image(width, height)` and `Image(width, height, data)` are validated
+**inner constructors** and the only construction path (the `Image` layout
+stays 3 fields: `width`, `height`, `data`). They check positive dimensions,
+a range-checked `4 * width * height` byte count (the guard fires before the
+multiplication, which wraps instead of throwing on this platform), and — for
+supplied storage — an exact data length. `newImage` delegates to the 2-arg
+constructor; every internal construction site (`Base.copy`, the decoders,
+...) goes through the same validated constructors. (The zero-dimension PPM
 decode is now rejected here, at the constructor root.)
 
 `Image` exposes a duck-typed 2-D interface (it is deliberately **not** an
@@ -37,11 +43,22 @@ decode is now rejected here, at the constructor root.)
 |---|---|
 | `img[row, column]` | matrix order — row 1 is the top scanline; returns `ColorRGBX` |
 | `img[i]` | pixel `i` in row-major order (1 = top-left) |
+| `img[end]` | the last linear index — the bottom-right pixel |
 | `img[row, column] = c` | set a `ColorRGBX` pixel (in place) |
+| `img[i] = c` | linear-order mutation (inverse of `img[i]`) |
+| `img[i] = c` for `i` in `eachindex(img)` | matrix-order mutation |
 | `for c in img` | pixels in storage order, top-left first |
 | `fill!(img, c)` | fill the whole image (all three color types) |
-| `size(img)`, `ndims(img)`, `eltype(img)`, `length(img)` | `(height, width)`, `2`, `ColorRGBX`, `width * height` |
+| `size(img)` / `size(img, d)` | `(height, width)`; `d = 1` → height, `d = 2` → width |
+| `axes(img)` / `ndims(img)` / `eltype(img)` / `length(img)` | `(OneTo(height), OneTo(width))`, `2`, `ColorRGBX`, `width * height` |
+| `eachindex(img)` | matrix-order (row, column) positions, column fastest — the same order as the linear index |
 | `copy(img)` | deep copy (validated) |
+
+All orders are consistent: linear index `i`, `eachindex` position
+`(row, column)`, and `img[row, column]` address the same storage position
+(row-major, row 1 first). Out-of-range linear, `eachindex`, or dimension
+access raises `BoundsError`; storage itself is never changed by this
+interface.
 
 **Coordinate conventions.** Array-style access is `img[row, column]`; the
 legacy `getColor(img, x, y)` / `setColor(img, x, y, c)` keep 1-based
@@ -62,12 +79,12 @@ formulas:
 
 | call | legacy equivalent |
 |---|---|
-| `LinearAlgebra.dot(a, b)` | `dot(a, b)` |
+| `dot(a, b)` (LinearAlgebra generic) | `dot(a, b)` — identical binding |
 | `LinearAlgebra.norm(v)` | `length(v)` |
-| `LinearAlgebra.normalize(v)` | `normalize(v)` |
+| `normalize(v)` (LinearAlgebra generic) | `normalize(v)` — identical binding |
 | `LinearAlgebra.det(m)` | `determinant(m)` |
 | `inv(m)` (Base) | `inverse(m)` |
-| `LinearAlgebra.rotate!(ctx, angle)` | `rotate(ctx, angle)` |
+| `rotate!(ctx, angle)` (LinearAlgebra generic) | `rotate(ctx, angle)` |
 
 `normalize` of the zero `Vec2` still yields NaN components (no guard, as
 upstream); a singular `Mat3` still yields ±Inf/NaN from `inv` (no guard, as
@@ -77,12 +94,11 @@ upstream).
 
 `fromColors` / `from_colors` accept any one-based `AbstractMatrix` of
 ColorTypes `RGB`/`RGBA`: plain matrices, `view`s (contiguous or strided,
-no copy), and `transpose`s (rebuilt as a permuted matrix — this platform's
-`Transpose` getindex transforms each indexed element, which a color value
-cannot survive). Views built with **index arrays** (e.g. zero-based or
-permuted selections), **adjoints**, and **views that wrap a transpose**
-raise an explicit `ArgumentError`; `copy` them first. 3-D plane layouts
-are still rejected. The premultiplication rounding is unchanged.
+no copy), and top-level `transpose`s (materialized as a permuted matrix).
+Inputs with **non-one-based axes**, views selected by **index arrays**,
+**adjoints**, and **views built over a transpose** raise an explicit
+`ArgumentError`; `copy` them first. 3-D plane layouts are still rejected.
+The premultiplication rounding is unchanged.
 
 ## Naming table
 
@@ -104,13 +120,13 @@ are still rejected. The premultiplication rounding is unchanged.
 | `gaussianKernel` | `gaussian_kernel` | pure |
 | `resize`, `shadow`, `diff`, `mix`, `width`, `height`, `inside`, `copy` | unchanged | already snake |
 | `fill` (image) | `fill!` | mutating |
-| `getColor` / `setColor` | `getColor` / `set_color!` | mutating (`(x, y)` order) |
+| `getColor` / `setColor` | `get_color` / `set_color!` | `get_color` pure, `(x, y)` order; `set_color!` mutating |
 | `flipHorizontal` / `flipVertical` | `flip_horizontal!` / `flip_vertical!` | mutating |
 | `invert` | `invert!` | mutating |
 | `blur` | `blur!` | mutating |
 | `spread` | `spread!` | mutating |
 | `applyOpacity` | `apply_opacity!` | mutating |
-| `ceil` | `ceil!` | mutating |
+| `ceil` | `ceil!` | mutating (Image-only adapter) |
 | `draw`, `drawTiled`, `drawImage` | `draw!`, `draw_tiled!`, `draw_image!` | mutating |
 
 ### Geometry
@@ -119,8 +135,8 @@ are still rejected. The premultiplication rounding is unchanged.
 |---|---|---|
 | `dot`, `length`, `normalize`, `perpendicular`, `mat3`, `determinant`, `inverse`, `transpose`, `snapToPixels` | `dot`, `length`, `normalize`, `perpendicular`, `mat3`, `determinant`, `inverse`, `transpose`, `snap_to_pixels` | pure (see the Vec2/Mat3 table above for the standard-library entry points) |
 | `lengthSq` | `length_sq` | pure |
-| `translate`, `scale`, `rotate` (geometry constructors), `transform(m, v)` / `transform(m, r)` / `transform(path, mat)` | unchanged | allocating / pure |
-| `rect`, `xy`, `wh`, `left`, `top`, `right`, `bottom`, `circle(pos, r)`, `segment`, `line` | unchanged | allocating |
+| `translate`, `scale`, `rotate` (geometry constructors), `transform(m, v)` / `transform(m, r)` | unchanged | allocating / pure |
+| `xy`, `wh`, `left`, `top`, `right`, `bottom`, `circle(pos, r)`, `segment`, `line`, `rect(x, y, w, h)` / `rect(pos, size)` | unchanged | pure / allocating |
 
 ### Paths
 
@@ -131,6 +147,8 @@ are still rejected. The premultiplication rounding is unchanged.
 | `computeBounds` | `compute_bounds` | pure |
 | `addPath`, `beginPath`, `closePath`, `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `ellipticalArcTo`, `arcTo`, `arc`, `roundedRect`, `ellipse`, `polygon` | `add_path!`, `begin_path!`, `close_path!`, `move_to!`, `line_to!`, `bezier_curve_to!`, `quadratic_curve_to!`, `elliptical_arc_to!`, `arc_to!`, `arc!`, `rounded_rect!`, `ellipse!`, `polygon!` | mutating (Path / Context / RecordingContext) |
 | `circle` (path/context form) | `circle!` | mutating (typed adapter — the geometry constructor `circle(pos, r)` stays un-banged) |
+| `rect` (path/context/recording form) | `rect!` | mutating (typed adapter; the `clockwise` keyword is preserved on the Path form — the `rect(x, y, w, h)` / `rect(pos, size)` constructors stay un-banged) |
+| `transform(path, mat)` | `transform!(path, mat)` | mutating (typed adapter — the point/rect forms stay un-banged) |
 | `fillPath`, `strokePath`, `fillShapes` | `fill_path!`, `stroke_path!`, `fill_shapes!` | mutating |
 | `isPointInPath` | `is_point_in_path` | pure |
 
@@ -161,7 +179,8 @@ are still rejected. The premultiplication rounding is unchanged.
 
 | legacy | new | kind |
 |---|---|---|
-| `newPaint`, `colorStop`, `parseHtmlColor`, `fillGradient` | `new_paint`, `color_stop`, `parse_html_color`, `fill_gradient` | pure |
+| `newPaint`, `colorStop`, `parseHtmlColor` | `new_paint`, `color_stop`, `parse_html_color` | pure |
+| `fillGradient` | `fill_gradient!` | mutating (fills the image) |
 
 ### Text
 
@@ -182,7 +201,7 @@ are still rejected. The premultiplication rounding is unchanged.
 | legacy | new | kind |
 |---|---|---|
 | `PictureRecorder`, `RecordingContext` | unchanged | constructors |
-| `finishRecording` | `finish_recording` | allocating (returns a `Picture`) |
+| `finishRecording` | `finish_recording!` | mutating — returns a `Picture` and **consumes** the recorder (drawing on it afterwards raises `ArgumentError`) |
 | `drawPicture` | `draw_picture!` | mutating |
 
 ### IO and interop

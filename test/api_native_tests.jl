@@ -19,10 +19,21 @@ using Test
 using Vetra
 using LinearAlgebra
 using ColorTypes
+using TOML
 
 const n8 = ColorTypes.N0f8
 const FONT_DIR = joinpath(@__DIR__, "..", ".reference", "upstream", "tests", "fonts")
 const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
+
+# A one-based AbstractMatrix with offset axes (local wrapper for the
+# fromColors axes-validation tests; no dependency).
+struct OffsetMatrix{T} <: AbstractMatrix{T}
+    d::Matrix{T}
+    OffsetMatrix(d::Matrix{T}) where {T} = new{T}(d)
+end
+Base.size(A::OffsetMatrix) = size(A.d)
+Base.axes(A::OffsetMatrix) = (0:size(A, 1), 0:size(A, 2))
+Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
 
 @testset "M003 Julia-native API" begin
 
@@ -38,7 +49,6 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
             (with_fallback, withFallback), (shape_text, shapeText),
             (layout_paragraph, layoutParagraph),
             (paragraph_metrics, paragraphMetrics),
-            (finish_recording, finishRecording),
             (new_font, newFont), (new_span, newSpan),
             (new_paragraph, newParagraph), (new_paint, newPaint),
             (new_path, newPath), (color_stop, colorStop),
@@ -69,7 +79,8 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
             (encode_jpeg, encodeJPEG), (encode_webp, encodeWebP),
             (encode_image, encodeImage), (encode_base64, encodeBase64),
             (decode_base64, decodeBase64), (to_colors, toColors),
-            (from_colors, fromColors), (get_transform, getTransform),
+            (from_colors, fromColors), (get_color, getColor),
+            (get_transform, getTransform),
             (get_line_dash, getLineDash), (get_rgba_smooth, getRgbaSmooth),
             (get_advance, getAdvance), (get_glyph_path, getGlyphPath),
             (get_kerning_adjustment, getKerningAdjustment),
@@ -104,7 +115,7 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
             (miter_limit_to_angle, miterLimitToAngle),
             (angle_to_miter_limit, angleToMiterLimit),
             (default_miter_limit, defaultMiterLimit),
-            (fill_gradient, fillGradient), (snap_to_pixels, snapToPixels),
+            (snap_to_pixels, snapToPixels),
             (srgb, sRBG),
         ]
         bang_pairs = [
@@ -129,17 +140,25 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
             (spread!, spread), (invert!, invert),
             (flip_horizontal!, flipHorizontal),
             (flip_vertical!, flipVertical), (apply_opacity!, applyOpacity),
-            (ceil!, ceil), (set_color!, setColor),
+            (set_color!, setColor),
             (write_file!, writeFile), (write_ppm!, writePPM),
             (write_svg!, writeSvg), (write_pdf!, writePdf),
+            (fill_gradient!, fillGradient), (finish_recording!, finishRecording),
         ]
         for (newname, oldname) in vcat(snake_pairs, bang_pairs)
             @test newname === oldname
         end
-        # fill! extends the Base generic (identical binding, so `using
-        # Vetra` cannot make fill! ambiguous for Base-array users).
+        # fill! and rotate! extend the Base / LinearAlgebra generics
+        # (identical bindings, so `using Vetra` cannot make them ambiguous
+        # for stdlib users); dot and normalize ARE the LinearAlgebra
+        # generics (the legacy names were re-bound via import).
         @test fill! === Base.fill!
+        @test rotate! === LinearAlgebra.rotate!
+        @test dot === LinearAlgebra.dot
+        @test normalize === LinearAlgebra.normalize
         # adapters are distinct generic functions (forwarders, not const).
+        @test ceil! !== ceil
+        @test rect! !== rect
         @test translate! !== translate
         @test scale! !== scale
         @test rotate! !== rotate
@@ -315,6 +334,10 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
         scale!(r, 1.5, 2.5)
         rotate!(r, 0.3)
         transform!(r, mat3())
+        transform!(p, mat3())
+        rect!(r, 1.5, 2.5, 3.5, 4.5)
+        rect!(c, 1.5, 2.5, 3.5, 4.5)
+        rect!(p, 1.5, 2.5, 3.5, 4.5; clockwise = false)
         circle!(c, 1.5, 2.5, 3.5)
         circle!(r, 1.5, 2.5, 3.5)
         circle!(p, 1.5, 2.5, 3.5)
@@ -324,6 +347,106 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
         circle!(p, cc)
         @test getTransform(c) != mat3()
         @test r.mat != mat3()
+    end
+
+    @testset "bang classification corrections (M003 review)" begin
+        # ceil!: Image-only; a scalar behind a bang name is a MethodError,
+        # not a pure allocating call.
+        ci1 = newImage(9, 7)
+        ci2 = newImage(9, 7)
+        for y in 1:7, x in 1:9
+            setColor(ci1, x, y, ColorRGBX(UInt8(20x), UInt8(20y), 0x30, 0xff))
+            setColor(ci2, x, y, ColorRGBX(UInt8(20x), UInt8(20y), 0x30, 0xff))
+        end
+        ceil(ci1)
+        ceil!(ci2)
+        @test ci1.data == ci2.data
+        @test_throws MethodError ceil!(1.2f0)
+        # transform!(path, mat): the in-place path mutator.
+        t1 = newPath()
+        t2 = newPath()
+        for p in (t1, t2)
+            moveTo(p, 1f0, 1f0)
+            lineTo(p, 5f0, 2f0)
+            closePath(p)
+        end
+        transform(t1, translate(Vec2(3f0, 1f0)))
+        transform!(t2, translate(Vec2(3f0, 1f0)))
+        @test computeBounds(t1) == computeBounds(t2)
+        # rect!: Path / Context / RecordingContext mutators, clockwise
+        # keyword preserved on the Path form.
+        r1 = newPath()
+        r2 = newPath()
+        rect(r1, 1f0, 1f0, 4f0, 3f0; clockwise = false)
+        rect!(r2, 1f0, 1f0, 4f0, 3f0; clockwise = false)
+        @test computeBounds(r1) == computeBounds(r2)
+        rc1 = Context(newImage(9, 7))
+        rc2 = Context(newImage(9, 7))
+        rect(rc1, 1f0, 1f0, 3f0, 2f0)
+        rect!(rc2, 1f0, 1f0, 3f0, 2f0)
+        fill(rc1)
+        fill!(rc2)
+        @test rc1.image.data == rc2.image.data
+        rr1 = PictureRecorder(9, 7)
+        rr2 = PictureRecorder(9, 7)
+        rect!(rr1.ctx, 1.5, 1.5, 2.5, 3.5)
+        rect(rr2.ctx, 1.5, 1.5, 2.5, 3.5)
+        stroke!(rr1.ctx)
+        stroke(rr2.ctx)
+        ir1 = newImage(9, 7)
+        ir2 = newImage(9, 7)
+        drawPicture(ir1, finishRecording(rr1))
+        drawPicture(ir2, finishRecording(rr2))
+        @test ir1.data == ir2.data
+        # fill!(rctx) current-path overloads, actual recorded output.
+        function recFill(bang::Bool)
+            rec = PictureRecorder(8, 8)
+            r = rec.ctx
+            beginPath(r)
+            moveTo(r, 1f0, 1f0)
+            lineTo(r, 6f0, 1f0)
+            lineTo(r, 6f0, 5f0)
+            closePath(r)
+            r.fillStyle = Paint(rgba(200, 0, 0, 255))
+            if bang
+                fill!(r)
+                fill!(r, EvenOdd)
+            else
+                fill(r)
+                fill(r, EvenOdd)
+            end
+            return finishRecording(rec)
+        end
+        fr1 = newImage(8, 8)
+        fr2 = newImage(8, 8)
+        drawPicture(fr1, recFill(false))
+        drawPicture(fr2, recFill(true))
+        @test fr1.data == fr2.data
+        @test any(getColor(fr1, x, y) != ColorRGBX(0, 0, 0, 0)
+                  for y in 1:8, x in 1:8)
+        # fill_gradient!: mutating image fill.
+        function gradPaint()
+            p = Paint(LinearGradientPaint)
+            p.gradientHandlePositions = [Vec2(0f0, 0f0), Vec2(4f0, 0f0)]
+            p.gradientStops = [colorStop(rgb(0, 0, 0), 0f0),
+                               colorStop(rgb(255, 255, 255), 1f0)]
+            return p
+        end
+        gg1 = newImage(4, 4)
+        gg2 = newImage(4, 4)
+        fillGradient(gg1, gradPaint())
+        fill_gradient!(gg2, gradPaint())
+        @test gg1.data == gg2.data
+        # finish_recording!: consumes the recorder.
+        fr3 = PictureRecorder(8, 8)
+        rect!(fr3.ctx, 1f0, 1f0, 2f0, 2f0)
+        fill!(fr3.ctx)
+        finish_recording!(fr3)
+        @test_throws ArgumentError finishRecording(fr3)
+        # get_color: the snake_case pixel getter.
+        gi = newImage(3, 2)
+        setColor(gi, 2, 1, ColorRGBX(0x12, 0x34, 0x56, 0xff))
+        @test get_color(gi, 2, 1) == getColor(gi, 2, 1)
     end
 
     @testset "image ops: legacy vs native bytes" begin
@@ -397,6 +520,9 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
     end
 
     @testset "Image constructor trust boundary" begin
+        # 3-field layout; the inner constructors are the only construction
+        # path (no raw/unvalidated constructor exists).
+        @test fieldnames(Image) == (:width, :height, :data)
         @test_throws ArgumentError newImage(0, 5)
         @test_throws ArgumentError newImage(5, 0)
         @test_throws ArgumentError newImage(-3, 5)
@@ -404,8 +530,11 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
         @test_throws ArgumentError newImage(1 << 61, 2)
         @test_throws ArgumentError Image(1 << 61, 2)
         @test_throws ArgumentError Image(0, 4, Vector{UInt8}())
+        @test_throws ArgumentError Image(2, 2, Vector{UInt8}())
+        @test_throws ArgumentError Image(-1, 2, Vector{UInt8}())
         @test_throws ArgumentError Image(4, 4, Vector{UInt8}(undef, 63))
         @test_throws ArgumentError Image(4, 4, Vector{UInt8}(undef, 65))
+        @test_throws MethodError Image(4, 4, Vector{UInt8}(undef, 64), 64)
         d = Vector{UInt8}(1:64)
         img = Image(4, 4, d)
         @test img.data === d
@@ -427,9 +556,19 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
                 UInt8(x + y), 0xff))
         end
         @test size(img) == (3, 5)
+        @test size(img, 1) == 3 && size(img, 2) == 5
+        @test_throws BoundsError size(img, 3)
         @test ndims(img) == 2
         @test eltype(img) === ColorRGBX
         @test length(img) == 15
+        @test axes(img) == (Base.OneTo(3), Base.OneTo(5))
+        # img[end] = the last linear index = the bottom-right pixel
+        @test img[end] == getColor(img, 5, 3)
+        # eachindex: matrix-order positions, same order as the linear
+        # index and the storage-order iteration
+        @test length(collect(eachindex(img))) == 15
+        @test first(eachindex(img)) == CartesianIndex(1, 1)
+        @test last(eachindex(img)) == CartesianIndex(3, 5)
         # [row, column] maps onto the stored (x, y) pixel
         for y in 1:3, x in 1:5
             @test img[y, x] == getColor(img, x, y)
@@ -451,6 +590,16 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
         img[2, 3] = ColorRGBX(0x11, 0x22, 0x33, 0x44)
         @test getColor(img, 3, 2) == ColorRGBX(0x11, 0x22, 0x33, 0x44)
         @test_throws BoundsError setindex!(img, ColorRGBX(1, 1, 1, 1), 0, 1)
+        # linear mutation: img[k] = c is the inverse of img[k]
+        img[6] = ColorRGBX(0x55, 0x66, 0x77, 0x88)
+        @test getColor(img, 1, 2) == ColorRGBX(0x55, 0x66, 0x77, 0x88)
+        @test_throws BoundsError setindex!(img, ColorRGBX(1, 1, 1, 1), 16)
+        @test_throws BoundsError setindex!(img, ColorRGBX(1, 1, 1, 1), 0)
+        # eachindex editing
+        for i in eachindex(img)
+            img[i] = ColorRGBX(0xaa, 0xbb, 0xcc, 0xdd)
+        end
+        @test getColor(img, 5, 3) == ColorRGBX(0xaa, 0xbb, 0xcc, 0xdd)
         # iteration in storage order
         @test [c for c in img] ==
             [getColor(img, (k - 1) % 5 + 1, (k - 1) ÷ 5 + 1) for k in 1:15]
@@ -561,6 +710,9 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
         # index-array views are rejected explicitly
         @test_throws ArgumentError fromColors(view(big, [2, 1], [1, 2]))
         @test_throws ArgumentError fromColors(view(big, [1, 2], [3, 4, 5]))
+        # offset (non-one-based) axes are rejected before kernel access
+        # (distinct from index-array selections)
+        @test_throws ArgumentError fromColors(OffsetMatrix(big))
         # 3-D plane layouts and non-color eltypes are still rejected
         @test_throws ArgumentError fromColors(zeros(RGB{n8}, 2, 3, 4))
         @test_throws ArgumentError fromColors(zeros(UInt8, 2, 3))
@@ -635,28 +787,10 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
     end
 
     @testset "package metadata (weakdeps + compat)" begin
-        # Pkg is not loadable inside the Pkg.test sandbox; read the flat
-        # Project.toml sections directly.
-        function parse_project_toml(path)
-            sections = Dict{String, Dict{String, String}}()
-            cur = nothing
-            for raw in readlines(path)
-                line = strip(raw)
-                (isempty(line) || startswith(line, '#')) && continue
-                if startswith(line, '[')
-                    cur = string(line)
-                    sections[cur] = Dict{String, String}()
-                    continue
-                end
-                if cur !== nothing && occursin('=', line)
-                    k, v = split(line, '=', limit = 2)
-                    sections[cur][strip(k)] = strip(strip(v), '"')
-                end
-            end
-            return sections
-        end
-        proj = parse_project_toml(joinpath(@__DIR__, "..", "Project.toml"))
-        @test haskey(proj, "[weakdeps]")
+        # TOML stdlib in the test sandbox (string keys); Pkg itself is not
+        # loadable there.
+        proj = TOML.parsefile(joinpath(@__DIR__, "..", "Project.toml"))
+        @test haskey(proj, "weakdeps")
         weak = Dict(
             "ColorTypes" => "3da002f7-5984-5a60-b8a6-cbb66c0b333f",
             "HarfBuzz_jll" => "2e76f6c2-a576-52d4-95c1-20adfe4de566",
@@ -665,14 +799,15 @@ const ROBO = joinpath(FONT_DIR, "Roboto-Regular_1.ttf")
             "WebP" => "e3aaa7dc-3e4b-44e0-be63-ffb868ccd7c1",
             "XML" => "72c71f33-b9b6-44de-8c94-c961784809e2")
         for (name, uuid) in weak
-            @test get(proj["[weakdeps]"], name, nothing) === uuid
+            @test get(proj["weakdeps"], name, nothing) === uuid
         end
-        @test proj["[compat]"]["julia"] == "1.10"
+        @test proj["compat"]["julia"] == "1.10"
         for name in keys(weak)
-            @test haskey(proj["[compat]"], name)
+            @test haskey(proj["compat"], name)
         end
         # runtime deps are stdlib only (optional providers are weakdeps,
         # loaded lazily on first use, D014/D015/D019/D024/D028).
-        @test sort(collect(keys(proj["[deps]"]))) == ["Libdl", "LinearAlgebra"]
+        @test sort(collect(keys(proj["deps"]))) == ["Libdl", "LinearAlgebra"]
+        @test "TOML" in proj["targets"]["test"]
     end
 end

@@ -8,11 +8,12 @@
 #
 # Naming rules (bounded contract, tasks/MODERNIZATION.md):
 # - a `!` name covers exactly the mutating generics; a generic that mixes
-#   mutating and allocating methods gets a typed adapter (translate!,
-#   scale!, rotate!, transform!, circle!) instead of a const alias, so no
-#   `!` name advertises a pure or allocating overload;
-# - `fill!` is defined on the Base generic `fill!` (identical binding) so
-#   `using Vetra` cannot make `fill!` ambiguous for Base-array users;
+#   mutating and allocating methods gets a typed adapter (ceil!, rect!,
+#   translate!, scale!, rotate!, transform!, circle!) instead of a const
+#   alias, so no `!` name advertises a pure or allocating overload;
+# - `fill!` and `rotate!` are defined on the Base / LinearAlgebra generics
+#   (identical bindings) so `using Vetra` cannot make them ambiguous for
+#   stdlib users; `ceil!` is a separate Image-only generic;
 # - allocating/pure entry points get snake_case names without `!`.
 
 # --- mutating entry points (bang API) ---
@@ -29,6 +30,8 @@ Base.fill!(ctx::Context, path::Path, windingRule = NonZero) =
 Base.fill!(ctx::Context, windingRule = NonZero) = fill(ctx, windingRule)
 Base.fill!(rctx::RecordingContext, path::Path, windingRule = NonZero) =
     fill(rctx, path, windingRule)
+Base.fill!(rctx::RecordingContext, windingRule = NonZero) =
+    fill(rctx, windingRule)
 
 const stroke! = stroke
 const save! = save
@@ -72,17 +75,25 @@ const invert! = invert
 const flip_horizontal! = flipHorizontal
 const flip_vertical! = flipVertical
 const apply_opacity! = applyOpacity
-const ceil! = ceil
 const set_color! = setColor
 const write_file! = writeFile
 const write_ppm! = writePPM
 const write_svg! = writeSvg
 const write_pdf! = writePdf
+const fill_gradient! = fillGradient
+# Consumes the recorder (it cannot be drawn again after finishing).
+const finish_recording! = finishRecording
+
+# ceil! is an Image-only adapter (a distinct generic from ceil): the
+# mutating image form gets the bang name, nothing else.
+function ceil!(image::Image)
+    return ceil(image)
+end
 
 # --- typed adapters: generics that mix mutating and allocating methods ---
-# Context/RecordingContext mutators only; the geometry constructors
-# translate(v) / scale(v) / rotate(angle) and the pure transform(m, v) /
-# transform(m, r) / transform(path, mat) stay un-banged.
+# Mutating forms only; the geometry constructors translate(v) / scale(v) /
+# rotate(angle) / rect(...) and the pure transform(m, v) / transform(m, r)
+# stay un-banged.
 
 function translate!(ctx::Context, v::Vec2)
     return translate(ctx, v)
@@ -121,6 +132,46 @@ function transform!(ctx::Context, m::Mat3)
 end
 function transform!(rctx::RecordingContext, m::Mat3)
     return transform(rctx, m)
+end
+
+# transform! also covers the in-place path mutator (transform(path, mat));
+# the point/rect forms transform(m, v) / transform(m, r) stay un-banged.
+function transform!(path::Path, mat::Mat3)
+    return transform(path, mat)
+end
+
+# rect! covers the Path / Context / RecordingContext mutators; the geometry
+# constructors rect(x, y, w, h) / rect(pos, size) stay un-banged. The
+# `clockwise` keyword is preserved where the legacy form supports it.
+function rect!(path::Path, r::Rect; clockwise::Bool = true)
+    return rect(path, r; clockwise = clockwise)
+end
+function rect!(path::Path, x::Float32, y::Float32, w::Float32, h::Float32;
+    clockwise::Bool = true)
+    return rect(path, x, y, w, h; clockwise = clockwise)
+end
+function rect!(path::Path, x::Real, y::Real, w::Real, h::Real;
+    clockwise::Bool = true)
+    return rect(path, x, y, w, h; clockwise = clockwise)
+end
+function rect!(ctx::Context, r::Rect)
+    return rect(ctx, r)
+end
+function rect!(ctx::Context, x::Float32, y::Float32, w::Float32, h::Float32)
+    return rect(ctx, x, y, w, h)
+end
+function rect!(ctx::Context, x::Real, y::Real, w::Real, h::Real)
+    return rect(ctx, x, y, w, h)
+end
+function rect!(rctx::RecordingContext, r::Rect)
+    return rect(rctx, r)
+end
+function rect!(rctx::RecordingContext, x::Float32, y::Float32, w::Float32,
+    h::Float32)
+    return rect(rctx, x, y, w, h)
+end
+function rect!(rctx::RecordingContext, x::Real, y::Real, w::Real, h::Real)
+    return rect(rctx, x, y, w, h)
 end
 
 # circle! covers the Path / Context / RecordingContext mutators only; the
@@ -173,7 +224,6 @@ const with_fallback = withFallback
 const shape_text = shapeText
 const layout_paragraph = layoutParagraph
 const paragraph_metrics = paragraphMetrics
-const finish_recording = finishRecording
 const new_font = newFont
 const new_span = newSpan
 const new_paragraph = newParagraph
@@ -217,6 +267,7 @@ const encode_base64 = encodeBase64
 const decode_base64 = decodeBase64
 const to_colors = toColors
 const from_colors = fromColors
+const get_color = getColor
 const get_transform = getTransform
 const get_line_dash = getLineDash
 const get_rgba_smooth = getRgbaSmooth
@@ -262,6 +313,5 @@ const to_premultiplied_alpha = toPremultipliedAlpha
 const miter_limit_to_angle = miterLimitToAngle
 const angle_to_miter_limit = angleToMiterLimit
 const default_miter_limit = defaultMiterLimit
-const fill_gradient = fillGradient
 const snap_to_pixels = snapToPixels
 const srgb = sRBG
