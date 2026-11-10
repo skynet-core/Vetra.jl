@@ -50,6 +50,9 @@ jobs:
         uses: vmactions/freebsd-vm@v1
         with:
           release: ${{ matrix.release }}
+          # The VM image ships no git (scripts/fetch_upstream.jl needs
+          # it); ca_root_nss provides the CA store for TLS downloads.
+          prepare: pkg install -y git ca_root_nss
       - name: Install official Julia (checksum-pinned)
         shell: freebsd {0}
         run: |
