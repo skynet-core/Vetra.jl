@@ -6,15 +6,19 @@
 port-document cleanup, rewritten interactive GitHub Pages documentation, and
 working Linux/Windows/macOS/FreeBSD tests and benchmarks. Follow
 `tasks/MODERNIZATION.md` M001–M007 in order. GPT-6 Astra validates; Qwen3.8
-implements. M001 audit and fresh baseline gate are complete; M002 is active.
+implements. M001/M002 are complete; M003 Julia-native API work is active.
 Baseline `415c7a0` was clean and already pushed. Existing remote CI fails;
 Pages workflow hosting is enabled but there is no deployment yet.
 M002 implementation and review fixes are integrated (`95185c3`, `8bfd7ae`).
-Coordinator Julia 1.10.13 full gate and benchmark smoke pass. Concurrent gates
-exposed and fixed a shared Chromium fixture directory; reruns are pending.
+Coordinator full gates now pass concurrently on Julia 1.13.3 (95.82%) and
+1.10.13 (95.86%), after fixing a shared Chromium fixture directory. Benchmark
+smoke passes. Qwen's sole implementation worktree is now `julia-native-api`
+(branch `modernization/native-api`); old M002 worktree is validation-only.
 Remote run 42809642886 passed all six Linux/Windows/macOS tests and three
 benchmark jobs. FreeBSD booted/installed Julia, then failed for missing Git;
-VM preparation is fixed and awaiting rerun. Do not mark M002 done yet.
+VM preparation is fixed; run 42811680553 passed all 10 jobs, including FreeBSD's
+full test/coverage gate (95.32%) and benchmark smoke. Four OS-specific benchmark
+artifacts are present. M002 acceptance is satisfied at revision `d2d44fa`.
 Keep registration user-owned. Preserve licenses, attribution, regression
 fixtures and test/benchmark/docs infrastructure during cleanup.
 

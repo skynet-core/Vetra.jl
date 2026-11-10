@@ -9,8 +9,8 @@ scope, ownership, dependencies, and acceptance checks:
 | Task | Goal | Status |
 | --- | --- | --- |
 | M001 | Baseline, code audit, detailed task contract | done |
-| M002 | Reliable tests and four-platform test/benchmark CI | in_progress |
-| M003 | Julia-native API and package integration | blocked on M002 |
+| M002 | Reliable tests and four-platform test/benchmark CI | done (all 10 CI jobs passed) |
+| M003 | Julia-native API and package integration | in_progress |
 | M004 | Correctness audit and reproduced bug fixes | blocked on M003 |
 | M005 | New README, interactive docs, GitHub Pages publication | blocked on M004 |
 | M006 | Remove obsolete port scaffolding | blocked on M005 |
@@ -26,6 +26,13 @@ Benchmarks passed. Pages workflow hosting is enabled, awaiting deployment.
 M002 Qwen worktree:
 `/home/vasyl/.local/share/opencode/worktree/e72bb3/julia-native-modernization`
 (branch `modernization/qwen`); coordinator owns shared task/handoff documents.
+M002 coordinator gates now pass concurrently on Julia 1.13.3 and 1.10.13;
+Linux/Windows/macOS remote tests and benchmarks passed. FreeBSD prerequisite
+fix passed in [run 42811680553](https://github.com/skynet-core/Vetra.jl/actions/runs/42811680553),
+including full tests/coverage and benchmark smoke, with all four benchmark
+artifacts uploaded. Sole implementation writer is now Qwen on M003 at
+`/home/vasyl/.local/share/opencode/worktree/e72bb3/julia-native-api`
+(branch `modernization/native-api`).
 
 ## Historical board (retired after M006 consolidation)
 

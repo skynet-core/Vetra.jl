@@ -122,13 +122,24 @@ benchmark checks. `actionlint .github/workflows/ci.yml` and `git diff --check`
 pass. Coordinator Julia 1.10.13 gate passed (95.86%, 7697/8029); benchmark
 smoke passed. Concurrent local full gates exposed a shared Chromium fixture
 directory: the stable run failed when the other run removed it. Fixed with
-`mktempdir(homedir(); prefix="vetra-svgtest-")`; concurrent reruns are pending.
+`mktempdir(homedir(); prefix="vetra-svgtest-")`; concurrent coordinator reruns
+passed: Julia 1.13.3 95.82% (7603/7935), Julia 1.10.13 95.86% (7697/8029).
+Exact commands: `julia --startup-file=no --project=. scripts/check.jl` and
+`julia +1.10 --startup-file=no --project=. scripts/check.jl` in separate worktrees.
+Logs: `/tmp/opencode/vetra-m002-concurrent-{stable,1.10}.log`.
 
 [Remote run 42809642886](https://github.com/skynet-core/Vetra.jl/actions/runs/42809642886):
 all six Linux/Windows/macOS test jobs and three benchmark jobs passed. FreeBSD
 VM boot and checksum-verified Julia installation passed; fixture fetch failed
 because Git was absent. Added VM preparation (`pkg install -y git ca_root_nss`).
-Remote rerun pending: M002 is not yet complete.
+**M002 complete:** [remote rerun 42811680553](https://github.com/skynet-core/Vetra.jl/actions/runs/42811680553)
+passed all 10 jobs at revision `d2d44fa`. Full tests/coverage passed on Julia
+1.10.13 and stable on Linux, Windows, macOS; FreeBSD 14.3 x86_64 passed the full
+Julia 1.10.13 gate (95.32%, 7653/8029). Stable CI coverage was 95.26%
+(7559/7935); local external-renderer checks explain the higher local coverage.
+All four benchmark artifacts exist, nonempty and unexpired, verified with
+`gh api repos/skynet-core/Vetra.jl/actions/runs/42811680553/artifacts`.
+Full CI log: `/tmp/opencode/vetra-m002-ci-success.log`.
 
 ## M003 — Julia-native public API and package integration
 
