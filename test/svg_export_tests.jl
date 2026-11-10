@@ -674,9 +674,11 @@
 
         function check_chromium(chromium)
             # Non-hidden home subdir: the snap chromium sandbox denied
-            # hidden directories (ERR_ACCESS_DENIED).
-            workdir = joinpath(homedir(), "vetra-svgtest")
-            mkpath(workdir)
+            # hidden directories (ERR_ACCESS_DENIED). The directory name
+            # is unique per process, so concurrent test runs that share
+            # the home directory (separate worktrees) can no longer
+            # delete each other's fixture files.
+            workdir = mktempdir(homedir(); prefix = "vetra-svgtest-")
             try
                 lin = Paint(LinearGradientPaint)
                 lin.gradientHandlePositions = [Vec2(0f0, 0f0),
