@@ -324,14 +324,64 @@ and SVG operations in the codec-enabled test environment.
    **Not supported** (v1, documented limits): UAX#14 mid-word/justified
    breaking (long unbreakable runs split character-wise at overflow — the
    pinned engine behavior), Unicode shaping and bidirectional text
-   (RTL raises `ArgumentError("RTL requires the T029 shaper")`; complex
-   scripts draw unshaped), regional indicators/skin tones/emoji beyond
+   (superseded by the additive T029 shaper below — RTL no longer raises;
+   complex scripts in pure-LTR paragraphs still draw unshaped, a named
+   v1 engagement limit), regional indicators/skin tones/emoji beyond
    the cluster subset (one cluster per codepoint). Evidence:
-   test/paragraph_tests.jl (22,760 assertions: hand-derived line boxes
+   test/paragraph_tests.jl (22,761 assertions: hand-derived line boxes
    from Roboto hhea/hmtx, cluster cases, wrap/NBSP/char-split invariants,
    alignment offsets, clip + ellipsis pixel checks, image + context
    render, fallback cycles/termination); large-paragraph timing in
    tasks/T028-paragraph-layout.md.
+ - Optional Unicode shaping and bidirectional text: `shapeText`/
+   `ShapedGlyph`, `glyphPathByGid` (additive GID -> outline), and the
+   `ParagraphLayout.shaped` logical->visual permutation
+   (`src/formats/shaping.jl`; D033, docs/TEXT_LAYOUT.md §5/§7) —
+   **implemented** (T029): an opt-in shaper over the
+   `HarfBuzz_jll` artifact (harfbuzz 15.1.0) via a thin `ccall` surface
+   (blob/face/font/buffer/`hb_shape`), loaded lazily on first shaped
+   call (core-only and legacy-LTR installs never load it; a missing
+   provider raises the explicit `ErrorException("Shaping support is
+   opt-in: ...")`). Engagement: `RightToLeft` paragraphs and LTR
+   paragraphs containing strong-RTL codepoints shape; pure-LTR complex
+   scripts keep the T028 isolated-forms `typeset` rendering (named
+   limit). Bidi is a documented UAX#9 simplification: strong runs take
+   their own direction, neutrals/WS/controls/astral take the base,
+   L2E digit runs keep LTR order under an RTL base, punctuation
+   mirrors (Bidi_Mirroring), and the logical->visual permutation is
+   exposed on `ParagraphLayout.shaped` (cluster indices stay logical).
+   RTL placement uses the harfbuzz cairo-bridge pen model (forward pen
+   in buffer order for both directions). Coverage pinned against an
+   independent reference: system libharfbuzz **12.3.2** through the C
+   driver `tools/oracle/hb_refshape.c` (no Julia in the loop), 10 cases
+   in `test/reference/shaping_reference.tsv` over the pinned
+   `NotoSansArabic-Regular.ttf` / `NotoSansDevanagari-Regular.ttf`
+   (OFL 1.1, `test/fixtures/`) and `Roboto-Regular_1.ttf` (Apache-2.0);
+   the JLL 15.1.0 and the 12.3.2 reference agree on all 10 cases.
+   Demonstrates Arabic contextual joining (joined GIDs differ from the
+   isolated cmap), a Devanagari conjunct (k + virama + ssa -> one
+   ligature GID), a Latin ligature (Roboto `fi` -> one GID), combining
+   marks (cluster merge, no silent drop), mixed RTL/LTR digits,
+   missing-glyph -> `.notdef` (gid 0) with the font's `.notdef`
+   advance, and RTL/LTR wrapping + alignment. **Not supported** (v1,
+   documented limits): explicit bidi controls (RLO/LRI/...) inside
+   text, full UAX#9 neutral-run analysis beyond segment reversal,
+   vertical text, CFF/TTC/color fonts (rejected at parse, as T028),
+   and shaped `EllipsisOverflow` (renders as plain clip — the ellipsis
+   pass is `typeset`-based). Evidence: test/shaping_tests.jl (223
+   assertions: 10 cases vs the pinned reference, `glyphPathByGid`,
+   punctuation mirroring, hand-derived bidi permutations, RTL
+   placement (cairo-bridge pen model), joined-vs-isolated forms,
+   Indic conjuncts, ligatures, combining/missing glyphs, engagement);
+   codec_loading_tests.jl (core-only + provider legs); the
+   multilingual cookbook card (recipe 15).
+   - Also fixed (T029): the T028 vendored UAX#29 cluster tables
+     (`_CLUSTER_EXTEND`/`_CLUSTER_MC` in `paragraph.jl`) had a range
+     misalignment that put base letters (Devanagari 0905/0915/0936,
+     Myanmar 1000..100B) inside both tables; regenerated from the
+     pinned Unicode 16.0.0 sources by
+     `tools/oracle/gen_cluster_tables.py` and round-trip verified
+     codepoint-exact (220 extend / 112 mc BMP ranges).
 
 ## SIMD
 

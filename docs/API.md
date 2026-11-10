@@ -126,7 +126,8 @@ arrays but shares its referenced image.
 `readTypeface`, `readFont`, `newFont`, `newSpan`, `typeset`, `layoutBounds`,
 `computePaths`, `fillText`, `strokeText`, and `measureText` cover native
 TTF/glyf parsing, metrics, kerning, layout, and glyph drawing. CFF outlines,
-TTC collections, SVG fonts, and general Unicode shaping are unsupported.
+TTC collections, and SVG fonts are unsupported. Unicode shaping is optional
+and opt-in (`shapeText`/`ShapedGlyph`, `glyphPathByGid` — see below).
 
 Paragraph layout is **implemented** (T028; D031, docs/TEXT_LAYOUT.md):
 additive `Paragraph`/`newParagraph`, `layoutParagraph`/`ParagraphLayout`
@@ -140,13 +141,23 @@ line height, existing alignment enums (effective on constrained
 dimensions), styled runs (existing `Span`/`Font`), fallback via the
 existing `Typeface.fallbacks` chain (cycle-checked) with a
 `.notdef`/zero-advance missing-glyph policy, metrics, and vendored
-UAX#29-subset grapheme clusters (codepoint-indexed). Shaping and
-bidirectional text are specified (shaper interface, GID → outline
-mapping, UAX#9 direction model) but **implementation is provider-gated
-(T029 blocked)**: no maintained Julia shaping package exists in the
-registry as of 2026-11-09. Until then, RTL paragraphs raise a named
-`ArgumentError` and complex scripts draw without joining. Legacy
-single-line behavior is unchanged.
+UAX#29-subset grapheme clusters (codepoint-indexed).
+
+Shaping and bidirectional text are **implemented** (T029; D033,
+docs/TEXT_LAYOUT.md §5): opt-in via the `HarfBuzz_jll` extra (harfbuzz
+15.1.0, a thin `ccall` surface loaded lazily on first shaped call — a
+missing provider raises the explicit `ErrorException("Shaping support is
+opt-in: ...")`). `shapeText(tf, codepoints; script, direction,
+language)` returns per-cluster `Vector{Vector{ShapedGlyph}}` (gid,
+advance, xOffset, yOffset in font units, logical cluster order);
+`glyphPathByGid(tf, gid)` maps a shaped GID to the native outline (no
+cmap; out-of-range/0 → `.notdef`). Paragraph engagement: `RightToLeft`
+paragraphs and LTR paragraphs containing strong-RTL codepoints lay out
+through the shaper (contextual joining, UAX#9-simplified direction,
+L2E digit runs, mirrored punctuation; the logical→visual permutation is
+`ParagraphLayout.shaped`); pure-LTR complex scripts keep the T028
+isolated-forms `typeset` rendering (named v1 limit). Legacy single-line
+behavior is unchanged.
 
 `readImage`/`decodeImage` detect formats by contents; `writeFile` selects by
 extension, and `encodeImage` accepts a `FileFormat`. PNG read/write requires

@@ -1,6 +1,6 @@
 # Current handoff
 
-Updated: 2026-11-07
+Updated: 2026-11-10
 
 ## State
 
@@ -62,9 +62,9 @@ has no quadratic path operator), and a documented whole-picture
 `rasterFallback`; the SVG arc x-axis rotation emission was fixed to
 degrees verbatim along the way. Verified with hand-derived geometry
 under gs 10.06.0 + poppler/pdftoppm 26.01.0. Full gate:
-**96.32% coverage (7110/7382)** (T032). No ready rows: T019 awaits an
-explicit publication request; T029 awaits the provider decision,
-D031 §6, now that T028 is done. T013–T032
+**95.83% coverage (7603/7934)** (T029). No ready rows: T019 awaits an
+explicit publication request (user-owned — the user registers the
+package directly). T013–T032
 are committed and pushed to origin main (protocol: commit+push after each
 task); the package is unregistered (General `P/Vetra` = 404, re-checked
 2026-11-07).
@@ -137,10 +137,36 @@ them before loading Vetra, or restart Julia after installation.
 
 ## Next step and limits
 
-No active implementation task. No ready rows: T019 (registration/
-publication) is gated on an explicit user request; T029 (shaping/bidi)
-remains blocked on the provider decision (D031 §6) now that T028 is
-done. T032 shipped the WebP half: `decodeWebP`/`decodeWebPDimensions`/
+No active implementation task. The roadmap is complete except T019
+(registration/publication), which is user-owned — the user registers the
+package directly ("no, I'll register myself"), so it needs an explicit
+publication request. T029 (shaping/bidi) is done: option (b) of D031 §6
+selected and recorded as D033 — an opt-in `HarfBuzz_jll` (harfbuzz
+15.1.0) shaper behind a thin `ccall` surface (blob/face/font/buffer/
+`hb_shape`), loaded lazily on first shaped call (core-only and
+legacy-LTR installs never load it; a missing provider raises the
+explicit `ErrorException("Shaping support is opt-in: ...")`). Public
+API: `shapeText(tf, codepoints; script, direction, language)` →
+per-cluster `Vector{Vector{ShapedGlyph}}`, additive `glyphPathByGid`
+(GID → outline, no cmap; 0/out-of-range → `.notdef`), and
+`ParagraphLayout.shaped` (logical → visual permutation). Engagement:
+`RightToLeft` paragraphs and LTR paragraphs with strong-RTL content
+shape (Arabic contextual joining, Devanagari conjuncts, Roboto `fi`
+ligature, combining-mark cluster merge, L2E digit runs, mirrored
+punctuation, `.notdef` missing-glyph policy); pure-LTR complex scripts
+keep the T028 isolated-forms rendering (named v1 limit). Bidi is a
+documented UAX#9 simplification; RTL placement follows harfbuzz's
+cairo-bridge pen model. Reference: system libharfbuzz 12.3.2 via the C
+driver `tools/oracle/hb_refshape.c`, 10 cases pinned in
+`test/reference/shaping_reference.tsv` over the OFL
+NotoSansArabic/NotoSansDevanagari fixtures (`test/fixtures/`) +
+upstream-pinned Roboto; JLL 15.1.0 ≡ 12.3.2 on all 10 (probe log in
+tasks/T029-unicode-shaping.md). Evidence: `test/shaping_tests.jl` (223
+assertions), the codec-loading legs, cookbook recipe 15
+(multilingual card). T029 also fixed the T028 vendored UAX#29 cluster
+tables (a range misalignment had put base letters inside both
+`_CLUSTER_EXTEND`/`_CLUSTER_MC`); they are regenerated codepoint-exact
+from Unicode 16.0.0 (`tools/oracle/gen_cluster_tables.py`). T032 shipped the WebP half: `decodeWebP`/`decodeWebPDimensions`/
 `encodeWebP` per the T030 contract (docs/JPEG_WEBP_CODECS.md §3, D032)
 via the opt-in `WebP.jl` 0.1.3 + `libwebp_jll` 1.6.1+0 extra — success-
 checked feature scan first (the provider's auto-decode ignores the
@@ -173,7 +199,7 @@ release evidence is in [T011](../tasks/T011-release.md),
 [T018](../tasks/T018-release-readiness.md), and
 [DECISIONS.md](DECISIONS.md).
 
-## Recent verification (T014–T028, T030–T032)
+## Recent verification (T014–T032)
 
 - T014 `test/numeric_api_tests.jl` (23 assertions, byte-for-byte Int-vs-Float32
   scene parity); T015 `test/colormatrices_tests.jl` (29) + core-only ColorTypes
@@ -533,3 +559,42 @@ release evidence is in [T011](../tasks/T011-release.md),
    lossless 394 B (recipe 14 reports the numbers without claiming
    universal superiority). Gate green: **96.32% coverage (7110/7382)**;
    T008 suite 796459.
+  - T029: optional shaping and bidi implemented
+    (`src/formats/shaping.jl`; `shapeText`/`ShapedGlyph`,
+    `glyphPathByGid`; `ParagraphLayout.shaped` + RTL engagement in
+    `paragraph.jl`; `test/shaping_tests.jl`, 223 assertions; cookbook
+    recipe 15). Provider: opt-in `HarfBuzz_jll` 100.15001.0+0
+    (harfbuzz 15.1.0) behind a 15-symbol `ccall` surface, loaded lazily
+    (D033; D028 protocol — absent → the named `ErrorException("Shaping
+    support is opt-in: ...")` on RTL `layoutParagraph` and on
+    `shapeText`; present → the pinned outputs). **Reference evidence**
+    (protocol §8 option 2): system libharfbuzz 12.3.2 through the C
+    driver `tools/oracle/hb_refshape.c` — 10 pinned cases in
+    `test/reference/shaping_reference.tsv` over the OFL
+    `NotoSansArabic-Regular.ttf`/`NotoSansDevanagari-Regular.ttf`
+    (`test/fixtures/`, sha256 sidecars + `scripts/
+    fetch_shaping_fixtures.jl`) and upstream-pinned `Roboto-Regular_1.ttf`;
+    the JLL 15.1.0 provider agrees with the 12.3.2 reference on all 10
+    cases (gid/cluster/advance/offset; probe log in
+    tasks/T029-unicode-shaping.md). Demonstrated: Arabic contextual
+    joining (shaped GIDs 424/59/36 ≠ isolated cmap 420/56/34),
+    script sensitivity (Arab vs Zinh rows), Devanagari conjuncts
+    (k+virama+ssa → one GID 179; the reference akshara word keeps
+    clusters 0/1/4), the Roboto `fi` ligature (one GID 444; `ff` does
+    not ligate), combining-mark cluster merge, missing-glyph →
+    `.notdef` (gid 0, the font's 600-unit advance) with no silent
+    cluster drop, L2E digit order under an RTL base, mirrored
+    punctuation, RTL placement per the cairo-bridge pen model
+    (right-aligned ink on the box edge), and RTL wrap with per-line
+    re-shaping. **Table fix carried from T028**: the vendored UAX#29
+    cluster tables had a range misalignment (base letters — Devanagari
+    0905/0915/0936, Myanmar 1000..100B — inside both tables, so
+    "akshara" (0905 0915 094d 0936 0930) clustered as one grapheme);
+    regenerated from Unicode 16.0.0 by
+    `tools/oracle/gen_cluster_tables.py`, round-trip verified
+    codepoint-exact (220 extend / 112 mc BMP ranges); one T028
+    expectation corrected ("ka+virama+ssa" = 2 UAX#29 clusters;
+    conjunct formation is shaper-level, not grapheme-level). Gate
+    green: **95.83% coverage (7603/7934)**; all legacy suites
+    byte-unchanged (T028 paragraph suite 22,761 with the corrected
+    expectation).

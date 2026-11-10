@@ -954,6 +954,120 @@ println("decode: ", round(decMs, digits = 1), " ms")
 back
 
 #
+# ## 15. Multilingual card (shaped RTL + conjuncts, T029)
+#
+# One card, three text paths: the legacy Latin title/footnotes
+# (T009 `fillText`), a shaped Arabic paragraph (RTL base direction —
+# contextual joining, logical clusters drawn right-to-left,
+# right-aligned in its box), and a shaped Devanagari conjunct
+# (k + virama + ssa -> the single ligature glyph; an RTL base
+# direction engages the shaper, the internal order stays LTR per
+# UAX#9). The shaping fonts are the pinned T029 fixtures
+# (test/fixtures/, sha256 sidecars); the provider is the opt-in
+# HarfBuzz_jll extra (D033). Expected: both shaped lines' right
+# edges sit on the box edge, and the gap between them is card
+# white.
+ARABIC_FONT = joinpath(root, "test", "fixtures",
+    "NotoSansArabic-Regular.ttf")
+DEVA_FONT = joinpath(root, "test", "fixtures",
+    "NotoSansDevanagari-Regular.ttf")
+@assert isfile(ARABIC_FONT) && isfile(DEVA_FONT)
+
+function multilingual_card_image()
+    width = 360
+    height = 240
+    img = newImage(width, height)
+    ctx = Context(img)
+    ctx.fillStyle = rgb(241, 245, 249)
+    fillRect(ctx, 0, 0, width, height)
+    card = newImage(width, height)
+    cardctx = Context(card)
+    cardshape = newPath()
+    roundedRect(cardshape, 12, 12, width - 24, height - 24, 16, 16, 16, 16)
+    cardctx.fillStyle = rgb(255, 255, 255)
+    fill(cardctx, cardshape)
+    drawImage(ctx, shadow(card, Vec2(0, 2), 1, 8, rgba(15, 23, 42, 40)), 0, 0)
+    drawImage(ctx, card, 0, 0)
+    ## Legacy Latin title (T009 path).
+    ctx.font = ROBOTO
+    ctx.fontSize = 18f0
+    ctx.fillStyle = rgb(15, 23, 42)
+    fillText(ctx, "Multilingual text", 32, 38)
+    ## Shaped Arabic: joined forms, RTL, right-aligned in a 296 box.
+    fA = Font(readTypeface(ARABIC_FONT), Float32(22), autoLineHeight,
+        [Paint(rgba(30, 64, 175, 255))], NormalCase, false, false, false)
+    pA = newParagraph("\u0643\u062a\u0628", fA, width = 296,
+        hAlign = RightAlign, dir = RightToLeft)
+    lA = layoutParagraph(pA)
+    fillParagraph(ctx, lA, 32, 66)
+    ## Shaped Devanagari conjunct: the RTL base engages the shaper;
+    ## the run's internal order stays LTR (UAX#9).
+    fD = Font(readTypeface(DEVA_FONT), Float32(22), autoLineHeight,
+        [Paint(rgba(15, 118, 110, 255))], NormalCase, false, false, false)
+    pD = newParagraph("\u0915\u094d\u0937", fD, width = 296,
+        hAlign = RightAlign, dir = RightToLeft)
+    lD = layoutParagraph(pD)
+    fillParagraph(ctx, lD, 32, 118)
+    ## Legacy Latin footnotes (the documented v1 limit).
+    ctx.font = ROBOTO
+    ctx.fontSize = 12f0
+    ctx.fillStyle = rgb(100, 116, 139)
+    fillText(ctx, "Shaped: RTL runs and conjuncts (opt-in HarfBuzz_jll, D033).",
+        32, 168)
+    fillText(ctx, "v1 limit: pure LTR Indic keeps the isolated-forms path.",
+        32, 186)
+    return img, lA, lD
+end
+
+ml, lmlA, lmlD = multilingual_card_image()
+@assert (width(ml), height(ml)) == (360, 240)
+@assert getColor(ml, 2, 2) == rgbx(241, 245, 249, 255) # page background
+@assert getColor(ml, 20, 20) == rgbx(255, 255, 255, 255) # card interior
+@assert lmlA.shaped[1] == [3, 2, 1]  # Arabic: clusters reverse (UAX#9)
+@assert lmlA.lines[1].width > 41f0 && lmlA.lines[1].width < 42f0
+# pinned 1093 + 373 + 412 units at 22 px
+@assert lmlD.shaped[1] == [1, 2]     # Devanagari: LTR order under RTL base
+devaGids = [g[1] for slp in lmlD.shapedPos for ep in slp.pos
+    for g in ep.glyphs]
+@assert 179 in devaGids              # the pinned k + virama + ssa conjunct
+@assert lmlD.lines[1].width > 15f0 && lmlD.lines[1].width < 16f0
+# pinned 712 units at 22 px
+function inkCountML(img, x0, x1, y0, y1)
+    n = 0
+    for y in y0:y1
+        for x in x0:x1
+            c = getColor(img, x, y)
+            if c.r < 250 || c.g < 250 || c.b < 250
+                n += 1
+            end
+        end
+    end
+    return n
+end
+function rightmostInk(img, x0, x1, y0, y1)
+    r = 0
+    for x in x0:x1
+        for y in y0:y1
+            c = getColor(img, x, y)
+            if c.r < 250 || c.g < 250 || c.b < 250
+                r = max(r, x); break
+            end
+        end
+    end
+    return r
+end
+@assert inkCountML(ml, 32, 328, 20, 52) > 50     # title
+@assert inkCountML(ml, 32, 328, 66, 110) > 100   # Arabic line
+@assert inkCountML(ml, 32, 328, 111, 117) == 0   # gap between the lines
+@assert inkCountML(ml, 32, 328, 118, 156) > 80   # Devanagari conjunct
+@assert inkCountML(ml, 32, 328, 160, 196) > 50   # footnotes
+@assert rightmostInk(ml, 32, 332, 66, 110) == 328  # Arabic right edge
+@assert rightmostInk(ml, 32, 332, 118, 156) == 328 # Devanagari right edge
+save_named(ml, "multilingual-card.png")
+
+ml
+
+#
 # That is the whole cookbook. The named images above (PNG, JPEG,
 # WebP) are what
 # `docs/make_cookbook.jl` collects into `docs/build/gallery.html`, and the

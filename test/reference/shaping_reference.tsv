@@ -1,0 +1,36 @@
+fixture=shaping_reference.tsv
+generator=tools/oracle/hb_refshape.c (C driver; gcc -I<12.3.2 headers> hb_refshape.c /usr/lib/x86_64-linux-gnu/libharfbuzz.so.0)
+reference_version=12.3.2
+reference_library=/usr/lib/x86_64-linux-gnu/libharfbuzz.so.0
+font_arabic_sha256=7ff958cd705f9e56a9e2755b9405dbb45b52cdd8a387a2bb2050083b0e488830
+font_arabic_license=SIL Open Font License 1.1
+font_arabic_url=https://github.com/googlefonts/noto-fonts/raw/main/archive/hinted/NotoSansArabic/NotoSansArabic-Regular.ttf
+font_devanagari_sha256=71f9677a5234afe51b39240b7b0f3478b8f818c5f912413609aeb904322a2855
+font_devanagari_license=SIL Open Font License 1.1
+font_devanagari_url=https://github.com/googlefonts/noto-fonts/raw/main/archive/hinted/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf
+font_roboto_sha256=79e851404657dac2106b3d22ad256d47824a9a5765458edb72c9102a45816d95
+font_roboto_license=Apache License 2.0
+font_roboto_source=.reference/upstream/tests/fonts/Roboto-Regular_1.ttf (upstream-pinned, upstream.toml)
+case,font,script,direction,language,codepoints,gid,cluster,x_advance,x_offset,y_offset
+arab-katab,NotoSansArabic-Regular,Arab,RTL,ar,0643;062a;0628,36,2,1093,0,0
+arab-katab,NotoSansArabic-Regular,Arab,RTL,ar,0643;062a;0628,59,1,373,0,0
+arab-katab,NotoSansArabic-Regular,Arab,RTL,ar,0643;062a;0628,424,0,412,0,0
+arab-katab-zinh,NotoSansArabic-Regular,Zinh,RTL,ar,0643;062a;0628,34,2,993,0,0
+arab-katab-zinh,NotoSansArabic-Regular,Zinh,RTL,ar,0643;062a;0628,56,1,993,0,0
+arab-katab-zinh,NotoSansArabic-Regular,Zinh,RTL,ar,0643;062a;0628,420,0,882,0,0
+arab-arabic-digits,NotoSansArabic-Regular,Arab,RTL,ar,0661;0662;0663,1422,2,583,0,0
+arab-arabic-digits,NotoSansArabic-Regular,Arab,RTL,ar,0661;0662;0663,1421,1,487,0,0
+arab-arabic-digits,NotoSansArabic-Regular,Arab,RTL,ar,0661;0662;0663,1420,0,280,0,0
+ansi-digits-rtl,NotoSansArabic-Regular,Zyyy,RTL,ar,0031;0032;0033,1410,2,572,0,0
+ansi-digits-rtl,NotoSansArabic-Regular,Zyyy,RTL,ar,0031;0032;0033,1409,1,572,0,0
+ansi-digits-rtl,NotoSansArabic-Regular,Zyyy,RTL,ar,0031;0032;0033,1408,0,572,0,0
+latin-fi,NotoSansArabic-Regular,Latn,LTR,en,0066;0069,0,0,600,0,0
+latin-fi,NotoSansArabic-Regular,Latn,LTR,en,0066;0069,0,1,600,0,0
+latin-combining,NotoSansArabic-Regular,Latn,LTR,en,0065;0301,0,0,600,0,0
+latin-combining,NotoSansArabic-Regular,Latn,LTR,en,0065;0301,0,0,600,0,0
+missing-han,NotoSansArabic-Regular,Hani,LTR,en,4e00,0,0,600,0,0
+deva-ksha,NotoSansDevanagari-Regular,Deva,LTR,hi,0915;094d;0937,179,0,712,0,0
+deva-akshara,NotoSansDevanagari-Regular,Deva,LTR,hi,0905;0915;094d;0936;0930,9,0,764,0,0
+deva-akshara,NotoSansDevanagari-Regular,Deva,LTR,hi,0905;0915;094d;0936;0930,495,1,1226,0,0
+deva-akshara,NotoSansDevanagari-Regular,Deva,LTR,hi,0905;0915;094d;0936;0930,52,4,409,0,0
+roboto-fi,Roboto-Regular_1,Latn,LTR,en,0066;0069,444,0,1134,0,0

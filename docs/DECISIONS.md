@@ -1001,6 +1001,84 @@ probes in `/tmp/opencode/codecprobe` (JpegTurbo 0.1.6, WebP 0.1.3,
 JpegTurbo_jll 3.2.1+0, libwebp_jll 1.6.1+0, PyMuPDF 1.28.2; commands
 recorded); task record tasks/T030-codec-design.md.
 
+## D033 — T029 shaping provider: HarfBuzz_jll + thin ccall bindings
+(accepted, 2026-11-09, T029; selects option (b) of D031 §6)
+
+Problem: T029 needs an external shaper per docs/TEXT_LAYOUT.md §5/§8.
+D031 §6 (2026-11-09 registry sweep) found no maintained Julia
+shaping package in the General registry (`HarfKit`/`Pango` delisted);
+option (b) — a JLL binary + our own thin `ccall` surface — was a
+candidate pending a dependency-policy decision (this one).
+
+Chosen behavior (implementation in src/formats/shaping.jl, T029):
+- **Provider = `HarfBuzz_jll` 100.15001.0+0** (JLL wrapper registry;
+  MIT; artifact 1.7 MiB; 18 platform wrappers; bundles harfbuzz
+  15.1.0; julia compat "1.6.0-1"; deps are artifact-only JLLs —
+  Fontconfig/FreeType2/Glib/Graphite2/Cairo/Libffi — no build
+  system). It is an **opt-in extra** (D014/D032 pattern): lazy
+  `require` on first shaped call with an install hint; core-only
+  and legacy LTR paths are byte-unchanged and load it never.
+- **Thin ccall surface** (~12 symbols): `hb_blob_create` →
+  `hb_face_create(blob, 0)` → `hb_font_create` → buffer
+  (`set_direction`/`set_script`/`set_language`/`add`) → `hb_shape`
+  → `hb_buffer_get_glyph_infos`/`_positions` → destroy. Verified
+  ABI (C `offsetof`/`sizeof` against both the 12.3.2 system lib and
+  the 15.1.0 artifact — identical for everything used):
+  `hb_glyph_info_t` = 5×uint32 (codepoint/gid@0, mask@4,
+  cluster@8); `hb_glyph_position_t` = 5×int32 (x_advance@0,
+  y_advance@4, x_offset@8, y_offset@12); `hb_direction_t`
+  LTR=4, RTL=5; `hb_script_t` = 4-byte tag. Note:
+  `hb_face_create` takes an `hb_blob_t*` in all modern versions —
+  the legacy raw-bytes signature segfaults on both 12.3.2 and
+  15.1.0. `hb_face_get_glyph_count` (not `hb_face_count_glyphs`)
+  in both.
+- **ccall library expression must be a global String path** in this
+  build (`const JLLLIB = HarfBuzz_jll.libharfbuzz`; locals and
+  `Ptr` globals are rejected/misbehave — recorded probe finding).
+- **Reference protocol (§8 option 2)**: expectations come from the
+  system libharfbuzz **12.3.2** through a plain C driver
+  (`tools/oracle/hb_refshape.c`, no Julia in the loop), pinned to
+  `test/reference/shaping_reference.tsv` (+ sha256 sidecar) over the
+  pinned OFL fonts `NotoSansArabic-Regular.ttf` /
+  `NotoSansDevanagari-Regular.ttf` (`test/fixtures/`, sha256
+  sidecars, `scripts/fetch_shaping_fixtures.jl`). The JLL 15.1.0
+  and the 12.3.2 reference agree on **all 10 pinned cases**
+  (gid/cluster/advance/offset identical; recorded in the task
+  record), so the tests pin the 12.3.2 reference while running on
+  whatever harfbuzz the JLL bundles.
+- **Integration (contract §5)**: `shapeText` returns per-cluster
+  `Vector{Vector{ShapedGlyph}}` (gid, advance, xOffset, yOffset —
+  font units, like `getAdvance`); `glyphPathByGid(tf, gid)` reads
+  glyf by index via the existing internal reader (no cmap).
+  `ParagraphLayout` gains `shaped` (the logical→visual
+  permutation); engagement: `RightToLeft` paragraphs require the
+  provider (named `ArgumentError` without it — replaces the T028
+  "RTL requires the T029 shaper" gate), LTR text containing
+  strong-RTL codepoints shapes when the provider is present and
+  keeps the T028 documented isolated-forms rendering when absent.
+
+Alternatives that matter: (a) a General-registry HarfBuzz binding —
+none maintained exists as of the 2026-11-09 sweep, and `HarfKit`'s
+repo is delisted/stale; (c) a pure-Julia GSUB-subset shaper —
+rejected here: far larger surface, Indic coverage is the risk, and
+the registry check that motivated it predates the JLL artifact
+verification done for this decision; (d) defer — superseded by the
+user selecting option (b) on 2026-11-09.
+
+Compatibility impact: one new opt-in extra (`HarfBuzz_jll`) in
+`Project.toml` `[extras]`/`[targets]` + the docs environment;
+additive `ShapedGlyph`, `shapeText`, `glyphPathByGid`, the
+`ParagraphLayout.shaped` field, and `newParagraph` no longer throws
+for RTL (it defers to layout time). No public symbol or legacy
+behavior changes; T009–T028 fixtures stay byte-exact.
+
+Evidence: probe log in tasks/T029-unicode-shaping.md (dual-library
+shaping of the 10 pinned cases, ABI `offsetof`/`sizeof` C check
+against both versions, symbol-table diff of the 12 used symbols);
+`test/shaping_tests.jl` (binding vs pinned reference, bidi
+permutation, missing-glyph policy, RTL/LTR paragraph layout and
+render); codec-loading protocol extended to HarfBuzz.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

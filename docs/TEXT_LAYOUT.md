@@ -245,16 +245,21 @@ use case needs it.`
 
 - `_CLUSTER_EXTEND`: derived property `Grapheme_Extend` from
   `DerivedCoreProperties-16.0.0.txt` (= Me + Mn +
-  Other_Grapheme_Extend), BMP subset (245 ranges), plus
-  U+200C..U+200D appended (the ZWNJ/ZWJ pair is category `Cf`, so the
-  derived property omits it, but GB9a/GB9d require it in the Extend
-  class — recorded in the table header).
+  Other_Grapheme_Extend), BMP subset (220 ranges), plus
+  U+200D appended (ZWJ is category `Cf`, so the derived property
+  omits it, but GB9a/GB9d require it in the Extend class —
+  U+200C already appears in the derived property).
 - `_CLUSTER_MC`: general category `Mc` (spacing combining marks) from
-  `UnicodeData-16.0.0.txt`, BMP subset (104 ranges).
+  `UnicodeData-16.0.0.txt`, BMP subset (112 ranges).
 - Cc / Hangul / ZWJ / ZWNJ / CR / LF: hardcoded BMP constants.
 
 Both tables are generated data (source header in `paragraph.jl`),
-checked by tests against hand-derived cases (§7). Changing the Unicode
+checked by tests against hand-derived cases (§7). Regenerated
+2026-11-09 (T029) by `tools/oracle/gen_cluster_tables.py` — the
+original T028 generation had range misalignment (base letters such as
+Devanagari 0905/0915/0936 and Myanmar 1000..100B were inside both
+tables); the regenerated tables are round-trip verified
+codepoint-exact against the UCD sources. Changing the Unicode
 version is a recorded test-fixture change, never a silent behavior
 change.
 
@@ -341,18 +346,20 @@ shaping) exists; nothing matches `Harf*/Pango*/Grapheme*/Bidi*`
 (package-name sweep of the full tree). The system has `libharfbuzz`
 shared libraries (no `hb-shape` CLI, no Pango tools, no Python `gi`).
 
-Options (none selected — T029 stays blocked until one is recorded as a
-decision):
+Options (selection recorded in D033, 2026-11-09, T029):
 
 - **(a) Re-emerged/upstreamed Julia HarfBuzz binding** — wait for or
   find a maintained package (the previous ones' repos still exist;
   adoption of a community re-release is acceptable). Pro: standard
   shaper, full UAX#9. Con: availability/Julia 1.10 compat unverified.
-- **(b) JLL HarfBuzz + our own thin bindings** — `HarfBuzz_jll`
-  (v8.5.1+0 exists in the JLL wrapper registry) + a small `Libc`
-  `ccall` surface (hb_buffer, hb_shape, hb_face). Pro: pinned, no
-  package risk. Con: binary dependency + FFI surface — a D030-style
-  decision is required first (codec dependency policy).
+- **(b) JLL HarfBuzz + our own thin bindings — selected (D033,
+  T029)**: `HarfBuzz_jll` 100.15001.0+0 (bundles harfbuzz 15.1.0) +
+  a small `ccall` surface (blob/face/font/buffer/shape; the ≥12
+  blob-based `hb_face_create` ABI, struct strides 5×uint32/5×int32,
+  direction LTR=4/RTL=5, scripts as 4-byte tags — all verified
+  against the 12.3.2 system library, which is also the pinned
+  reference). Opt-in extra per D014/D032: lazy `require` + install
+  hint; legacy LTR and core-only installs never load it.
 - **(c) Pure-Julia minimal shaper** — UAX#9 core algorithm + a GSUB
   single-substitution/contextual subset sufficient for the §5.2
   behavior list, validated against a pinned external reference
@@ -409,7 +416,9 @@ independently derived at implementation time)
   distinct from the ported upstream project): `Noto Sans Arabic` and
   `Noto Sans Devanagari` (Regular), fetched pinned (URL + SHA256
   recorded in the task record; fetched through the
-  `scripts/fetch_upstream.jl` pattern into `test/fixtures/`).
+  `scripts/fetch_upstream.jl` pattern into `test/fixtures/`). The
+  ligature reference case uses the existing upstream-pinned
+  `Roboto-Regular_1.ttf` (Apache 2.0) from `test/` fonts.
 - **Shaping reference protocol**: expected glyph sequences/advances
   come from a pinned external reference, never from the code under
   test. Preference order: (1) `hb-shape` built from the pinned HarfBuzz
@@ -425,9 +434,12 @@ independently derived at implementation time)
 
 ## 9. Specifications and versions
 
-- Unicode Standard (pinned at implementation time; v1 tables generated
-  from the pinned version's `GraphemeBreakProperty.txt`/
-  `Script.txt`, BMP subset).
+- Unicode Standard **16.0.0** (pinned; v1 tables generated from the
+  pinned UCD, BMP subset — §3.2 and `src/formats/shaping.jl` header
+  record the exact source files:
+  `DerivedCoreProperties.txt`/`UnicodeData.txt` for the grapheme
+  cluster tables, `Scripts.txt`/`UnicodeData.txt`/
+  `BidiMirroring.txt` for the shaping script/bidi/mirroring tables).
 - UAX #29 (Grapheme Cluster Boundary) — §3.
 - UAX #14 (Line Breaking) — out of v1 scope (§2.1 shortcut).
 - UAX #9 (Bidi Algorithm) — §5.3 (T029).

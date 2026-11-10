@@ -9,7 +9,7 @@
             using Vetra
             for id in (Vetra._PNGFILES_PKGID, Vetra._JPEGTURBO_PKGID,
                     Vetra._XML_PKGID, Vetra._COLORTYPES_PKGID,
-                    Vetra._WEBP_PKGID)
+                    Vetra._WEBP_PKGID, Vetra._HB_PKGID)
                 @assert Base.locate_package(id) === nothing
             end
             @assert width(newImage(2, 3)) == 2
@@ -49,6 +49,26 @@
                 @assert e isa ErrorException &&
                     occursin("WebP support is opt-in", e.msg)
             end
+            # T029: RTL layout engages the opt-in shaper at layout time.
+            tfHB = readTypeface($(repr(joinpath(root, "test", "fixtures",
+                "NotoSansArabic-Regular.ttf"))))
+            fHB = newFont(tfHB)
+            try
+                layoutParagraph(newParagraph("كتب", fHB;
+                    dir = RightToLeft))
+                error("shaping should require its optional package")
+            catch e
+                @assert e isa ErrorException &&
+                    occursin("Shaping support is opt-in", e.msg)
+            end
+            # and shapeText itself names the missing provider
+            try
+                shapeText(tfHB, UInt32[0x0643])
+                error("shapeText should require its optional package")
+            catch e
+                @assert e isa ErrorException &&
+                    occursin("Shaping support is opt-in", e.msg)
+            end
             # T016: display falls back to text in a core-only environment.
             @assert Base.showable(MIME("image/png"), newImage(2, 3)) === false
             @assert Base.showable(MIME("text/plain"), newImage(2, 3)) === true
@@ -71,6 +91,16 @@
             @assert decodeWebPDimensions(encodeWebP(image)) == (2, 3)
             @assert decodeWebP(encodeWebP(image; lossy = false)).data ==
                 image.data
+            # T029: the opt-in shaper works in the codec-enabled
+            # environment — pinned reference gids for "كتب" (Arab, RTL)
+            tfHB = readTypeface($(repr(joinpath(root, "test", "fixtures",
+                "NotoSansArabic-Regular.ttf"))))
+            out = shapeText(tfHB, UInt32[0x0643, 0x062a, 0x0628];
+                script = 0x41726162, direction = RightToLeft,
+                language = "ar")
+            @assert [g.gid for cl in out for g in cl] == [424, 59, 36]
+            @assert layoutParagraph(newParagraph("كتب", newFont(tfHB);
+                dir = RightToLeft)).shaped[1] == [3, 2, 1]
             """
         for (env, code) in ((root, core), (project, codecs))
             cmd = `$(Base.julia_cmd()) --startup-file=no --project=$env -e $code`

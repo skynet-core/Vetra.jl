@@ -4,7 +4,8 @@ The pinned-scope port and cleanup (T000–T013) are complete. The user-approved
 [adoption and advanced-graphics roadmap](docs/ROADMAP.md) adds T014–T032.
 Status values: `ready`, `blocked`, `in_progress`, `done`. Work on one selected
 task; for a general continuation take the first ready row.
-**No ready rows** (T019 and T029 are blocked — see Current work).
+**Roadmap complete except T019** (user-owned registration; see Current
+work).
 
 ## Completed foundation
 
@@ -38,7 +39,7 @@ resolve its implementation contracts before dependents are marked ready.
 | T016 | [Automatic notebook image display](tasks/T016-notebook-display.md) | T013 | done |
 | T017 | [Documentation, gallery, application recipes](tasks/T017-docs-gallery-recipes.md) | T013 | done |
 | T018 | [Adoption release readiness](tasks/T018-release-readiness.md) | T014, T015, T016, T017 | done |
-| T019 | [Registration and publication](tasks/T019-registration-publication.md) | T018 | blocked (also requires explicit publication request) |
+| T019 | [Registration and publication](tasks/T019-registration-publication.md) | T018 | blocked (user will register directly; not agent work) |
 | T020 | [Representative application benchmarks](tasks/T020-application-benchmarks.md) | T013 | done |
 | T021 | [Package and first-render latency](tasks/T021-startup-latency.md) | T020 | done |
 | T022 | [Render allocations and PNG throughput](tasks/T022-render-encode-performance.md) | T020 | done |
@@ -48,7 +49,7 @@ resolve its implementation contracts before dependents are marked ready.
 | T026 | [PDF export](tasks/T026-pdf-export.md) | T024 | done |
 | T027 | [Paragraph layout and shaping contract](tasks/T027-text-design.md) | T013 | done |
 | T028 | [Wrapping, styled runs, font fallback](tasks/T028-paragraph-layout.md) | T027 | done |
-| T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | blocked (provider decision, D031 §6) |
+| T029 | [Optional shaping and bidirectional text](tasks/T029-unicode-shaping.md) | T028 | done (2026-11-10; provider = option (b), D033) |
 | T030 | [JPEG/WebP codec contracts](tasks/T030-codec-design.md) | T013 | done |
 | T031 | [JPEG encoding](tasks/T031-jpeg-encoding.md) | T030 | done |
 | T032 | [Static WebP read/write](tasks/T032-webp-support.md) | T030 | done |
@@ -293,10 +294,27 @@ resolve its implementation contracts before dependents are marked ready.
    round-trip). T008 dispatch tests updated to the seven writable
    formats (count restored: 796459). Gate green: 96.32% coverage
    (7110/7382).
- - No active implementation task. No ready rows: T019 awaits an
-   explicit publication request; T029 awaits the provider decision
-   (D031 §6) now that T028 is done. All T013–T032 changes are committed
-   and pushed to origin main (protocol: commit+push after each task).
+ - T029 done (2026-11-10; provider option (b) per D033): opt-in
+   `HarfBuzz_jll` (harfbuzz 15.1.0) thin ccall shaper —
+   `shapeText`/`ShapedGlyph`, additive `glyphPathByGid`,
+   UAX#9-simplified bidi (L2E digits, mirrored punctuation,
+   logical→visual `ParagraphLayout.shaped`), RTL engagement
+   (RTL paragraphs + strong-RTL-in-LTR shape; missing provider →
+   named `ErrorException`; legacy LTR byte-unchanged), RTL placement
+   per the harfbuzz cairo-bridge pen model. Reference pinned: system
+   libharfbuzz 12.3.2 via the C driver tools/oracle/hb_refshape.c,
+   10 cases in test/reference/shaping_reference.tsv over the pinned
+   OFL NotoSansArabic/NotoSansDevanagari fixtures (+ upstream-pinned
+   Roboto for the ligature); JLL 15.1.0 ≡ 12.3.2 on all 10 (probe
+   log in the task record). Also fixed the T028 vendored UAX#29
+   cluster tables (range misalignment — base letters were inside
+   both tables), regenerated codepoint-exact from Unicode 16.0.0
+   (tools/oracle/gen_cluster_tables.py). Evidence:
+   test/shaping_tests.jl (223 assertions) + codec-loading legs +
+   cookbook recipe 15 (multilingual card). Gate green: 95.83%
+   coverage (7603/7934). T019 stays user-owned (the user registers
+   the package directly). All T013–T032 changes are committed and
+   pushed to origin main (protocol: commit+push after each task).
 
 ## Evidence and policies
 

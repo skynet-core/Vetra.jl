@@ -96,3 +96,10 @@ include("jpeg_encode_tests.jl")
 # the animated-fixture named error, round-trip exactness partition,
 # RIFF chunk walk, dispatch + base64.
 include("webp_tests.jl")
+
+# T029: optional shaping and bidi (D033, docs/TEXT_LAYOUT.md §5):
+# bindings vs the pinned libharfbuzz 12.3.2 reference (9 cases),
+# glyphPathByGid, punctuation mirroring, hand-derived bidi
+# permutations, RTL placement (cairo-bridge pen model), joined vs
+# isolated forms, Indic conjuncts, missing-glyph policy, engagement.
+include("shaping_tests.jl")

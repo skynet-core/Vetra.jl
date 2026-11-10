@@ -1,4 +1,5 @@
 [deps]
+HarfBuzz_jll = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
 JpegTurbo = "b835a17e-a41a-41e7-81f0-2f016b05efe0"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"

@@ -53,6 +53,8 @@ const ITEMS = [
         "The pinned mandrill photo resized to 256x256 and exported with encodeJPEG (premultiplied composited over white, JFIF 72 dpi, default quality 92): on photographic content JPEG is ~14% of the PNG size; on flat graphics it is not."),
     ("mandrill-webp.webp", "WebP export (T032)",
         "The pinned mandrill thumbnail exported with encodeWebP (lossy quality 75, default; real alpha preserved, no background compositing) — with a lossless mode for flat/transparent content."),
+    ("multilingual-card.png", "Multilingual card (T029)",
+        "Three text paths on one card: legacy Latin, shaped RTL Arabic (contextual joining, right-aligned), and a shaped Devanagari conjunct — the opt-in HarfBuzz_jll provider (D033)."),
 ]
 
 function gallery_html()

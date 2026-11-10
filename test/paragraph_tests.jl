@@ -87,7 +87,12 @@
         @test length(clustersOf("\u1161\u1100")) == 2      # V+L breaks
         @test length(clustersOf("\r\n")) == 1              # GB3
         @test length(clustersOf("a\tb")) == 3              # control standalone
-        @test length(clustersOf("\u0915\u094d\u0937")) == 1  # Devanagari Mc
+        # Devanagari: virama is Extend (no break before it); a letter
+        # after the conjunct starts a new cluster (conjunct formation
+        # is shaper-level, not grapheme-level — UAX#29), while an Mc
+        # vowel sign joins its base
+        @test length(clustersOf("\u0915\u094d\u0937")) == 2
+        @test length(clustersOf("\u0915\u094d\u093E")) == 1
         @test length(clustersOf("\u0e01\u0e38")) == 1      # Thai Mn
         @test length(clustersOf("a\u0300\u0301")) == 1     # stacked marks
         @test length(clustersOf("a\u0301b\u0301")) == 2
@@ -110,10 +115,10 @@
         @test p.overflow === EllipsisOverflow
         @test p.dir === LeftToRight
         @test p.spans[1].text == "hello"
-        # RTL is a named, explicit limit (docs §5.3).
-        @test throws_arg(
-            () -> newParagraph("hello", f; dir = RightToLeft),
-            "RTL requires the T029 shaper")
+        # RTL construction is allowed since T029 (D033); shaper
+        # engagement happens at layout time.
+        pRtl = newParagraph("hello", f; dir = RightToLeft)
+        @test pRtl.dir === RightToLeft
         # withFallback: additive chain, resolved glyph source.
         tfFB = withFallback(tfR, [tfU])
         @test hasGlyph(tfR, UInt32(0x0180)) == false

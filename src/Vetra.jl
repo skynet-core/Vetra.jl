@@ -349,6 +349,7 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     computePaths, defaultLineHeight,
     ascent, descent, lineGap, lineHeight, capHeight,
     hasGlyph, fallbackTypeface, getGlyphPath, getAdvance,
+    glyphPathByGid,
     getKerningAdjustment, getLeftSideBearing, isCCW, name,
     withFallback,
     Paragraph, Cluster, ParagraphLine, ParagraphMetrics, ParagraphLayout,
@@ -356,6 +357,7 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     TextDirection, LeftToRight, RightToLeft,
     newParagraph, layoutParagraph, paragraphMetrics,
     fillParagraph, strokeParagraph,
+    ShapedGlyph, shapeText,
     toColors, fromColors,
     Picture, PictureRecorder, RecordingContext, finishRecording, drawPicture,
     writeSvg, writePdf
@@ -371,6 +373,7 @@ include("fontformats/unicase.jl")
 include("formats/fonts.jl")
 include("context.jl")
 include("formats/paragraph.jl")
+include("formats/shaping.jl")
 include("recordings.jl")
 include("formats/ppm.jl")
 include("formats/svg.jl")
