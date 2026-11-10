@@ -119,8 +119,16 @@ checksum-pinned Julia 1.10.13, and bounded benchmark checks on all four OSes.
 Coordinator review fixed invalid job-level runner context, Windows shell choice,
 BSD checksum syntax, unintended .mem deletion, and shadow/input confusion in
 benchmark checks. `actionlint .github/workflows/ci.yml` and `git diff --check`
-pass. Coordinator full-gate runs are in progress on Julia 1.13.3 and 1.10.13.
-Remote validation is pending: M002 is not yet complete.
+pass. Coordinator Julia 1.10.13 gate passed (95.86%, 7697/8029); benchmark
+smoke passed. Concurrent local full gates exposed a shared Chromium fixture
+directory: the stable run failed when the other run removed it. Fixed with
+`mktempdir(homedir(); prefix="vetra-svgtest-")`; concurrent reruns are pending.
+
+[Remote run 42809642886](https://github.com/skynet-core/Vetra.jl/actions/runs/42809642886):
+all six Linux/Windows/macOS test jobs and three benchmark jobs passed. FreeBSD
+VM boot and checksum-verified Julia installation passed; fixture fetch failed
+because Git was absent. Added VM preparation (`pkg install -y git ca_root_nss`).
+Remote rerun pending: M002 is not yet complete.
 
 ## M003 — Julia-native public API and package integration
 

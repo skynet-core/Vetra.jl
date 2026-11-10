@@ -10,8 +10,11 @@ implements. M001 audit and fresh baseline gate are complete; M002 is active.
 Baseline `415c7a0` was clean and already pushed. Existing remote CI fails;
 Pages workflow hosting is enabled but there is no deployment yet.
 M002 implementation and review fixes are integrated (`95185c3`, `8bfd7ae`).
-Coordinator full gates on Julia 1.13.3/1.10.13 and remote platform validation
-are pending; actionlint passes. Do not mark the task done before CI evidence.
+Coordinator Julia 1.10.13 full gate and benchmark smoke pass. Concurrent gates
+exposed and fixed a shared Chromium fixture directory; reruns are pending.
+Remote run 42809642886 passed all six Linux/Windows/macOS tests and three
+benchmark jobs. FreeBSD booted/installed Julia, then failed for missing Git;
+VM preparation is fixed and awaiting rerun. Do not mark M002 done yet.
 Keep registration user-owned. Preserve licenses, attribution, regression
 fixtures and test/benchmark/docs infrastructure during cleanup.
 
