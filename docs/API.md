@@ -4,7 +4,9 @@ Vetra provides an immediate-mode CPU drawing context inspired by Canvas and
 Flutter's `dart:ui`, with behavior from the pinned pixie revision. Start with
 [Getting started](GETTING_STARTED.md) for executable examples; consult
 [Compatibility](COMPATIBILITY.md) for supported inputs, deviations, and tests.
-Names keep the upstream camelCase spelling. Future GPU and widget APIs are
+Prefer snake_case names and `!` mutators; the [migration guide](MIGRATION.md)
+maps every new entry point to its retained legacy spelling (M003). The reference
+below keeps legacy names where useful for provenance. Future GPU and widget APIs are
 not part of the current library. Display-list recording follows the
 [Recording contract](RECORDING.md) (D030): recording, CPU replay, and SVG
 export are implemented (T024–T025, see [Recordings](#recordings-d030-docsrecordingmd));
@@ -26,6 +28,13 @@ PDF export by T026.
   `rgb`/`rgba` for straight colors and `rgbx` for premultiplied colors.
 - `Image` has fixed dimensions and a mutable pixel buffer. `Path`, `Paint`,
   and `Context` are mutable; geometry and color structs are immutable.
+- `Image(width, height[, data])` validates positive dimensions, byte-count
+  overflow and exact supplied-buffer length. Supplied bytes are borrowed;
+  preserve their length. `copy(image)` owns a separate buffer.
+- `img[row, column]` reads/writes a premultiplied `ColorRGBX`; `img[i]`,
+  iteration and `eachindex(img)` follow row-major storage order. `size`/`axes`
+  use `(height, width)`, including dimension-aware `begin`/`end`. This is a
+  duck-typed interface, not an `AbstractMatrix` or column-major array.
 - Drawing mutates its target. `blur`, `spread`, `invert`, `ceil`,
   `applyOpacity`, and flips mutate images despite having no `!` suffix.
   `copy`, `resize`, `rotate90`, `subImage`, `superImage`, and `shadow` return
@@ -50,11 +59,16 @@ With the opt-in `ColorTypes` package (D024), `toColors(image)` exports an
 image as a `Matrix{RGBA{N0f8}}` (straight alpha, `[row, col]`, row 1 = top)
 and `fromColors(matrix)` imports 2-D `RGB`/`RGBA` matrices (N0f8 bytes or
 0..1 floats, clamped) as a premultiplied `Image`. Both use the PNG boundary
-conversions, so matrix bytes equal PNG payload bytes; 3-D plane matrices and
-non-`Matrix` views are rejected with a clear error.
+conversions, so matrix bytes equal PNG payload bytes. One-based range-selected
+views (including strides) are read without copying the source; top-level
+transposes materialize via `permutedims`. Offset axes, index-array views,
+adjoints, views over transposes and 3-D plane matrices are rejected explicitly.
 
 ## Geometry and paths
 
+- `dot` and `normalize` share LinearAlgebra's bindings. With `using LinearAlgebra`,
+  `norm(::Vec2)` and `det(::Mat3)` are available; `inv(::Mat3)` uses Base's
+  generic. Legacy `length(::Vec2)` remains Euclidean magnitude, not an element count.
 - Geometry: `Vec2`, `Rect(x, y, width, height)`, `Circle`, `Segment`, `Line`,
   `Polygon`, and `Mat3`; helpers include `rect`, `circle`, `segment`, `line`,
   `dot`, `length`, `lengthSq`, `normalize`, and `snapToPixels`.

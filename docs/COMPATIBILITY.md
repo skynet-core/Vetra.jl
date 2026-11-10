@@ -17,6 +17,16 @@ what the pixie modules themselves use (see docs/NUMERICAL_CONTRACT.md).
 
 ## Foundation (T002) and geometry (T003)
 
+### Julia-native additions (M003)
+
+The [migration guide](MIGRATION.md) documents additive snake_case names, typed
+bang adapters and shared Base/LinearAlgebra bindings. `Image` retains three-field
+row-major storage with validated constructors and `[row, column]` access;
+linear indexing, mutation and iteration share storage order. It is deliberately
+not an `AbstractMatrix`. Invalid dimensions/lengths now raise `ArgumentError`,
+including zero-size PPM images previously accepted accidentally. Evidence:
+`test/api_native_tests.jl`, plus coordinator validation in [Handoff](HANDOFF.md).
+
 | Upstream symbol(s) | Area | Julia status | Evidence |
 | --- | --- | --- | --- |
 | `Vec2` (`GVec2[float32]`), `+ - * /` scalar/vector, `dot`, `length`, `lengthSq`, `normalize`, `perpendicular` | `vmath` | **implemented** (T003, D011). Float32; zero `normalize` yields NaN like upstream | test/geometry_tests.jl "Vec2" (hand-computed values + literal expectations) |
@@ -60,7 +70,7 @@ what the pixie modules themselves use (see docs/NUMERICAL_CONTRACT.md).
 | `gradientColor` (internal), `fillGradientLinear`/`Radial`/`Angular`/`fillGradient` | `pixie/paints.nim` | **implemented** (T007a); upstream stop clamping, float32 `lerp`, opacity-before-premultiply, and handle-count errors preserved | test/paint_tests.jl gradient endpoints/midpoints, radial/angular hand checks |
 | `parseHtmlColor`, `parseSomePaint` | chroma, `pixie/paints.nim` | **implemented**: `#RGB`/`#RRGGBB`, numeric `rgb()`/`rgba()`, case-insensitive named CSS colors; unknown names and malformed input raise `ArgumentError` | test/context_tests.jl hex, named-color, and rgb/rgba parsing tests; T013 corrects the stale hex-only inventory |
 | ordinary-number drawing arguments (Int/Float64 coordinates, `Vec2`/`Rect` constructors, blur/spread/opacity/shadow radii) | — (port addition, T014) | **implemented**: `Real` boundary overloads convert once to `Float32` and delegate to the specialized kernels (upstream Nim implicit conversions are approximated; keyword arguments such as `strokeWidth` remain `Float32`-typed) | test/numeric_api_tests.jl: byte-for-byte scene parity (plain vs `Float32` literals), conversion semantics, zero-extra-allocation dispatch |
-| `toColors` / `fromColors` (ColorTypes matrices) | — (port addition, T015/D024) | **implemented** (opt-in `ColorTypes`): export `Matrix{RGBA{N0f8}}` straight, `[row, col]`; import 2-D `RGB`/`RGBA` of N0f8 bytes or 0..1 floats (clamped); PNG-boundary conversions both ways; 3-D planes and views rejected | test/colormatrices_tests.jl: orientation (asymmetric 3x2), channel order, hand-derived premul/straight values, clamp/round, round-trip loss bounds, recipe; test/codec_loading_tests.jl core-only hint |
+| `toColors` / `fromColors` (ColorTypes matrices) | — (T015/D024, extended M003) | **implemented** (opt-in `ColorTypes`): export `Matrix{RGBA{N0f8}}` straight, `[row, col]`; import 2-D `RGB`/`RGBA` of N0f8 bytes or 0..1 floats (clamped); PNG-boundary conversions both ways. One-based range/strided views accepted without a source copy; top-level transposes materialized. Offset axes, index-array views, adjoints, views over transposes and 3-D planes rejected | test/colormatrices_tests.jl: orientation, channel order, premul/straight, round-trip bounds; test/api_native_tests.jl: views/axes/transpose; test/codec_loading_tests.jl core-only hint |
 
 ## Image operations and effects (T007a, T007b)
 

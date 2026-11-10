@@ -8,9 +8,9 @@ renderer-independent Canvas, CPU/Vulkan.jl/browser/document execution, existing
 codecs and Jupyter integration. Independent architecture/task-plan review has
 passed; source review and final independent media consistency review are complete
 with no blocking findings.
-Coordinator owns these documents. Qwen continues only
-the bounded M003 implementation in `modernization/native-api`; no competing
-Canvas implementation is authorized in that task. Future streams are gated by
+Coordinator owns these documents. Qwen's bounded M003 implementation in
+`modernization/native-api` is now approved and integrated; no writer is currently
+assigned. Future streams are gated by
 R010's contract review. Final milestone task R099 publishes the real interactive
 tutorial via GitHub Pages CI; R098 prepares the illustrated README.
 
@@ -39,9 +39,9 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: independently review/validate M003 when its completion report arrives;
-assign the dependency-ready R040 spike explicitly before starting it. R010
-remains gated by R040 and M003. M003 stays bounded in its separate worktree.
+Next: assign bounded M004 correctness work and the dependency-ready R040 spike
+explicitly before starting them, with separate worktrees. M003's final candidate
+is approved (evidence below); R010 now awaits R040. R099 remains the final task.
 
 Vulkan source research is **reviewed for planning**, with coordinator qualifications
 recorded in `docs/CANVAS_RESEARCH.md`: SPIRV.jl exists (experimental,
@@ -98,11 +98,115 @@ must remain labeled as plans until implemented and validated.
 
 ## Active direction: Julia-native modernization
 
+### M003 completed: review and validation (2026-11-10)
+
+**Approved and integrated:** Qwen's final `0c88c91`, following three reviewed
+correction rounds. Integration commits are `ae9faf6`, `5716ae2`, `bdf39a5` and
+`901b9d7`; source, tests, examples and package metadata match the validated
+candidate exactly. M004 is ready; registration remains user-owned.
+
+Qwen submitted `c1ea06e` on `modernization/native-api`, based on `d2d44fa`.
+**Initial candidate rejected.** Coordinator read the diff and connected methods,
+then reproduced six correction groups: unchecked four-argument Image creation;
+missing one-based axes validation before color-import kernels; incorrectly
+classified/missing native mutators; missing current-path `fill!` on recordings;
+separate `dot`/`normalize` exports still conflicting with LinearAlgebra; and
+missing dimension/end/eachindex/linear-assignment methods on the Image interface.
+
+A standard inner constructor using `new` worked under both Julia 1.13.3 and
+1.10.13; the reported platform limitation does not justify a fourth Image field
+or an unchecked constructor. Exact minimum-version probe (exit 0):
+
+```sh
+julia +1.10 --startup-file=no -e 'println(VERSION); struct ConstructorProbe; x::Int; function ConstructorProbe(x::Int); x > 0 || throw(ArgumentError("positive")); new(x); end; end; @assert ConstructorProbe(1).x == 1; println("inner constructor works");'
+```
+
+Other focused probes used the candidate's `--project=.` and the existing
+`--project=/tmp/opencode/m002env` environment, with `pathof(Vetra)` verified.
+Expressions and outcomes are recorded in the M003 task review. A safe zero-based
+matrix wrapper entered `fromColors` and failed only after three element reads.
+No expected fixtures were modified.
+
+Numbered corrections were returned to the same Qwen writer, including regression
+tests, corrected migration documentation, both Julia gates and remeasurement of
+the reported +16-byte context allocations after restoring the three-field Image.
+Subsequent corrections `e0d1ff8` and `62afa30` restore the validated three-field
+constructor, shared LinearAlgebra bindings, correct mutator inventory, early
+axes checks and row-major linear `eachindex`. Coordinator ran the exact `62afa30`
+full gates in detached worktrees `/tmp/opencode/vetra-m003-coord-{113,110}`:
+
+- `julia --startup-file=no --project=. scripts/check.jl`: exit 0,
+  **95.84% (7734/8070)**, `/tmp/opencode/m003-coord-gate113.log`.
+- `julia +1.10 --startup-file=no --project=. scripts/check.jl`: exit 0,
+  **95.88% (7837/8174)**, `/tmp/opencode/m003-coord-gate110.log`.
+- Focused `test/api_native_tests.jl`: **375/375** on both versions; logs
+  `/tmp/opencode/m003-coord-focused{113,110}.log`.
+- `python3 /tmp/opencode/m003-coord-loading.py`: all eight fresh-process
+  version × core/provider × load-order combinations pass. Candidate paths were
+  asserted; `JULIA_LOAD_PATH=@:@stdlib` excludes global provider leakage.
+- Independent `/tmp/opencode/m003-coord-probes.jl`: **37 pass, 5 errors** on
+  both versions. `axes(img,d)` is missing, so dimensional `begin`/`end` also fail;
+  Qwen is adding that method and nonsquare read/write regressions. The other
+  corrected groups passed, including rejection of offset axes before any reads.
+
+Final correction `0c88c91` adds dimension-aware `axes` with nonsquare begin/end
+read/write tests. Coordinator verified the diff and reran the exact final source:
+
+| Check | Julia 1.13.3 | Julia 1.10.13 |
+| --- | --- | --- |
+| Full `scripts/check.jl` gate | exit 0; **95.84% (7735/8071)** | exit 0; **95.88% (7838/8175)** |
+| Native API suite within the gate | **383/383** | **383/383** |
+| Independent corrected-case probes | **42/42** | **42/42** |
+
+Exact commands, run in the corresponding detached worktree:
+
+```sh
+julia --startup-file=no --project=. scripts/check.jl
+julia +1.10 --startup-file=no --project=. scripts/check.jl
+julia --startup-file=no --project=/tmp/opencode/m003-coord-env113 /tmp/opencode/m003-coord-probes.jl /tmp/opencode/vetra-m003-coord-113
+julia +1.10 --startup-file=no --project=/tmp/opencode/m003-coord-env110 /tmp/opencode/m003-coord-probes.jl /tmp/opencode/vetra-m003-coord-110
+```
+
+Logs: `/tmp/opencode/m003-coord-final-gate{113,110}.log` and
+`/tmp/opencode/m003-coord-final-probes{113,110}.log`. Full gates also exercise
+all six optional providers after core-only precompilation. PyMuPDF interop was
+skipped because the module is unavailable. Source/test/migration corrections
+are Qwen's; shared evidence and integration are coordinator-owned.
+
+Coordinator benchmark comparison used Linux Julia 1.13.3, the same resolved
+provider versions, baseline `9d6bdc8` and final candidate `0c88c91`. Both
+eight-workload output-checking smoke runs passed. In the respective worktrees:
+
+```sh
+VETRA_BENCH_SMOKE=1 julia --startup-file=no --project=/tmp/opencode/m003-coord-env-before -e 'using Vetra; @assert dirname(dirname(pathof(Vetra))) == pwd(); include("benchmark/run_benchmarks.jl")'
+VETRA_BENCH_SMOKE=1 julia --startup-file=no --project=/tmp/opencode/m003-coord-env113 -e 'using Vetra; @assert dirname(dirname(pathof(Vetra))) == pwd(); include("benchmark/run_benchmarks.jl")'
+```
+
+| Workload | Before median ms | After median ms | Before bytes | After bytes |
+| --- | ---: | ---: | ---: | ---: |
+| fill_rects_1000 | 0.954 | 0.927 | 8515560 | 8515560 |
+| stroke_lines_1000 | 26.750 | 28.755 | 22203640 | 22203640 |
+| blur_128_r3 | 0.383 | 0.375 | 656800 | 656800 |
+| shadow_128 | 0.406 | 0.423 | 1640760 | 1640760 |
+| draw_10 | 0.235 | 0.357 | 1639120 | 1639120 |
+| png_encode_256_x10 | 26.321 | 28.370 | 47522280 | 47511880 |
+| png_decode_basic1_x10 | 2.915 | 2.892 | 13901360 | 13880560 |
+| text_parse_layout_x100_measure_x20 | 1.273 | 1.283 | 10136080 | 10136080 |
+
+Logs: `/tmp/opencode/m003-coord-bench-{before,after}.log`; TSVs in each
+worktree's `benchmark/results/julia_2026-11-10_smoke.tsv`. No allocation total
+increased: six match, PNG totals are slightly lower (the implementer's all-eight
+equality was not reproduced). The earlier +16-byte fill/stroke regression is
+gone. Shared-host five-sample timings are observations, not a speed claim:
+draw's minimum stayed 0.232→0.231 ms despite the median variation. No kernel
+optimization is inferred. M003's remote platform results remain pending after
+push; prior four-platform evidence belongs to M002.
+
 2026-11-10: user requested independent Julia-native identity/API, obsolete
 port-document cleanup, rewritten interactive GitHub Pages documentation, and
 working Linux/Windows/macOS/FreeBSD tests and benchmarks. Follow
 `tasks/MODERNIZATION.md` M001–M007 in order. GPT-6 Astra validates; Qwen3.8
-implements. M001/M002 are complete; M003 Julia-native API work is active.
+implements. M001–M003 are complete; M004 correctness work is ready.
 Baseline `415c7a0` was clean and already pushed. Existing remote CI fails;
 Pages workflow hosting is enabled but there is no deployment yet.
 M002 implementation and review fixes are integrated (`95185c3`, `8bfd7ae`).

@@ -40,7 +40,7 @@ Status vocabulary: `ready`, `in_progress`, `review`, `verification_pending`,
 | --- | --- |
 | M001 baseline/audit | Done; retain evidence |
 | M002 four-platform CI | Done at `d2d44fa`, run 42811680553; extend, do not replace |
-| M003 Julia-native API | Finish/review the active bounded work; additive foundation for Canvas |
+| M003 Julia-native API | Done; independently validated additive foundation for Canvas (see handoff) |
 | M004 correctness fixes | Complete before the shared core is released; includes FFI ownership, malformed input and crop fixes |
 | M005 new docs/Pages | Fold into **R099**, the last task; do not publish prospective backend support as current |
 | M006 obsolete-file cleanup | Fold into **R086**, after durable contracts have replacements |

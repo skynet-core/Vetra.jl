@@ -2,8 +2,8 @@
 
 **Superseded in part by the user's Canvas milestone:** see
 [Canvas architecture](../docs/CANVAS_DESIGN.md) and
-[R000–R099 development plan](CANVAS_ROADMAP.md). Finish the active bounded M003
-and prerequisite M004 correctness work. M005 documentation is folded into the
+[R000–R099 development plan](CANVAS_ROADMAP.md). M003 is complete; prerequisite
+M004 correctness work is ready for assignment. M005 documentation is folded into the
 final R099 task; M006 cleanup becomes R086; M007 integrated validation becomes
 R090. Their original order below is historical, not the active execution order.
 
@@ -193,6 +193,50 @@ Depends on M002 (local implementation may proceed while remote jobs run).
   demonstrated to preserve core-only load latency and application load order.
   Keep old encode return types compatible; don't silently convert binary Strings
   to byte vectors in existing methods during this naming transition.
+
+### Coordinator review of candidate `c1ea06e` (2026-11-10)
+
+Initial status: **corrections requested**. Independently reproduced:
+
+1. `Image(-1, 2, UInt8[], 0)` bypasses validation. Use a validated inner
+   constructor and the existing three fields; ordinary `new` works on both
+   supported Julia versions. Remeasure allocations after removing `nbytes`.
+2. `fromColors` enters its kernel for non-one-based axes. Reject unsupported
+   axes before reads, including through wrappers; range-view checks are not an
+   axes check.
+3. `ceil!(1.2)` wrongly calls pure Base rounding. Path `transform`, gradient
+   fill and recorder finalization mutate, and `rect` mixes constructors with
+   mutators. Correct typed adapters, bang names, exports and migration claims;
+   include the missing snake-case pixel getter.
+4. `fill!(PictureRecorder(8, 8).ctx)` has no method despite legacy support.
+   Cover current-path and winding-rule overloads with a recorded-output test.
+5. `using Vetra, LinearAlgebra` still makes unqualified `dot` and `normalize`
+   ambiguous. Share the standard-library bindings, preserving qualified legacy
+   calls, and verify both load orders in fresh processes.
+6. `size(img, 1)`, `img[end]`, `eachindex(img)` and linear assignment fail.
+   Complete the documented duck-typed interface with consistent storage-order
+   indexing and nonsquare-image tests.
+
+### Completion evidence (2026-11-10)
+
+**Done, independently approved.** Qwen's final `0c88c91` follows `e0d1ff8`
+(six correction groups), `62afa30` (row-major eachindex) and `0c88c91`
+(dimension-aware axes and begin/end). Coordinator integrated the four commits
+through `901b9d7`; validated source/tests/package metadata are identical.
+
+- Exact final `scripts/check.jl` gates pass: Julia 1.13.3 **95.84%
+  (7735/8071)**; Julia 1.10.13 **95.88% (7838/8175)**. Native API suite:
+  **383/383** each; independent corrected-case probes: **42/42** each.
+- Eight fresh-process core/provider and LinearAlgebra load-order combinations
+  passed; the complete gates exercise all six optional providers.
+- Both before/after benchmark smoke runs passed output assertions. Six workloads
+  have equal allocation totals; PNG encode/decode totals are slightly lower.
+  Fill/stroke totals exactly match baseline, eliminating the rejected fourth-field
+  regression. Timings are recorded without a speed claim.
+- API, migration, compatibility, decision and example documentation is aligned.
+  Exact commands, logs, benchmark table and PyMuPDF skip are in
+  `docs/HANDOFF.md`. Remote platform validation after push is pending; existing
+  four-platform results belong to M002. M004 is now ready for assignment.
 
 ## M004 — Correctness audit and reproduced bug fixes
 

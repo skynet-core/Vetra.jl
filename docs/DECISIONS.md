@@ -1147,6 +1147,35 @@ conformance and the new tutorial remain future task criteria. Research sources
 and compatibility probes are recorded in the design/plan, not inferred from
 the CPU evidence. Package registration remains user-owned.
 
+## D035 — Additive Julia-native API with explicit storage order (M003)
+
+Status: **accepted and independently validated**; evidence in `docs/HANDOFF.md`.
+Supersedes D024's concrete-Matrix-only import restriction and the legacy-only
+naming convention without removing legacy callers or changing rendering kernels.
+
+- Prefer snake_case and `!` mutators. Alias mutation-homogeneous generics;
+  use typed adapters when a legacy generic mixes constructors and mutators.
+  Recorder finalization consumes state and is named `finish_recording!`.
+- Share Base/LinearAlgebra generics for owned-type methods; `dot` and `normalize`
+  must not become competing exports. Preserve Vec2's legacy magnitude `length`
+  without making it an AbstractVector.
+- Keep `Image(width, height, data)`'s three fields and row-major premultiplied
+  RGBA bytes. Inner constructors reject invalid dimensions, overflow and wrong
+  buffer lengths. The supplied vector remains borrowed; callers must not resize it.
+  No unchecked public constructor or redundant stored byte count is needed.
+- Expose `[row, column]`, row-major linear access/iteration/`eachindex`, and
+  coherent size/axes/begin/end. Image remains duck-typed, not an AbstractMatrix;
+  pretending column-major storage would misrepresent its linear indices.
+- Validate one-based axes before color-import reads. Accept range-selected
+  views without a source copy and materialize top-level transposes; reject
+  unsupported wrappers explicitly. Preserve alpha conversion and rounding.
+- Runtime dependencies remain standard libraries; declare optional provider
+  UUIDs/compatibility while retaining D028's lazy first-use loading.
+
+Evidence: `test/api_native_tests.jl`, existing kernel/reference suites, coordinator
+load-order probes and before/after benchmark smoke. No new Canvas backend is
+implied by these additive interfaces.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

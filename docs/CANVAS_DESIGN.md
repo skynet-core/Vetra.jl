@@ -261,7 +261,7 @@ An image's storage format does not choose its processor. Support host
 `AbstractMatrix` and `AbstractVector` inputs/outputs through ordinary Julia
 indexing and typed pixel conversions. Rendering stays in the CPU or Vulkan
 backend selected by the caller. Reuse the existing color-matrix conversions;
-the current concrete-Matrix-only API is not the new interoperability limit.
+M003's owned-image matrix imports are not the new interoperability limit.
 
 Required storage contracts:
 

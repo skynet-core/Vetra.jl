@@ -27,9 +27,9 @@ GUI or plotting frameworks in core.
 
 Coordinator owns the design and integration. Vulkan, browser/notebook and media
 source research is reviewed, with runtime decisions deferred to implementation
-probes. R040 is ready for explicit assignment. The existing Qwen writer is finishing
-only its bounded M003 task in the
-`modernization/native-api` worktree. New backend implementation is dependency-
+probes. M003 is complete: Qwen's final `0c88c91` candidate was independently
+validated and integrated through `901b9d7`. M004 and R040 are ready for explicit
+assignment. New backend implementation is dependency-
 gated by R010's reviewed contracts. M005/M006/M007 are folded into R099/R086/R090
 respectively; the current M003 and M004 correctness work remain prerequisites.
 
@@ -43,8 +43,8 @@ scope, ownership, dependencies, and acceptance checks:
 | --- | --- | --- |
 | M001 | Baseline, code audit, detailed task contract | done |
 | M002 | Reliable tests and four-platform test/benchmark CI | done (all 10 CI jobs passed) |
-| M003 | Julia-native API and package integration | in_progress |
-| M004 | Correctness audit and reproduced bug fixes | blocked on M003 |
+| M003 | Julia-native API and package integration | done (independently approved; both Julia gates and benchmark smoke pass) |
+| M004 | Correctness audit and reproduced bug fixes | ready (unassigned) |
 | M005 | New README, interactive docs, GitHub Pages publication | moved to R098/R099 |
 | M006 | Remove obsolete port scaffolding | moved to R086 |
 | M007 | Final independent validation | moved to R090 |
@@ -63,9 +63,9 @@ M002 coordinator gates now pass concurrently on Julia 1.13.3 and 1.10.13;
 Linux/Windows/macOS remote tests and benchmarks passed. FreeBSD prerequisite
 fix passed in [run 42811680553](https://github.com/skynet-core/Vetra.jl/actions/runs/42811680553),
 including full tests/coverage and benchmark smoke, with all four benchmark
-artifacts uploaded. Sole implementation writer is now Qwen on M003 at
+artifacts uploaded. Completed M003 implementation is retained at
 `/home/vasyl/.local/share/opencode/worktree/e72bb3/julia-native-api`
-(branch `modernization/native-api`).
+(branch `modernization/native-api`); no active writer until the next assignment.
 
 ## Historical board (retired after M006 consolidation)
 

@@ -11,7 +11,7 @@ and embedding seams for future GUI/plotting libraries (host lifecycle, reusable
 drawing, text metrics and precise data-to-local-coordinate mapping).
 The architecture is `docs/CANVAS_DESIGN.md`; the detailed parallel development
 plan is `tasks/CANVAS_ROADMAP.md`. R000 is planning/review, not a claim of backend
-implementation. Finish the already assigned bounded M003 work; new backend
+implementation. M003 is complete; M004 and R040 await explicit assignment. New backend
 implementation follows reviewed R010 contracts and explicit task ownership.
 Use separate worktrees for parallel writers. The coordinator reviews and
 validates each result before approval. R099 (interactive GitHub Pages tutorial)

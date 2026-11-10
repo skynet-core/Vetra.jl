@@ -18,6 +18,7 @@ These are design documents; the current implementation remains CPU-based.
 | Copy a small reproducible recipe (sparkline, gauge, KPI, candles, annotation, diagram, dashboard, social card) | [COOKBOOK](build/cookbook/COOKBOOK.md) — source: [docs/cookbook.jl](cookbook.jl) |
 | See all rendered outputs | [build/gallery.html](build/gallery.html) (run the build command below first) |
 | Look up the public API | [API.md](API.md) |
+| Adopt snake_case names, `!` mutators and Image indexing | [MIGRATION.md](MIGRATION.md) |
 | Check what is supported vs. upstream | [COMPATIBILITY.md](COMPATIBILITY.md) |
 | Understand the rendering architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Read the numerical/rounding contract | [NUMERICAL_CONTRACT.md](NUMERICAL_CONTRACT.md) |
