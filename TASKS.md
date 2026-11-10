@@ -8,8 +8,8 @@ scope, ownership, dependencies, and acceptance checks:
 
 | Task | Goal | Status |
 | --- | --- | --- |
-| M001 | Baseline, code audit, detailed task contract | in_progress |
-| M002 | Reliable tests and four-platform test/benchmark CI | blocked on M001 |
+| M001 | Baseline, code audit, detailed task contract | done |
+| M002 | Reliable tests and four-platform test/benchmark CI | in_progress |
 | M003 | Julia-native API and package integration | blocked on M002 |
 | M004 | Correctness audit and reproduced bug fixes | blocked on M003 |
 | M005 | New README, interactive docs, GitHub Pages publication | blocked on M004 |
@@ -20,7 +20,12 @@ Coordinator: GPT-6 Astra, responsible for validation and integration. Paired
 implementer: `vllm/nvidia/Qwen3.8-27B-NVFP4`. One task at a time; commit and push
 each completed task. Baseline `415c7a0` is clean and already on `origin/main`.
 Latest existing CI run `42741112923` failed (including Julia 1.10 allocation
-equality in `test/numeric_api_tests.jl:126`); Pages is not yet configured.
+equality in `test/numeric_api_tests.jl:126`). M001 baseline passed locally on
+Julia 1.13.3 (95.83% coverage); numeric failure reproduced on 1.10.13.
+Benchmarks passed. Pages workflow hosting is enabled, awaiting deployment.
+M002 Qwen worktree:
+`/home/vasyl/.local/share/opencode/worktree/e72bb3/julia-native-modernization`
+(branch `modernization/qwen`); coordinator owns shared task/handoff documents.
 
 ## Historical board (retired after M006 consolidation)
 

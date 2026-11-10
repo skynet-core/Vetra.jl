@@ -6,8 +6,9 @@
 port-document cleanup, rewritten interactive GitHub Pages documentation, and
 working Linux/Windows/macOS/FreeBSD tests and benchmarks. Follow
 `tasks/MODERNIZATION.md` M001–M007 in order. GPT-6 Astra validates; Qwen3.8
-implements. M001 audit and fresh baseline gate are running. Baseline `415c7a0`
-was clean and already pushed. Existing remote CI fails; no Pages site exists.
+implements. M001 audit and fresh baseline gate are complete; M002 is active.
+Baseline `415c7a0` was clean and already pushed. Existing remote CI fails;
+Pages workflow hosting is enabled but there is no deployment yet.
 Keep registration user-owned. Preserve licenses, attribution, regression
 fixtures and test/benchmark/docs infrastructure during cleanup.
 

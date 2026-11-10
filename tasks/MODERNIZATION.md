@@ -47,7 +47,27 @@ from passing tests. Fix reproduced defects; record remaining limitations.
   loading symbol `dlopen`; Linux 1.10 failed an allocation equality (7824 versus
   1568 bytes). No FreeBSD job. These are baseline failures, not new regressions.
 - `gh api repos/skynet-core/Vetra.jl/pages` returned 404: no configured site.
-- Detailed Qwen audit: pending.
+- Coordinator reproduced the numeric failure locally with Julia 1.10.13:
+  `julia +1.10 --startup-file=no --project=. -e 'using Test, Vetra;
+  include("test/numeric_api_tests.jl")'`: 22 pass, one failure (5712 vs 1568).
+- Baseline `julia --startup-file=no --project=docs benchmark/run_benchmarks.jl`
+  passed on Julia 1.13.3; log
+  `/tmp/opencode/vetra-modernization-bench-before.log`. Single-run steady medians
+  (ms): fill 0.824, stroke 26.179, blur 0.373, shadow 0.529, draw 0.240,
+  PNG encode 24.924, PNG decode 3.218, text 1.267. These are comparison data,
+  not generalized speed claims.
+- Qwen read-only audit completed. Triaged for M002: direct Unix loader calls
+  fail on Windows; numeric allocation checks need specialization warm-up;
+  coverage can use stale data and omit uncovered files. For M004: PPM accepts
+  zero dimensions; cmap-12 groups can expand billions of invalid codepoints;
+  `superImage`'s absolute-offset early exit discards some partial overlaps;
+  `setLineDash` aliases caller storage (verify intended snapshot contract).
+  Each latent finding requires a coordinator-reviewed regression before fixing.
+- Keep API evolution in M003 and parser/correctness fixes in M004 as specified.
+  Encoding return-type changes require compatibility consideration, not a
+  blanket rewrite. `Libdl` is a stdlib runtime dependency and must be declared.
+  FreeBSD is feasible via `vmactions/freebsd-vm`, not dependent on provisioning
+  a self-hosted runner. No nonstandard Julia-semantics assumption is adopted.
 
 ## M002 — Restore trustworthy tests and cross-platform CI
 
@@ -125,6 +145,10 @@ Depends on M003/M004.
 - Acceptance: clean docs build, executed examples, local links/assets checked,
   browser interaction smoke check, successful deployment, and live site URLs
   fetched and inspected by coordinator.
+
+Infrastructure prepared: coordinator enabled workflow-based Pages with
+`gh api --method POST repos/skynet-core/Vetra.jl/pages -f build_type=workflow`.
+Target URL is `https://skynet-core.github.io/Vetra.jl/`; no deployment yet.
 
 ## M006 — Retire obsolete port scaffolding
 
