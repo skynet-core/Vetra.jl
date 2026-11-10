@@ -59,7 +59,7 @@ from passing tests. Fix reproduced defects; record remaining limitations.
 - Qwen read-only audit completed. Triaged for M002: direct Unix loader calls
   fail on Windows; numeric allocation checks need specialization warm-up;
   coverage can use stale data and omit uncovered files. For M004: PPM accepts
-  zero dimensions; cmap-12 groups can expand billions of invalid codepoints;
+  zero dimensions; cmap-12 accepts invalid/inverted Unicode ranges;
   `superImage`'s absolute-offset early exit discards some partial overlaps;
   `setLineDash` aliases caller storage (verify intended snapshot contract).
   Each latent finding requires a coordinator-reviewed regression before fixing.
@@ -68,6 +68,25 @@ from passing tests. Fix reproduced defects; record remaining limitations.
   blanket rewrite. `Libdl` is a stdlib runtime dependency and must be declared.
   FreeBSD is feasible via `vmactions/freebsd-vm`, not dependent on provisioning
   a self-hosted runner. No nonstandard Julia-semantics assumption is adopted.
+- Coordinator independently reproduced PPM zero-size and `superImage` lost
+  overlap, and found `newImage(1 << 61, 2)` returns an empty buffer because
+  dimension multiplication overflows. Add checked size arithmetic in M003's
+  constructor work. cmap-12 inverted and >U+10FFFF singleton ranges are accepted;
+  the audit's billion-iteration claim is withdrawn: the existing glyph-ID guard
+  already rejects that case at 65536. Validate ranges before expansion in M004.
+- Additional coordinator FFI review: `_hbFace` uses `get`, not `get!`, so its
+  supposed cache remains empty and every shaping call leaks new native handles.
+  Reproduced in the docs environment: after `shapeText`, cache length is zero
+  and two `_hbFace(tf.opentype)` calls return different handles. M004 must give
+  native objects explicit ownership/cleanup and reuse live font state without
+  permanently retaining every parsed font. `_hbShape` also passes a temporary
+  character vector as `hb_language_t`; use `hb_language_from_string` (as the
+  independent C oracle already does) and guarantee buffer cleanup on exceptions.
+  Reference: https://harfbuzz.github.io/harfbuzz-hb-common.html#hb-language-from-string.
+  Baseline on Julia 1.13.3, one parsed Arabic font and 100 three-codepoint calls:
+  13.069/13.012/12.711 ms across three warmed runs, 177600 Julia heap bytes/run;
+  native leaked allocations are not counted by Julia's allocation metric.
+  Log: `/tmp/opencode/vetra-shaping-before.log`.
 
 ## M002 — Restore trustworthy tests and cross-platform CI
 
@@ -108,6 +127,33 @@ Depends on M002 (local implementation may proceed while remote jobs run).
 - Acceptance: meaningful interface/inference/dispatch regressions, complete
   gate, representative before/after allocations and timings; no unmeasured
   performance claim or sweeping mechanical rewrite.
+
+### Coordinator's bounded API contract
+
+- Prefer lowercase/snake-case names and `!` on public mutators. Keep legacy
+  names callable; reuse generic functions via constant aliases when all methods
+  have the same mutation semantics, and use typed adapters for mixed
+  allocating/mutating generics. No `!` alias may advertise a pure constructor
+  overload as a mutator. Include drawing, paths, image effects, context state,
+  recordings, text, and IO/interop in a complete migration table.
+- Add `Image(width, height)` and validate positive dimensions, checked byte-count
+  multiplication, and supplied storage length at construction. Preserve compact
+  row-major bytes. Make Image's Julia array access follow `[row, column]`, while
+  legacy `getColor`/`setColor` retain `(x, y)`; implement the appropriate Base
+  interfaces coherently rather than claiming array compatibility from `size`
+  alone. Test nonsquare images, bounds, iteration, aliasing, copy, and fill!.
+- Extend LinearAlgebra's own `dot`/`normalize` and provide `norm(::Vec2)` /
+  `det(::Mat3)` / `inv(::Mat3)` where semantics already exist. Preserve historical
+  `length(::Vec2)` only as a documented legacy Euclidean-length entry point;
+  do not make Vec2 an AbstractVector with incompatible length semantics.
+- Color-matrix import should accept conventional one-based AbstractMatrix views
+  and transposes through existing specialized kernels, with explicit rejection
+  of unsupported indexing. Do not change premultiplication rounding.
+- Declare optional provider UUIDs/version compatibility in package metadata;
+  retain tested lazy first-use behavior unless a supported replacement is
+  demonstrated to preserve core-only load latency and application load order.
+  Keep old encode return types compatible; don't silently convert binary Strings
+  to byte vectors in existing methods during this naming transition.
 
 ## M004 — Correctness audit and reproduced bug fixes
 
