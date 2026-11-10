@@ -155,8 +155,9 @@ end
 # ---------- image storage (pixie/common.nim, images.nim) ----------
 
 """
-Checked `4 * width * height`: the range guard fires before the multiplication,
-which wraps instead of throwing on this platform.
+Checked `4 * width * height`: the range guard fires before the multiplication
+— fixed-width `Int` multiplication wraps instead of throwing (standard
+semantics), so an unchecked product could silently alias.
 """
 function _checked_nbytes(width::Int, height::Int)
     width > typemax(Int) ÷ 4 ÷ height &&
@@ -179,8 +180,9 @@ are defined; `eachindex` yields the row-major linear indices, so
 `img[i]` / `img[i] = c` are order-consistent with the storage-order
 iteration. The 2-arg and 3-arg inner
 constructors are the only construction path and validate the storage
-contract: positive dimensions, a checked `4 * width * height` byte count,
-and — for supplied storage — an exact data length.
+contract: positive dimensions, a range-checked `4 * width * height` byte
+count (fixed-width multiplication wraps rather than throwing, so the
+guard fires first), and — for supplied storage — an exact data length.
 """
 struct Image
     width::Int
@@ -232,6 +234,14 @@ Base.ndims(::Image) = 2
 Base.eltype(::Type{Image}) = ColorRGBX
 Base.length(image::Image) = image.width * image.height
 Base.axes(image::Image) = (Base.OneTo(image.height), Base.OneTo(image.width))
+
+"""
+`axes(img, d)` = `OneTo(size(img, d))` — the same dimension convention as
+`size(img, d)` (d > 2 → `OneTo(1)`, d <= 0 → ArgumentError). Makes the
+dimension-aware `firstindex(img, d)` / `lastindex(img, d)` (i.e.
+`img[begin, begin]` / `img[end, end]`) work.
+"""
+Base.axes(image::Image, d::Int) = Base.OneTo(size(image, d))
 
 """The first linear index (`img[begin]` = the top-left pixel)."""
 Base.firstindex(image::Image) = 1

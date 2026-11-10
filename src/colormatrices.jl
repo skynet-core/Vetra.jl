@@ -88,8 +88,9 @@ function fromColors(m::AbstractMatrix{C}) where {C}
     CT = _requireColorTypes()
     T = C
     if T === Union{}
-        # A lazy transpose of a color matrix resolves to a bottom eltype in
-        # this build (Transpose{Union{}, ...}); resolve it from the base.
+        # A lazy transpose of a color matrix resolves to a bottom eltype
+        # under standard Transpose semantics (the color elements define no
+        # element transpose); resolve the real color type from the base.
         base = m
         while base isa SubArray || base isa LinearAlgebra.Transpose ||
             base isa LinearAlgebra.Adjoint

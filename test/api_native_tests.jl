@@ -565,9 +565,18 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
         @test eltype(img) === ColorRGBX
         @test length(img) == 15
         @test axes(img) == (Base.OneTo(3), Base.OneTo(5))
+        # axes(img, d): the same dimension convention as size(img, d)
+        @test axes(img, 1) == Base.OneTo(3) && axes(img, 2) == Base.OneTo(5)
+        @test axes(img, 3) == Base.OneTo(1) && axes(img, 7) == Base.OneTo(1)
+        @test_throws ArgumentError axes(img, 0)
+        @test_throws ArgumentError axes(img, -1)
         # img[begin] / img[end] = first / last linear index
         @test img[begin] == getColor(img, 1, 1)
         @test img[end] == getColor(img, 5, 3)
+        # dimensional begin / end: firstindex/lastindex delegate to
+        # axes(img, d)
+        @test img[begin, begin] == getColor(img, 1, 1)
+        @test img[end, end] == getColor(img, 5, 3)
         # eachindex: row-major linear order — with distinct pixels the
         # vectorized read must equal the storage-order iteration
         @test [img[i] for i in eachindex(img)] == [c for c in img]
@@ -578,6 +587,11 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
             @test img[y, x] == ColorRGBX(UInt8(4 * x), UInt8(4 * y),
                 UInt8(x + y), 0xff)
         end
+        # dimensional begin / end writes
+        img[begin, begin] = ColorRGBX(0x10, 0x11, 0x12, 0xff)
+        img[end, end] = ColorRGBX(0x20, 0x21, 0x22, 0xff)
+        @test getColor(img, 1, 1) == ColorRGBX(0x10, 0x11, 0x12, 0xff)
+        @test getColor(img, 5, 3) == ColorRGBX(0x20, 0x21, 0x22, 0xff)
         # linear index = row-major pixel order
         @test img[1] == getColor(img, 1, 1)
         @test img[5] == getColor(img, 5, 1)
@@ -679,8 +693,8 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
         @test size(imgv) == (2, 4)
         @test imgv.data == fromColors(copy(v)).data
         @test getColor(imgv, 4, 2) == ColorRGBX(31, 24, 27, 200)
-        # transpose (rebuilt as a permuted matrix — this platform's
-        # Transpose getindex transforms elements, so no in-place read)
+        # transpose (materialized as a permuted matrix — a lazy wrapper
+        # over color elements has no element-wise transpose)
         t = transpose(big)
         @test size(t) == (5, 4)
         imgt = fromColors(t)

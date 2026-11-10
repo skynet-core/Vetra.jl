@@ -30,8 +30,8 @@ this layer is additive.
 **inner constructors** and the only construction path (the `Image` layout
 stays 3 fields: `width`, `height`, `data`). They check positive dimensions,
 a range-checked `4 * width * height` byte count (the guard fires before the
-multiplication, which wraps instead of throwing on this platform), and — for
-supplied storage — an exact data length. `newImage` delegates to the 2-arg
+multiplication, which wraps rather than throwing — standard fixed-width
+semantics), and — for supplied storage — an exact data length. `newImage` delegates to the 2-arg
 constructor; every internal construction site (`Base.copy`, the decoders,
 ...) goes through the same validated constructors. (The zero-dimension PPM
 decode is now rejected here, at the constructor root.)
@@ -49,17 +49,20 @@ decode is now rejected here, at the constructor root.)
 | `for c in img` | pixels in storage order, top-left first |
 | `fill!(img, c)` | fill the whole image (all three color types) |
 | `size(img)` / `size(img, d)` | `(height, width)`; `d = 1` → height, `d = 2` → width, `d > 2` → 1, `d <= 0` → `ArgumentError` (standard dimension convention) |
-| `axes(img)` / `ndims(img)` / `eltype(img)` / `length(img)` | `(OneTo(height), OneTo(width))`, `2`, `ColorRGBX`, `width * height` |
+| `axes(img)` / `axes(img, d)` | `(OneTo(height), OneTo(width))`; `OneTo(size(img, d))` per dimension |
+| `ndims(img)` / `eltype(img)` / `length(img)` | `2`, `ColorRGBX`, `width * height` |
 | `eachindex(img)` | the row-major linear indices `1:width*height` — the same order as `img[i]` and the storage-order iteration |
 | `copy(img)` | deep copy (validated) |
 
 All orders are consistent: `img[row, column]` maps to linear index
 `(row - 1) * width + column`, which is exactly what `eachindex` yields, so
 vectorized `img[i]` reads and `img[i] = c` writes over `eachindex` are
-row-major (top-left first). Out-of-range linear or `row, column` access
-raises `BoundsError`; `size(img, d > 2)` returns 1 and `size(img, d <= 0)`
-raises `ArgumentError`, as for standard matrices. Storage itself is never
-changed by this interface.
+row-major (top-left first). Dimensional begin/end agree with the matrix
+order: `img[begin, begin]` is the top-left pixel, `img[end, end]` the
+bottom-right one (reads and writes). Out-of-range linear or `row, column`
+access raises `BoundsError`; `size(img, d > 2)` and `axes(img, d > 2)`
+return 1 / `OneTo(1)`, and `d <= 0` raises `ArgumentError`, as for
+standard matrices. Storage itself is never changed by this interface.
 
 **Coordinate conventions.** Array-style access is `img[row, column]`; the
 legacy `getColor(img, x, y)` / `setColor(img, x, y, c)` keep 1-based
