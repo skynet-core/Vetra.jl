@@ -75,25 +75,80 @@ end
 Import a 2-D color matrix as an `Image` (D024): `RGB`/`RGBA` of `N0f8`
 (bytes) or of `Float64`/`Float32` (0..1 values, clamped) are supported;
 `[1, 1]` is the top-left pixel. Straight channels are premultiplied with
-`rgbx` — the PNG decode boundary. Concrete `Matrix` inputs only (views must
-be `copy`ed first); 3-D plane layouts raise a pointing `ArgumentError`.
+`rgbx` — the PNG decode boundary.
+
+Inputs (M003): any one-based `AbstractMatrix` — plain matrices, `view`s
+(contiguous or strided, no copy), and `transpose`s (rebuilt as a permuted
+matrix: this platform's `Transpose` getindex transforms every indexed
+element, which a color value cannot survive). Views built with index
+arrays (e.g. zero-based or permuted selections) and adjoints raise an
+explicit `ArgumentError`; `copy` them first. 3-D plane layouts raise a
+pointing `ArgumentError`.
 """
-function fromColors(m::Matrix{C}) where {C}
+function fromColors(m::AbstractMatrix{C}) where {C}
     CT = _requireColorTypes()
-    (C <: CT.AbstractRGB || C <: CT.AbstractRGBA) ||
+    T = C
+    if T === Union{}
+        # A transpose of a color matrix loses its eltype metadata on this
+        # platform (Transpose{Union{}, ...}); resolve it from the base array.
+        base = m
+        while base isa SubArray || base isa LinearAlgebra.Transpose ||
+            base isa LinearAlgebra.Adjoint
+            base = base.parent
+        end
+        T = eltype(base)
+    end
+    (T <: CT.AbstractRGB || T <: CT.AbstractRGBA) ||
         throw(ArgumentError(
             "fromColors: expected a matrix of ColorTypes RGB/RGBA colors, " *
-            "got $(eltype(m))"))
+            "got $T"))
+    _fromColorsReadableWithoutCopy(m) ||
+        throw(ArgumentError(
+            "fromColors: views with index-array parent indexes are not " *
+            "supported; copy the matrix first"))
+    if m isa LinearAlgebra.Adjoint
+        throw(ArgumentError(
+            "fromColors: adjoint matrices are not supported; use " *
+            "transpose or copy the matrix first"))
+    end
+    # Transpose getindex on this platform applies `transpose` to every
+    # indexed element (identity for numbers, MethodError for colors).
+    # A transpose *under* a view cannot be rebuilt from the outside, so it
+    # is rejected explicitly; a transpose at the top is peeled (odd count
+    # flips the orientation) and rebuilt as a permuted matrix.
+    if m isa SubArray
+        base = m
+        while base isa SubArray
+            base = base.parent
+            if base isa LinearAlgebra.Transpose ||
+                base isa LinearAlgebra.Adjoint
+                throw(ArgumentError(
+                    "fromColors: views over transposes are not supported; " *
+                    "copy the matrix first"))
+            end
+        end
+    end
+    base = m
+    ntrans = 0
+    while base isa LinearAlgebra.Transpose
+        ntrans += 1
+        base = base.parent
+    end
+    if ntrans % 2 == 1
+        m = permutedims(base, (2, 1))
+    else
+        m = base
+    end
     h = size(m, 1)
     w = size(m, 2)
     image = newImage(w, h)
     # invokelatest: ColorTypes may be required (lazy discovery, D028) by
     # this very call, so the specialized kernel can be newer than this
     # method instance.
-    if C.parameters[1] <: AbstractFloat
-        Base.invokelatest(_fromColorsFloat!, m, image.data, w, h)
+    if T.parameters[1] <: AbstractFloat
+        Base.invokelatest(_fromColorsFloat!, m, T, image.data, w, h)
     else
-        Base.invokelatest(_fromColorsFixed!, m, image.data, w, h)
+        Base.invokelatest(_fromColorsFixed!, m, T, image.data, w, h)
     end
     return image
 end
@@ -105,9 +160,27 @@ function fromColors(m::AbstractArray{C,3}) where {C}
         "2-D Matrix of RGB/RGBA colors instead"))
 end
 
+"""True when every view/transpose layer of `m` selects its parent by
+ranges, so the kernel's logical `m[row, column]` reads are valid without a
+copy; false when any layer was built with index arrays."""
+function _fromColorsReadableWithoutCopy(m)
+    while true
+        if m isa SubArray
+            for idx in m.indices
+                idx isa AbstractRange || return false
+            end
+            m = m.parent
+        elseif m isa LinearAlgebra.Transpose || m isa LinearAlgebra.Adjoint
+            m = m.parent
+        else
+            return true
+        end
+    end
+end
+
 """Kernel for `fromColors` (N0f8 channels): the raw `.i` byte is exact."""
-function _fromColorsFixed!(m::Matrix{C}, d::Vector{UInt8}, w::Int, h::Int) where {C}
-    hasA = :alpha ∈ fieldnames(C)
+function _fromColorsFixed!(m, T, d::Vector{UInt8}, w::Int, h::Int)
+    hasA = :alpha ∈ fieldnames(T)
     @inbounds for y in 1:h
         row = 4 * (y - 1) * w
         for x in 1:w
@@ -128,8 +201,8 @@ function _fromColorsFixed!(m::Matrix{C}, d::Vector{UInt8}, w::Int, h::Int) where
 end
 
 """Kernel for `fromColors` (float channels): clamp to [0, 1], round to byte."""
-function _fromColorsFloat!(m::Matrix{C}, d::Vector{UInt8}, w::Int, h::Int) where {C}
-    hasA = :alpha ∈ fieldnames(C)
+function _fromColorsFloat!(m, T, d::Vector{UInt8}, w::Int, h::Int)
+    hasA = :alpha ∈ fieldnames(T)
     chan(v) = UInt8(round(clamp(Float64(v), 0.0, 1.0) * 255))
     @inbounds for y in 1:h
         row = 4 * (y - 1) * w

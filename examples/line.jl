@@ -8,5 +8,5 @@ using .VetraExamples
 out = isempty(ARGS) ?
     joinpath(@__DIR__, "..", "artifacts", "examples", "line.ppm") : ARGS[1]
 isdir(dirname(out)) || mkpath(dirname(out))
-writePPM(out, build_line())
+write_ppm!(out, build_line())
 println(out)

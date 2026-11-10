@@ -103,3 +103,8 @@ include("webp_tests.jl")
 # permutations, RTL placement (cairo-bridge pen model), joined vs
 # isolated forms, Indic conjuncts, missing-glyph policy, engagement.
 include("shaping_tests.jl")
+
+# M003: Julia-native API layer (snake_case/! aliases, Image constructor
+# trust boundary, array interface, LinearAlgebra/Base extensions,
+# fromColors view/transpose widening, weakdeps metadata).
+include("api_native_tests.jl")

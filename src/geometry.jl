@@ -87,7 +87,12 @@ function dot(a::Vec2, b::Vec2)
     return a.x * b.x + a.y * b.y
 end
 
-"""`sqrt(x^2 + y^2)` (vmath `length`, Float32 arithmetic)."""
+"""`sqrt(x^2 + y^2)` (vmath `length`, Float32 arithmetic).
+
+Legacy Euclidean entry point (upstream vmath's name): `LinearAlgebra.norm`
+is the idiomatic Julia name for the same quantity. `Vec2` deliberately
+is not an `AbstractVector`, so `length` here is not an element count.
+"""
 function length(v::Vec2)
     return sqrt(v.x * v.x + v.y * v.y)
 end
@@ -102,6 +107,13 @@ end
 no guard -- mirrors upstream.
 """
 normalize(v::Vec2) = v / length(v)
+
+# LinearAlgebra entry points (M003): the same formulas through the
+# standard-library generics, so `using LinearAlgebra` users get
+# `dot`/`norm`/`normalize` on Vec2 without a wrapper type.
+LinearAlgebra.dot(a::Vec2, b::Vec2) = dot(a, b)
+LinearAlgebra.norm(v::Vec2) = length(v)
+LinearAlgebra.normalize(v::Vec2) = normalize(v)
 
 """
 90-degree counter-clockwise perpendicular: `(x, y) -> (-y, x)`. Equals
@@ -295,6 +307,11 @@ function inverse(m::Mat3)
         -(m[1, 1] * m[3, 2] - m[3, 1] * m[1, 2]) * invdet,
         +(m[1, 1] * m[2, 2] - m[2, 1] * m[1, 2]) * invdet))
 end
+
+# Standard-library entry points (M003): same formulas, no singular guard
+# (a singular `Mat3` yields ±Inf/NaN elements, as upstream).
+LinearAlgebra.det(m::Mat3) = determinant(m)
+Base.inv(m::Mat3) = inverse(m)
 
 """Transpose (vmath ~line 1402): swaps i,j components."""
 function transpose(m::Mat3)

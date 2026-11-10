@@ -1,10 +1,15 @@
 """
-A Julia port of treeform/pixie, pinned at revision 30bb510 (see upstream.toml).
+Vetra — an independent, Julia-native 2D graphics library.
 
-CPU 2D drawing: images, colors, affine geometry, paths, paints, compositing,
-text, and image formats. See docs/COMPATIBILITY.md for supported subsets.
+CPU 2D drawing: images, colors, affine geometry, paths, paints,
+compositing, text, recordings, and image formats. See
+docs/COMPATIBILITY.md for supported subsets. The public API is
+snake_case with `!` on mutating entry points; the legacy camelCase
+names remain callable (full table in docs/MIGRATION.md).
 
-Ported formulas (with source in the pinned tree):
+The rendering core is a port of treeform/pixie, pinned at revision
+30bb510 (see upstream.toml). Ported formulas (with source in the
+pinned tree):
 
 - `pixie/common.nim`: newImage, mix, `*`(ColorRGBX, float32),
   `*`(ColorRGBX, uint8)
@@ -23,6 +28,10 @@ import Base: *, ceil, diff, fill, copy
 
 # Portable dynamic loading for the optional HarfBuzz provider (shaping.jl).
 import Libdl
+
+# Standard-library generics extended for the owned types (geometry.jl, M003).
+import LinearAlgebra
+import LinearAlgebra.rotate!
 
 # Upstream (Nim) `round` ties away from zero (verified against the pinned
 # toolchain: round(-1.5f) == -2); Julia's default round ties to even.
@@ -143,21 +152,95 @@ end
 """
 Bitmap in premultiplied-alpha RGBA, row-major, rows top to bottom, 4 bytes per
 pixel (R, G, B, A). 1-based pixel coordinates.
+
+Array-style access is `img[row, column]` (row 1 = the top scanline, element
+`ColorRGBX`); the legacy `getColor`/`setColor` keep 1-based `(x, y)` order.
+The 2-arg and 3-arg constructors validate the storage contract at the root
+(positive dims, checked byte count, exact data length). `nbytes` stores the
+checked byte count `4 * width * height`; the raw 4-arg constructor is
+low-level and unvalidated.
 """
 struct Image
     width::Int
     height::Int
     data::Vector{UInt8}
+    nbytes::Int
 end
 
-function newImage(width::Int, height::Int)
+"""
+Checked `4 * width * height`: the range guard fires before the multiplication,
+which wraps instead of throwing on this platform.
+"""
+function _checked_nbytes(width::Int, height::Int)
+    width > typemax(Int) ÷ 4 ÷ height &&
+        throw(ArgumentError(
+            "Image byte count 4 * $(width) * $(height) overflows Int64"))
+    return 4 * width * height
+end
+
+"""
+Construct an `Image` over supplied `data` (row-major, 4 bytes per pixel).
+Validates positive dimensions, the checked `4 * width * height` byte count,
+and `length(data) == 4 * width * height` — the storage contract every
+`Image` in the module honors, so all construction sites (`Base.copy`,
+decoders, ...) inherit the check.
+"""
+function Image(width::Int, height::Int, data::Vector{UInt8})
     (width > 0 && height > 0) ||
         throw(ArgumentError("Image width and height must be > 0"))
-    return Image(width, height, zeros(UInt8, 4 * width * height))
+    nbytes = _checked_nbytes(width, height)
+    length(data) == nbytes ||
+        throw(ArgumentError(
+            "Image data has $(length(data)) bytes, expected $nbytes " *
+            "(4 * $(width) * $(height))"))
+    return Image(width, height, data, nbytes)
 end
+
+"""Allocate a zero-initialized (fully transparent) image."""
+function Image(width::Int, height::Int)
+    (width > 0 && height > 0) ||
+        throw(ArgumentError("Image width and height must be > 0"))
+    nbytes = _checked_nbytes(width, height)
+    return Image(width, height, zeros(UInt8, nbytes), nbytes)
+end
+
+newImage(width::Int, height::Int) = Image(width, height)
 
 """Copy the image data into a new image (upstream `copy`)."""
 Base.copy(image::Image) = Image(image.width, image.height, copy(image.data))
+
+# ---------- array-style access (M003) ----------
+# Duck-typed 2-D interface on the concrete type (deliberately not
+# AbstractMatrix): `img[row, column]` with row 1 = the top scanline,
+# element type `ColorRGBX`, linear index in row-major pixel order,
+# iteration in storage order (top-left first).
+
+Base.size(image::Image) = (image.height, image.width)
+Base.ndims(::Image) = 2
+Base.eltype(::Type{Image}) = ColorRGBX
+Base.length(image::Image) = image.width * image.height
+
+"""`img[row, column]` — matrix order (row 1 = the top scanline)."""
+Base.getindex(image::Image, row::Int, column::Int) =
+    getColor(image, column, row)
+
+"""`img[i]` — pixel i in row-major order (i = 1 is the top-left pixel)."""
+function Base.getindex(image::Image, index::Int)
+    (1 <= index <= image.width * image.height) ||
+        throw(BoundsError(image, index))
+    return getColor(image, (index - 1) % image.width + 1,
+        (index - 1) ÷ image.width + 1)
+end
+
+Base.setindex!(image::Image, color::ColorRGBX, row::Int, column::Int) =
+    set_pixel(image, column, row, color)
+
+"""Storage-order iteration over pixels (top-left first)."""
+function Base.iterate(image::Image, state::Int = 1)
+    state > image.width * image.height && return nothing
+    return getColor(image, (state - 1) % image.width + 1,
+        (state - 1) ÷ image.width + 1), state + 1
+end
 
 width(image::Image) = image.width
 height(image::Image) = image.height
@@ -365,6 +448,50 @@ export ColorRGB, ColorRGBA, ColorRGBX, Image,
     Picture, PictureRecorder, RecordingContext, finishRecording, drawPicture,
     writeSvg, writePdf
 
+# M003: Julia-native naming layer (snake_case, `!` on mutating entry
+# points). Defined in native_api.jl; the legacy names above remain
+# callable. See docs/MIGRATION.md.
+export new_image, minify_by2, magnify_by2, rotate_90, sub_image,
+    super_image, opaque_bounds, stroke_shapes, parse_path,
+    compute_bounds, compute_paths, layout_bounds, measure_text,
+    length_sq, with_fallback, shape_text, layout_paragraph,
+    paragraph_metrics, finish_recording,
+    new_font, new_span, new_paragraph, new_paint, new_path,
+    color_stop, parse_html_color, parse_svg, parse_ttf, parse_otf,
+    parse_open_type, read_image, read_image_dimensions, read_font,
+    read_typeface, decode_ppm, decode_ppm_dimensions, decode_png,
+    decode_png_dimensions, decode_bmp, decode_bmp_dimensions, decode_dib,
+    decode_qoi, decode_qoi_dimensions, decode_gif, decode_gif_dimensions,
+    decode_jpeg, decode_jpeg_dimensions, decode_webp,
+    decode_webp_dimensions, decode_image, decode_image_dimensions,
+    encode_ppm, encode_png, encode_bmp, encode_qoi, encode_jpeg,
+    encode_webp, encode_image, encode_base64, decode_base64,
+    to_colors, from_colors, get_transform, get_line_dash,
+    get_rgba_smooth, get_advance, get_glyph_path,
+    get_kerning_adjustment, get_left_side_bearing, is_point_in_path,
+    is_ccw, has_glyph, fallback_typeface, glyph_path_by_gid,
+    auto_line_height, default_line_height, line_gap, line_height,
+    cap_height, blend_alpha, blend_normal, blend_darken,
+    blend_multiply, blend_color_burn, blend_lighten, blend_screen,
+    blend_color_dodge, blend_overlay, blend_soft_light,
+    blend_hard_light, blend_difference, blend_exclusion, blend_hue,
+    blend_saturation, blend_color, blend_luminosity, blend_mask,
+    blend_subtract_mask, blend_exclude_mask, gaussian_kernel,
+    srgb_to_linear, qoi_hash, to_straight_alpha,
+    to_premultiplied_alpha, miter_limit_to_angle, angle_to_miter_limit,
+    default_miter_limit, fill_gradient, snap_to_pixels, srgb,
+    fill!, stroke!, save!, save_layer!, restore!, clip!, begin_path!,
+    close_path!, add_path!, move_to!, line_to!, bezier_curve_to!,
+    quadratic_curve_to!, elliptical_arc_to!, arc_to!, arc!,
+    rounded_rect!, ellipse!, polygon!, circle!, fill_rect!,
+    stroke_rect!, clear_rect!, stroke_segment!, set_transform!,
+    reset_transform!, set_line_dash!, fill_path!, stroke_path!,
+    fill_shapes!, draw!, draw_tiled!, draw_image!, draw_picture!,
+    fill_text!, stroke_text!, fill_paragraph!, stroke_paragraph!,
+    blur!, spread!, invert!, flip_horizontal!, flip_vertical!,
+    apply_opacity!, ceil!, set_color!, write_file!, write_ppm!,
+    write_svg!, write_pdf!, translate!, scale!, rotate!, transform!
+
 include("paths.jl")
 include("blends.jl")
 include("rasterizer.jl")
@@ -390,6 +517,7 @@ include("formats/jpeg.jl")
 include("formats/webp.jl")
 include("formats/io.jl")
 include("colormatrices.jl")
+include("native_api.jl")
 
 # --- precompile common entry points (T021) ---
 # Measured in fresh processes: the first fillRect/stroke/fillText call
