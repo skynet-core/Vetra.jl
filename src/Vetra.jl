@@ -172,10 +172,12 @@ pixel (R, G, B, A). 1-based pixel coordinates.
 Array-style access is `img[row, column]` (row 1 = the top scanline, element
 `ColorRGBX`) plus `img[i]` in row-major linear order; the legacy
 `getColor`/`setColor` keep 1-based `(x, y)` order, so
-`img[y, x] == getColor(img, x, y)`. `size(img)`, `size(img, d)`, `axes`,
-`ndims`, `eltype`, `length`, `eachindex`, and `img[end]` are defined in
-matrix order (1 = height, 2 = width); `img[i] = c` works for both the
-linear index and `eachindex` positions. The 2-arg and 3-arg inner
+`img[y, x] == getColor(img, x, y)`. `size(img)`, `size(img, d)`
+(1 = height, 2 = width, `d > 2` → 1, `d <= 0` → ArgumentError), `axes`,
+`ndims`, `eltype`, `length`, `img[begin]`, `img[end]`, and `eachindex`
+are defined; `eachindex` yields the row-major linear indices, so
+`img[i]` / `img[i] = c` are order-consistent with the storage-order
+iteration. The 2-arg and 3-arg inner
 constructors are the only construction path and validate the storage
 contract: positive dimensions, a checked `4 * width * height` byte count,
 and — for supplied storage — an exact data length.
@@ -215,17 +217,24 @@ Base.copy(image::Image) = Image(image.width, image.height, copy(image.data))
 
 Base.size(image::Image) = (image.height, image.width)
 
-"""`size(img, d)`: 1 = height, 2 = width (matrix order)."""
+"""
+`size(img, d)`: 1 = height, 2 = width (matrix order). Standard dimension
+convention: positive `d > 2` returns 1, `d <= 0` raises `ArgumentError`.
+"""
 function Base.size(image::Image, d::Int)
     d == 1 && return image.height
     d == 2 && return image.width
-    throw(BoundsError(image, d))
+    d < 1 && throw(ArgumentError("dimension must be positive, got $d"))
+    return 1
 end
 
 Base.ndims(::Image) = 2
 Base.eltype(::Type{Image}) = ColorRGBX
 Base.length(image::Image) = image.width * image.height
 Base.axes(image::Image) = (Base.OneTo(image.height), Base.OneTo(image.width))
+
+"""The first linear index (`img[begin]` = the top-left pixel)."""
+Base.firstindex(image::Image) = 1
 
 """The last linear index (`img[end]` = the bottom-right pixel)."""
 Base.lastindex(image::Image) = image.width * image.height
@@ -253,15 +262,11 @@ function Base.setindex!(image::Image, color::ColorRGBX, index::Int)
         (index - 1) ÷ image.width + 1, color)
 end
 
-"""`img[i] = c` for `i` from `eachindex(img)` (matrix order)."""
-Base.setindex!(image::Image, color::ColorRGBX, i::Base.CartesianIndex{2}) =
-    set_pixel(image, i.I[2], i.I[1], color)
-
 """
-Matrix-order (row, column) pixel indices, column fastest — the same order as
-the linear index and the storage-order iteration.
+The row-major linear indices `1:width*height` — the same order as `img[i]`
+and the storage-order iteration.
 """
-Base.eachindex(image::Image) = Base.CartesianIndices((image.height, image.width))
+Base.eachindex(image::Image) = Base.OneTo(image.width * image.height)
 
 """Storage-order iteration over pixels (top-left first)."""
 function Base.iterate(image::Image, state::Int = 1)

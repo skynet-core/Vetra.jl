@@ -43,22 +43,23 @@ decode is now rejected here, at the constructor root.)
 |---|---|
 | `img[row, column]` | matrix order — row 1 is the top scanline; returns `ColorRGBX` |
 | `img[i]` | pixel `i` in row-major order (1 = top-left) |
-| `img[end]` | the last linear index — the bottom-right pixel |
+| `img[begin]` / `img[end]` | first / last linear index — the top-left / bottom-right pixel |
 | `img[row, column] = c` | set a `ColorRGBX` pixel (in place) |
-| `img[i] = c` | linear-order mutation (inverse of `img[i]`) |
-| `img[i] = c` for `i` in `eachindex(img)` | matrix-order mutation |
+| `img[i] = c` | linear-order mutation (inverse of `img[i]`; valid for every `i` in `eachindex(img)`) |
 | `for c in img` | pixels in storage order, top-left first |
 | `fill!(img, c)` | fill the whole image (all three color types) |
-| `size(img)` / `size(img, d)` | `(height, width)`; `d = 1` → height, `d = 2` → width |
+| `size(img)` / `size(img, d)` | `(height, width)`; `d = 1` → height, `d = 2` → width, `d > 2` → 1, `d <= 0` → `ArgumentError` (standard dimension convention) |
 | `axes(img)` / `ndims(img)` / `eltype(img)` / `length(img)` | `(OneTo(height), OneTo(width))`, `2`, `ColorRGBX`, `width * height` |
-| `eachindex(img)` | matrix-order (row, column) positions, column fastest — the same order as the linear index |
+| `eachindex(img)` | the row-major linear indices `1:width*height` — the same order as `img[i]` and the storage-order iteration |
 | `copy(img)` | deep copy (validated) |
 
-All orders are consistent: linear index `i`, `eachindex` position
-`(row, column)`, and `img[row, column]` address the same storage position
-(row-major, row 1 first). Out-of-range linear, `eachindex`, or dimension
-access raises `BoundsError`; storage itself is never changed by this
-interface.
+All orders are consistent: `img[row, column]` maps to linear index
+`(row - 1) * width + column`, which is exactly what `eachindex` yields, so
+vectorized `img[i]` reads and `img[i] = c` writes over `eachindex` are
+row-major (top-left first). Out-of-range linear or `row, column` access
+raises `BoundsError`; `size(img, d > 2)` returns 1 and `size(img, d <= 0)`
+raises `ArgumentError`, as for standard matrices. Storage itself is never
+changed by this interface.
 
 **Coordinate conventions.** Array-style access is `img[row, column]`; the
 legacy `getColor(img, x, y)` / `setColor(img, x, y, c)` keep 1-based

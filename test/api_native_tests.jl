@@ -557,18 +557,21 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
         end
         @test size(img) == (3, 5)
         @test size(img, 1) == 3 && size(img, 2) == 5
-        @test_throws BoundsError size(img, 3)
+        # standard dimension convention: d > ndims -> 1, d <= 0 -> ArgumentError
+        @test size(img, 3) == 1 && size(img, 7) == 1
+        @test_throws ArgumentError size(img, 0)
+        @test_throws ArgumentError size(img, -1)
         @test ndims(img) == 2
         @test eltype(img) === ColorRGBX
         @test length(img) == 15
         @test axes(img) == (Base.OneTo(3), Base.OneTo(5))
-        # img[end] = the last linear index = the bottom-right pixel
+        # img[begin] / img[end] = first / last linear index
+        @test img[begin] == getColor(img, 1, 1)
         @test img[end] == getColor(img, 5, 3)
-        # eachindex: matrix-order positions, same order as the linear
-        # index and the storage-order iteration
-        @test length(collect(eachindex(img))) == 15
-        @test first(eachindex(img)) == CartesianIndex(1, 1)
-        @test last(eachindex(img)) == CartesianIndex(3, 5)
+        # eachindex: row-major linear order — with distinct pixels the
+        # vectorized read must equal the storage-order iteration
+        @test [img[i] for i in eachindex(img)] == [c for c in img]
+        @test first(eachindex(img)) == 1 && last(eachindex(img)) == 15
         # [row, column] maps onto the stored (x, y) pixel
         for y in 1:3, x in 1:5
             @test img[y, x] == getColor(img, x, y)
@@ -595,11 +598,15 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
         @test getColor(img, 1, 2) == ColorRGBX(0x55, 0x66, 0x77, 0x88)
         @test_throws BoundsError setindex!(img, ColorRGBX(1, 1, 1, 1), 16)
         @test_throws BoundsError setindex!(img, ColorRGBX(1, 1, 1, 1), 0)
-        # eachindex editing
+        # read-modify-write via img[i] inside eachindex: distinct values
+        # per position prove the row-major linear mapping (i =
+        # (row - 1) * width + column)
         for i in eachindex(img)
-            img[i] = ColorRGBX(0xaa, 0xbb, 0xcc, 0xdd)
+            img[i] = ColorRGBX(UInt8(i), UInt8(2i), UInt8(3i), 0xff)
         end
-        @test getColor(img, 5, 3) == ColorRGBX(0xaa, 0xbb, 0xcc, 0xdd)
+        @test img[1] == ColorRGBX(1, 2, 3, 0xff) == getColor(img, 1, 1)
+        @test img[6] == ColorRGBX(6, 12, 18, 0xff) == getColor(img, 1, 2)
+        @test img[15] == ColorRGBX(15, 30, 45, 0xff) == getColor(img, 5, 3)
         # iteration in storage order
         @test [c for c in img] ==
             [getColor(img, (k - 1) % 5 + 1, (k - 1) ÷ 5 + 1) for k in 1:15]

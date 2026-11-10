@@ -101,12 +101,9 @@ function fromColors(m::AbstractMatrix{C}) where {C}
         throw(ArgumentError(
             "fromColors: expected a matrix of ColorTypes RGB/RGBA colors, " *
             "got $T"))
-    try
-        Base.require_one_based_indexing(m)
-    catch
-        throw(ArgumentError(
-            "fromColors: expects one-based (1:size) axes, got $(axes(m))"))
-    end
+    # One-based axes are required before any element access; unsupported
+    # indexing raises Base's own ArgumentError.
+    Base.require_one_based_indexing(m)
     _fromColorsReadableWithoutCopy(m) ||
         throw(ArgumentError(
             "fromColors: views selected by index arrays, adjoints, and " *
