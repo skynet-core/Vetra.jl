@@ -53,11 +53,14 @@ const _HB_PKGID = Base.PkgId(
     Base.UUID("2e76f6c2-a576-52d4-95c1-20adfe4de566"), "HarfBuzz_jll")
 
 const _HB_SYMBOLS = (
-    :hb_blob_create, :hb_blob_destroy, :hb_face_create, :hb_face_destroy,
-    :hb_font_create, :hb_font_destroy, :hb_buffer_create,
-    :hb_buffer_destroy, :hb_buffer_set_direction, :hb_buffer_set_script,
-    :hb_buffer_set_language, :hb_language_from_string, :hb_buffer_add,
-    :hb_shape, :hb_buffer_get_glyph_infos, :hb_buffer_get_glyph_positions)
+    :hb_blob_create, :hb_blob_destroy, :hb_blob_get_empty,
+    :hb_face_create, :hb_face_destroy, :hb_face_get_empty,
+    :hb_font_create, :hb_font_destroy, :hb_font_get_empty,
+    :hb_buffer_create, :hb_buffer_destroy, :hb_buffer_get_empty,
+    :hb_buffer_allocation_successful, :hb_buffer_set_direction,
+    :hb_buffer_set_script, :hb_buffer_set_language,
+    :hb_language_from_string, :hb_buffer_add, :hb_shape,
+    :hb_buffer_get_glyph_infos, :hb_buffer_get_glyph_positions)
 
 global _HB_FUNCS = nothing # Dict{Symbol,Ptr{Cvoid}}, once loaded
 # Cached (blob, face, font) per live parsed font. Keys are WEAK (M004:
@@ -125,22 +128,26 @@ shaping call leaked a fresh native triple)."""
 function _hbFace(ot::OtcOpenType)
     st = get(_HB_FACES, ot, nothing)
     st !== nothing && return st
+    # HarfBuzz 15.1.0 constructors never return NULL on failure: they
+    # return the published singleton empty object (`*_get_empty`), so
+    # the documented failure signal is a pointer comparison against it
+    # (checked before use; partially created objects are destroyed).
     blob = ccall(_HB_FUNCS[:hb_blob_create], Ptr{Cvoid},
         (Ptr{Cchar}, UInt32, UInt32, Ptr{Cvoid}, Ptr{Cvoid}),
         ot.buf, UInt32(length(ot.buf)), 0, C_NULL, C_NULL) # DUPLICATE
-    blob === C_NULL &&
+    blob === ccall(_HB_FUNCS[:hb_blob_get_empty], Ptr{Cvoid}, ()) &&
         throw(ErrorException(
             "HarfBuzz: hb_blob_create failed for $(length(ot.buf)) font bytes"))
     face = ccall(_HB_FUNCS[:hb_face_create], Ptr{Cvoid},
         (Ptr{Cvoid}, UInt32), blob, 0)
-    face === C_NULL && begin
+    face === ccall(_HB_FUNCS[:hb_face_get_empty], Ptr{Cvoid}, ()) && begin
         ccall(_HB_FUNCS[:hb_blob_destroy], Cvoid, (Ptr{Cvoid},), blob)
         throw(ErrorException(
             "HarfBuzz: hb_face_create failed (unsupported font data?)"))
     end
     font = ccall(_HB_FUNCS[:hb_font_create], Ptr{Cvoid},
         (Ptr{Cvoid},), face)
-    font === C_NULL && begin
+    font === ccall(_HB_FUNCS[:hb_font_get_empty], Ptr{Cvoid}, ()) && begin
         ccall(_HB_FUNCS[:hb_face_destroy], Cvoid, (Ptr{Cvoid},), face)
         ccall(_HB_FUNCS[:hb_blob_destroy], Cvoid, (Ptr{Cvoid},), blob)
         throw(ErrorException("HarfBuzz: hb_font_create failed"))
@@ -154,6 +161,16 @@ function _hbFace(ot::OtcOpenType)
     end
     _HB_FACES[ot] = st
     return st
+end
+
+"""Raise when `buf` is harfbuzz's empty-buffer sentinel or reported a
+failed allocation — the documented failure signal for buffers
+(`hb_buffer_create` itself never returns NULL)."""
+function _hbBufferOK(buf)
+    ccall(_HB_FUNCS[:hb_buffer_allocation_successful], Cint,
+        (Ptr{Cvoid},), buf) == 0 &&
+        throw(ErrorException("HarfBuzz: buffer allocation failed (OOM)"))
+    return nothing
 end
 
 """Shape one run of codepoints against `ot`'s raw bytes. Returns the
@@ -170,11 +187,15 @@ function _hbShape(ot::OtcOpenType, codepoints::Vector{UInt32},
     # preservation.
     GC.@preserve ot begin
         buf = ccall(_HB_FUNCS[:hb_buffer_create], Ptr{Cvoid}, ())
-        # HarfBuzz's documented OOM contract for create: NULL on
-        # allocation failure — never use the pointer unchecked.
-        buf === C_NULL &&
-            throw(ErrorException("HarfBuzz: hb_buffer_create failed"))
         try
+            # `hb_buffer_create` never returns NULL: on OOM it returns
+            # the published empty buffer, whose documented failure
+            # signal is `hb_buffer_allocation_successful == false`.
+            # Checked before any input, after the allocating add/shape
+            # ops, and before reading the raw results — no silent
+            # empty/partial success; the finally releases the buffer in
+            # all cases.
+            _hbBufferOK(buf)
             ccall(_HB_FUNCS[:hb_buffer_set_direction], Cvoid,
                 (Ptr{Cvoid}, UInt32), buf, direction)
             ccall(_HB_FUNCS[:hb_buffer_set_script], Cvoid,
@@ -186,7 +207,8 @@ function _hbShape(ot::OtcOpenType, codepoints::Vector{UInt32},
             # a C string (rooted for the call); -1 means NUL-terminated.
             # BCP47 tags are ASCII, and harfbuzz silently sanitizes
             # other input (e.g. "é" -> empty language) instead of
-            # failing, so reject empty/non-ASCII up front (M004).
+            # failing, so require non-empty ASCII input up front
+            # (M004 — no full BCP47 validation).
             if isempty(lang) || any(c -> Int(c) > 0x7f, lang)
                 throw(ArgumentError("Invalid language tag: $(lang)"))
             end
@@ -201,9 +223,11 @@ function _hbShape(ot::OtcOpenType, codepoints::Vector{UInt32},
                 ccall(_HB_FUNCS[:hb_buffer_add], Cvoid,
                     (Ptr{Cvoid}, UInt32, UInt32), buf, cp, UInt32(i - 1))
             end
+            _hbBufferOK(buf)
             ccall(_HB_FUNCS[:hb_shape], Cvoid,
                 (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, UInt32), font, buf,
                 C_NULL, 0)
+            _hbBufferOK(buf)
             nref = Ref{UInt32}(0)
             infoptr = ccall(_HB_FUNCS[:hb_buffer_get_glyph_infos],
                 Ptr{UInt32}, (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
@@ -349,8 +373,9 @@ returns `Vector{Vector{ShapedGlyph}}` — one entry per cluster in
 visual order for RTL runs, so RTL entries are reversed); within an
 entry the glyphs keep the shaper's buffer order. `script` is a UAX#24
 4-byte tag (UInt32, e.g. `0x41726162` "Arab"); it defaults to the first
-non-neutral codepoint of the run (§5.4). `language` is a non-empty
-ASCII BCP47 tag (ArgumentError otherwise — harfbuzz would silently
+non-neutral codepoint of the run (§5.4). `language` must be a non-empty
+ASCII string (ArgumentError otherwise; no full BCP47 validation is
+performed — harfbuzz normalizes the tag itself, and would silently
 sanitize non-ASCII input); it defaults to the script's default. Raises
 the D033 install hint when the provider is not installed.
 """

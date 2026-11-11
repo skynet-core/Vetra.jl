@@ -170,11 +170,15 @@ Copy the (x, y, w, h) sub-rectangle of `image` (upstream `subImage`);
 invalid parameters raise (upstream `PixieError`).
 """
 function subImage(image::Image, x::Int, y::Int, w::Int, h::Int)
-    if x < 0 || x + w > image.width
+    # Overflow-safe (M004): the end-coordinate test `x + w > width`
+    # wraps for extreme x; with x >= 0, `width - x` cannot, so the same
+    # predicate is a size comparison. Negative w falls through to the
+    # checked Image constructor's dimension error.
+    if x < 0 || w > image.width - x
         throw(ArgumentError(
             "Params x: $(x) w: $(w) invalid, image width is $(image.width)"))
     end
-    if y < 0 || y + h > image.height
+    if y < 0 || h > image.height - y
         throw(ArgumentError(
             "Params y: $(y) h: $(h) invalid, image height is $(image.height)"))
     end
@@ -985,13 +989,19 @@ Deviation (M004): upstream's `abs(offset) >= extent` early exit wrongly
 reported "no overlap" for negative offsets whose window still reaches
 the image (e.g. x = -width with w > width); the no-overlap test here is
 the derived rectangle intersection `[x, x+w) × [y, y+h)` vs
-`[0, width) × [0, height)`.
+`[0, width) × [0, height)`. Both predicates are written as size
+comparisons (`w <= width - x`, `x <= -w`), never as end coordinates
+(`x + w`), which would overflow for extreme x (M004 correction:
+`superImage(Image(3, 2), typemax(Int), 0, 1, 1)` wrapped into the
+subImage branch and raised BoundsError instead of a transparent 1×1).
+Invalid (non-positive) w/h still raise the checked constructor's
+dimension error.
 """
 function superImage(image::Image, x::Int, y::Int, w::Int, h::Int)
-    if x >= 0 && x + w <= image.width && y >= 0 && y + h <= image.height
+    if x >= 0 && w <= image.width - x && y >= 0 && h <= image.height - y
         return subImage(image, x, y, w, h)
     end
-    if x >= image.width || x + w <= 0 || y >= image.height || y + h <= 0
+    if x >= image.width || x <= -w || y >= image.height || y <= -h
         return newImage(w, h)
     end
     result = newImage(w, h)

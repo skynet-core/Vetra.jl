@@ -759,6 +759,33 @@ end
             for y in 1:2 for x in 1:4)
         @test all(pxv(superImage(img, 0, 4, 2, 2), x, y) == (0, 0, 0, 0)
             for y in 1:2 for x in 1:2)
+        # Extreme coordinates must not overflow the axis predicates:
+        # far outside on either sign is a clean transparent window
+        # (the old end-coordinate arithmetic wrapped typemax into the
+        # subImage branch -> BoundsError, M004 correction).
+        for xo in (typemax(Int), typemin(Int))
+            @test pxv(superImage(img, xo, 0, 1, 1), 1, 1) == (0, 0, 0, 0)
+            @test pxv(superImage(img, 0, xo, 1, 1), 1, 1) == (0, 0, 0, 0)
+        end
+        # subImage rejects extreme/invalid rects with a clean error
+        # (overflow-safe size comparison, not an end coordinate).
+        argmsg(f) = let
+            try
+                f()
+                return nothing
+            catch e
+                return e isa ArgumentError ? e.msg : "not-ArgumentError: $e"
+            end
+        end
+        @test argmsg(() -> subImage(img, typemax(Int), 0, 1, 1)) ==
+            "Params x: $(typemax(Int)) w: 1 invalid, image width is 4"
+        @test argmsg(() -> subImage(img, 0, typemax(Int), 1, 1)) ==
+            "Params y: $(typemax(Int)) h: 1 invalid, image height is 4"
+        # dimension errors are retained (checked Image constructor).
+        @test argmsg(() -> subImage(img, 0, 0, -1, 1)) ==
+            "Image width and height must be > 0"
+        @test argmsg(() -> superImage(img, 0, 0, -1, 1)) ==
+            "Image width and height must be > 0"
     end
 
     @testset "opaqueBounds" begin

@@ -494,11 +494,12 @@ end
         # GC pressure on ephemeral fonts: each font is shaped from its
         # own frame (a top-level `let` local would not be reliably dead
         # at GC time — the interpreter conservatively marks the stale
-        # slot of its still-active frame), the GIDs must stay correct
-        # (the native triple must not be destroyed mid-use), and once
-        # the font is collected the cache returns to its previous size.
-        # The finalizer flag observes the collection directly; dict
-        # length alone would not prove the font was reclaimed.
+        # slot of its still-active frame). The invariant is correct GIDs
+        # for every call (the native triple must not be destroyed
+        # mid-use); the finalizer flag then observes the eventual
+        # collection directly (no pre-GC liveness is asserted — GC may
+        # finalize the font at any point after the owning scope ends),
+        # and the cache returns to its previous size.
         finalized = Ref(false)
         function _m004ephemeralGids()
             fresh = parseOpenType(Vector{UInt8}(read(AR)))
@@ -511,7 +512,6 @@ end
                 language = "ar") for g in cl]
         end
         @test _m004ephemeralGids() == [424, 59, 36]
-        @test !finalized[]
         GC.gc()
         @test finalized[]
         @test length(Vetra._HB_FACES) == n0
@@ -544,8 +544,32 @@ end
             end
         end
         @test length(Vetra._HB_FACES) == n0
+        # Fault injection (published empty sentinel, not real OOM): the
+        # resolved `hb_buffer_create` pointer in the existing table is
+        # swapped for `hb_buffer_get_empty`, so every buffer create
+        # reports allocation failure. The error must be loud (no silent
+        # empty success), the pointer is always restored, and the
+        # cached face shapes normally again afterwards.
+        realCreate = Vetra._HB_FUNCS[:hb_buffer_create]
+        Vetra._HB_FUNCS[:hb_buffer_create] =
+            Vetra._HB_FUNCS[:hb_buffer_get_empty]
+        try
+            try
+                shapeText(tfA, UInt32[0x0643, 0x062a, 0x0628];
+                    script = scriptTag("Arab"), direction = RightToLeft,
+                    language = "ar")
+                @test false
+            catch e
+                @test e isa ErrorException &&
+                    occursin("buffer allocation failed", e.msg)
+            end
+        finally
+            Vetra._HB_FUNCS[:hb_buffer_create] = realCreate
+        end
+        @test length(Vetra._HB_FACES) == n0
         # RTL direction: the pinned katab values (Arab LTR shapes the
-        # other contextual forms — oracle-checked).
+        # other contextual forms — oracle-checked); also the recovery
+        # proof after the fault injection above.
         @test [g.gid for cl in shapeText(
             tfA, UInt32[0x0643, 0x062a, 0x0628];
             script = scriptTag("Arab"), direction = RightToLeft,
