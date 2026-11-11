@@ -18,7 +18,7 @@
 # Julia binaries are located through the juliaup installation
 # (\$JULIAUP_HOME, default ~/.julia/juliaup) — no host-specific paths.
 include(joinpath(@__DIR__, "probe_common.jl"))
-using .ProbeCommon: check, write_evidence, reset_checks, run_capture, CHECKS
+using .ProbeCommon: check, write_evidence, reset_checks, run_capture, tailshort, shorten, CHECKS
 using SPIRV
 
 const PROBE_ROOT = dirname(@__DIR__)
@@ -33,10 +33,6 @@ function juliaup_binary(maj, min)
            if startswith(d, "julia-$maj.$min") && isfile(joinpath(home, d, "bin", "julia"))]
   isempty(cands) && error("Julia $maj.$min channel not found under $home (install it with: juliaup add $maj.$min)")
   cands[1]
-end
-
-function tail2000(s)
-  length(s) > 2000 ? s[end - 1999 : end] : s
 end
 
 function file_copy(src, dst)
@@ -79,28 +75,30 @@ function main()
   # --- Julia 1.10: the actual Julia-minimum blocker ---------------------------
   # fresh temp project (no manifest): develop the pinned SPIRV checkout and
   # load it. The pinned source precompiles against a 1.11-only Base API
-  # (cached_return_type), so the load fails hard — recorded as exit code +
-  # stderr, which is the real blocker (not the manifest-mechanics error below).
+  # (cached_return_type), so `using SPIRV` fails — caught by the child,
+  # reported STRUCTURED (LOAD=failed + full LOAD_MSG) with a NORMAL exit.
+  # The parent requires that exact known diagnostic, not any failure: a
+  # resolver/install error (DEVELOP=failed) or an unrelated load error must
+  # not masquerade as the Julia-minimum evidence.
   minwork = mktempdir()
   open(joinpath(minwork, "Project.toml"), "w") do io
     write(io, "name = \"R040MinTest\"\nuuid = \"11111111-2222-3333-4444-555555555555\"\nversion = \"0.1.0\"\n")
   end
   r = run_cell("julia110_min_resolve", b110, minwork, extra = [spirv_path])
+  load_msg = get(r.parsed, "LOAD_MSG", "")
   ev["julia110_min"] = Dict("exit" => r.exit,
                             "develop" => get(r.parsed, "DEVELOP", ""),
                             "load" => get(r.parsed, "LOAD", ""),
-                            "detail" => get(r.parsed, "LOAD_MSG", get(r.parsed, "DEVELOP_MSG", "")),
-                            "stderr_tail" => tail2000(r.stderr))
+                            "load_msg" => load_msg,
+                            "stderr_tail" => tailshort(r.stderr, 2000))
   try
     rm(minwork; recursive = true, force = true)
   catch
   end
-  hard_fail = r.exit != 0
-  blocker_named = occursin("cached_return_type", r.stderr) || occursin("UndefVarError", r.stderr)
-  check("Julia 1.10.13: pinned SPIRV source fails to precompile/load (the actual Julia-min blocker)",
-        hard_fail || get(r.parsed, "LOAD", "") == "failed",
-        hard_fail ? "child exit=$(r.exit); stderr names: " * (blocker_named ? "cached_return_type/UndefVarError (1.11-only Base API)" : "see stderr_tail")
-                  : "load failed: $(get(r.parsed, "LOAD_MSG", ""))")
+  known_blocker = occursin("cached_return_type", load_msg) || occursin("cached_return_type", r.stderr)
+  check("Julia 1.10.13: install ok, then pinned SPIRV source fails precompile with the known 1.11-only-Base-API diagnostic (the actual Julia-min blocker)",
+        r.exit == 0 && get(r.parsed, "DEVELOP", "") == "ok" && get(r.parsed, "LOAD", "") == "failed" && known_blocker,
+        "exit=$(r.exit) develop=$(get(r.parsed, "DEVELOP", "")) load=$(get(r.parsed, "LOAD", "")); load_msg: $(tailshort(load_msg, 300))")
 
   # --- Julia 1.10: foreign-manifest mechanics (labeled, separate from compat) ---
   fwork = mktempdir()
@@ -127,7 +125,7 @@ function main()
   ev["julia113"] = Dict("exit" => r.exit, "result" => get(r.parsed, "RESULT", "NO_OUTPUT"),
                         "detail" => get(r.parsed, "DETAIL", ""),
                         "versions" => get(r.parsed, "VERSIONS", ""),
-                        "stderr_tail" => tail2000(r.stderr))
+                        "stderr_tail" => tailshort(r.stderr, 2000))
   try
     rm(lwork; recursive = true, force = true)
   catch

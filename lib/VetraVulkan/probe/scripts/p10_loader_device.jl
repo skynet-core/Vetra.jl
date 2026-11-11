@@ -66,6 +66,9 @@ function main()
   check("system libvulkan dlopens", true, "resolved=$(resolved)")
 
   # --- instance ----------------------------------------------------------------
+  inst = nothing
+  msg = nothing
+  try
   inst, msg, layers_used = make_instance(; validation = true, api = v"1.3")
   ev["instance"] = Dict("layers_enabled" => layers_used,
                         "all_layers" => instance_layers(),
@@ -156,9 +159,10 @@ function main()
   end
 
   # --- deterministic cleanup (messenger stays alive through device cleanup) ----
-  release(msg)
-  GC.gc()
-  release(inst)
+  finally
+    msg !== nothing && release(msg)
+    inst !== nothing && release(inst)
+  end
   GC.gc()
   check("refcount clean after release (no underflow)", refcount_ok(inst) && refcount_ok(msg), "")
   ev["validation"] = validation_evidence()

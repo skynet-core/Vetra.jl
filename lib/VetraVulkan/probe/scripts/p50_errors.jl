@@ -21,7 +21,7 @@
 # Each scenario runs in a child Julia process (scripts/p50_child.jl) so a
 # failure is captured as structured output, not a probe crash.
 include(joinpath(@__DIR__, "probe_common.jl"))
-using .ProbeCommon: check, write_evidence, reset_checks, run_capture, CHECKS
+using .ProbeCommon: check, write_evidence, reset_checks, run_capture, tailshort, CHECKS
 
 const PROBE_ROOT = dirname(@__DIR__)
 const EVIDENCE = joinpath(PROBE_ROOT, "evidence")
@@ -39,7 +39,7 @@ function run_child(mode, env::Vector{Pair{String,String}}, extra::Vector{String}
     !isnothing(m) && (parsed[m.captures[1]] = isnothing(m.captures[2]) ? "" : m.captures[2])
   end
   tail = err
-  length(tail) > 2000 && (tail = tail[end - 1999 : end])
+  length(tail) > 2000 && (tail = tailshort(tail, 2000))
   (parsed = parsed, stderr = tail, stderr_full = err, exit = code)
 end
 
@@ -110,7 +110,7 @@ function main()
       r = run_child("precompile", env, [pref], tmpproj)
       ev["precompile_$pref"] = Dict("exit" => r.exit,
                                     "instantiate_ok" => get(r.parsed, "INSTANTIATE_OK", ""),
-                                    "sources_copied" => get(r.parsed, "SOURCES_COPIED", ""),
+                                    "sources_exact" => get(r.parsed, "SOURCES_EXACT", ""),
                                     "vulkan_precompile_ok" => get(r.parsed, "PRECOMPILE_OK_VULKAN", ""),
                                     "spirv_precompile_ok" => get(r.parsed, "PRECOMPILE_OK_SPIRV", ""),
                                     "precompile_msg" => get(r.parsed, "PRECOMPILE_MSG_VULKAN", get(r.parsed, "PRECOMPILE_MSG_SPIRV", "")),
@@ -121,18 +121,21 @@ function main()
       rm(tmpdir; recursive = true, force = true)
     end
   end
-  ev["precompile_semantics"] = "Isolated temp project + temp first depot (read-through to the user depot); the preference is written to the temp project's LocalPreferences.toml BEFORE Pkg.instantiate, so the install-time precompile already runs under it. Vulkan.jl 0.6.30 @compile_workload gates the device workload on preference PRECOMPILE_DEVICE_FUNCTIONS (default auto). auto: workload runs, its no-driver failure is caught+logged (loader 'Found no drivers' visible), precompile succeeds; false: workload skipped; true: failure rethrown, Pkg.precompile(Vulkan) fails with INCOMPATIBLE_DRIVER."
+  ev["precompile_semantics"] = "Isolated temp project + temp first depot (read-through to the user depot); the preference is written to the temp project's LocalPreferences.toml BEFORE Pkg.instantiate, so the install-time precompile already runs under it. The copied sources are identified by uuid + git-tree-sha1 (the Base.version_slug depot dir) — exact pinned identity, not a version-string match — and must land at the exact slug path in the temp depot so Pkg resolves them there. Vulkan.jl 0.6.30 @compile_workload gates the device workload on preference PRECOMPILE_DEVICE_FUNCTIONS (default auto). auto: workload runs, its no-driver failure is caught+logged (loader 'Found no drivers' visible), precompile succeeds; false: workload skipped; true: failure rethrown, Pkg.precompile(Vulkan) fails with INCOMPATIBLE_DRIVER."
   pf = ev["precompile_false"]
   pa = ev["precompile_auto"]
   pt = ev["precompile_true"]
   check("precompile without device, pref=false: succeeds, device workload skipped",
-        pf["sources_copied"] != "" && pf["instantiate_ok"] == "yes" && pf["vulkan_precompile_ok"] == "yes" &&
+        occursin("Vulkan/", pf["sources_exact"]) && occursin("SPIRV/", pf["sources_exact"]) &&
+        occursin("tree=", pf["sources_exact"]) && occursin("rev=", pf["sources_exact"]) &&
+        pf["instantiate_ok"] == "yes" && pf["vulkan_precompile_ok"] == "yes" &&
         pf["spirv_precompile_ok"] == "yes" && pf["exit"] == 0 && pf["workload_ran"] === false,
-        "sources=$(pf["sources_copied"])")
+        "sources=$(pf["sources_exact"])")
   check("precompile without device, pref=auto (default): succeeds, device failure caught",
-        pa["sources_copied"] != "" && pa["instantiate_ok"] == "yes" && pa["vulkan_precompile_ok"] == "yes" &&
+        occursin("Vulkan/", pa["sources_exact"]) && occursin("SPIRV/", pa["sources_exact"]) &&
+        pa["instantiate_ok"] == "yes" && pa["vulkan_precompile_ok"] == "yes" &&
         pa["spirv_precompile_ok"] == "yes" && pa["exit"] == 0 && pa["workload_ran"] === true,
-        "sources=$(pa["sources_copied"])")
+        "sources=$(pa["sources_exact"])")
   check("precompile without device, pref=true: fails with a clear no-driver message",
         pt["vulkan_precompile_ok"] == "no" &&
         (occursin("INCOMPATIBLE_DRIVER", pt["precompile_msg"]) ||

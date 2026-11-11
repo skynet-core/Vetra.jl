@@ -1,9 +1,13 @@
 {
   "summary": {
     "fail": 0,
-    "pass": 5
+    "pass": 7
   },
   "sync_validation_requested": true,
+  "sync_validation_control": {
+    "waw_detected_sync_on": 1,
+    "waw_detected_sync_off": 0
+  },
   "checks": [
     {
       "name": "validation layer actually enabled (no silent downgrade)",
@@ -19,6 +23,16 @@
       "name": "clear/readback byte-exact vs hand-derived clear value",
       "ok": true,
       "detail": "first=UInt8[0xff, 0x00, 0xff, 0xff] last=UInt8[0xff, 0x00, 0xff, 0xff]"
+    },
+    {
+      "name": "sync validation ON: no-barrier WAW hazard flagged (WRITE_AFTER_WRITE)",
+      "ok": true,
+      "detail": "waw=1"
+    },
+    {
+      "name": "sync validation OFF (negative control): no WAW flagged",
+      "ok": true,
+      "detail": "waw=0"
     },
     {
       "name": "refcount clean after release (no underflow)",

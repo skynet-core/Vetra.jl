@@ -46,11 +46,11 @@ are pass/fail with `fail=0`.
 |---|---|---|
 | `scripts/p00_env.jl` | 14/0 | Pinned package set (SPIRV git rev, tree hashes), loader/ICD/layer inventory with sha256s (incl. both key shapes `layer` and `layers`), spirv-val provenance, external VVL layer + `PROVENANCE.txt`, real severity enum bits (1/16/256/4096), **synthetic severity regression** (one `vkSubmitDebugUtilsMessageEXT` per severity; positive + negative bucket controls) |
 | `scripts/p10_loader_device.jl` | 8/0 | Loader dlopen, instance with KHRONOS validation layer required-and-verified enabled, device discovery (3 devices), graphics+compute queues, BDA-capable API level, R8G8B8A8 format feature bits, memory-type labels from the real enum bits, 0 validation errors/warnings |
-| `scripts/p20_offscreen.jl` | 5/0 | 64×32 RGBA8 offscreen image: hand-derived upload → byte-exact readback (8192/8192), `cmd_clear_color_image` → byte-exact clear (`[255,0,255,255]`), explicit layout barriers, **sync validation requested** (instance `ValidationFeaturesEXT` pNext — `VK_EXT_validation_features` is promoted, not enumerated), 0 errors/warnings, deterministic `Base.finalize` cleanup, GC-stable after release |
+| `scripts/p20_offscreen.jl` | 7/0 | 64×32 RGBA8 offscreen image: hand-derived upload → byte-exact readback (8192/8192), `cmd_clear_color_image` → byte-exact clear (`[255,0,255,255]`), explicit layout barriers, **sync validation enabled by name + proven active**: a bounded positive/negative hazard control (two `vkCmdFillBuffer` into the same range, one command buffer, no barrier) is flagged `WRITE_AFTER_WRITE` only when sync validation is ON and never when OFF, 0 errors/warnings on the real workload, deterministic cleanup in `finally` (every path) |
 | `scripts/p30_compute.jl` | 15/0 | The full SPIRV.jl route: `@compute` Julia kernel → SPIR-V 1.6 → internal + external `spirv-val --target-env vulkan1.3` (vulkan1.2 negative control fails as expected) → **module-declared capabilities** (`VulkanMemoryModel`, `Int64`, `PhysicalStorageBufferAddresses`) → derived device features asserted **subset** of module caps (f11 derived set is empty — no `variable_pointers`; `maintenance4` required for `LocalSizeId`) → BDA buffer upload → dispatch → **byte-exact readback vs an independently written Julia reference** (512/512, 400/400 + untouched sentinel) → runtime-driven output change → safe `features2` chain query under 50-iteration GC stress → 0 errors/warnings |
 | `scripts/p40_bool_layers.jl` (+ `p40_child.jl`) | 18/0 | Bool-returning compute module (`OpTypeFunction %bool`) under KHRONOS layer: true/false 4-byte cases byte-exact with **per-experiment layer-enabled gate** (each child verifies the layer is actually enabled — no silent downgrade) and 0 validation errors; the 1-byte-buffer case is recorded as a **validator diagnostic** (`OpStore … Aligned 2` into 1 byte is *not* flagged — a limitation, not a safe-storage claim) |
-| `scripts/p50_errors.jl` (+ `p50_child.jl`) | 8/0 | Error paths: no device (`VK_DRIVER_FILES`→bogus ⇒ `VK_ERROR_INCOMPATIBLE_DRIVER` from `vkCreateInstance`), bogus device extension (`ERROR_EXTENSION_NOT_PRESENT`), unsupported format (`ERROR_FORMAT_NOT_SUPPORTED`, names format+usage); **isolated precompile environment** (temp depot, manifest-resolved Vulkan+SPIRV sources copied into it so precompile runs fresh — never reusing the user depot's `.ji` cache): `PRECOMPILE_DEVICE_FUNCTIONS=false` (workload skipped, ok) / `auto` (workload runs, no-driver failure caught, ok) / `true` (failure rethrown with `INCOMPATIBLE_DRIVER`) — workload execution proven per case from the child loader output |
-| `scripts/p60_julia_matrix.jl` (+ `p60_child.jl`) | 5/0 | Julia version matrix (wrapper-level only, no GPU execution on foreign versions): **Julia 1.10.13 — the actual minimum blocker: the pinned SPIRV source fails to precompile/load** (`UndefVarError: cached_return_type`, a 1.11-only Base API; recorded as child exit + stderr); the 1.11-generated manifest is additionally rejected by 1.10's Pkg (manifest mechanics, labeled separately, not a compatibility claim); **Julia 1.13.3 — instantiate + `using SPIRV, Vulkan` (LOAD ONLY)** |
+| `scripts/p50_errors.jl` (+ `p50_child.jl`) | 8/0 | Error paths: no device (`VK_DRIVER_FILES`→bogus ⇒ `VK_ERROR_INCOMPATIBLE_DRIVER` from `vkCreateInstance`), bogus device extension (`ERROR_EXTENSION_NOT_PRESENT`), unsupported format (`ERROR_FORMAT_NOT_SUPPORTED`, names format+usage); **isolated precompile environment** (temp depot; the EXACT manifest-pinned Vulkan+SPIRV sources are copied into it — identified by uuid + `git-tree-sha1` via `Base.version_slug`, never a version-string match — and verified to land at the exact slug path, so precompile runs fresh and can never reuse the user depot's `.ji` cache): `PRECOMPILE_DEVICE_FUNCTIONS=false` (workload skipped, ok) / `auto` (workload runs, no-driver failure caught, ok) / `true` (failure rethrown with `INCOMPATIBLE_DRIVER`) — workload execution proven per case from the child loader output |
+| `scripts/p60_julia_matrix.jl` (+ `p60_child.jl`) | 5/0 | Julia version matrix (wrapper-level only, no GPU execution on foreign versions): **Julia 1.10.13 — the actual minimum blocker: the pinned SPIRV source fails to precompile/load** (`UndefVarError: cached_return_type`, a 1.11-only Base API); the child CATCHES the error, reports it structured (`LOAD=failed` + full diagnostic) and exits normally — the parent requires that exact known diagnostic, not any failure (resolver/install errors stay distinguishable); the 1.11-generated manifest is additionally rejected by 1.10's Pkg (manifest mechanics, labeled separately, not a compatibility claim); **Julia 1.13.3 — instantiate + `using SPIRV, Vulkan` (LOAD ONLY)** |
 
 Shared helpers (`scripts/probe_common.jl`): check accumulator, JSON evidence
 writer (strict control-char escaping), debug-callback capture with
@@ -58,9 +58,18 @@ writer (strict control-char escaping), debug-callback capture with
 hardcoded 1/2/4/8; the real values are 1/16/256/4096, so its "0 errors"
 claims were void), `run_capture`/`run_jll` (env **merged** via `addenv`,
 never replaced — replacing env drops `PATH` and the child fails ENOENT),
-instance/device/queue/memory/BDA-buffer helpers on the Vulkan.jl 0.6.30 API,
-**owned-Ref `features2` chain query** (see upstream defect 1), and
-`release(h) = Base.finalize(h)` (see upstream defect 2).
+instance/device/queue/memory/BDA-buffer helpers on the Vulkan.jl 0.6.30 API —
+**with partial-failure cleanup in the constructors** (`plain_buffer`,
+`bda_buffer`, `offscreen_image` release what they created, in reverse order,
+before rethrowing, so a failed allocation never leaks a refcount on the
+device — proven by fault-injection tests in `test/runtests.jl`) — the
+**owned-Ref `features2` chain query** (see upstream defect 1), the bounded
+**sync-validation hazard control** (two barrier-less `vkCmdFillBuffer`
+writes: flagged `WRITE_AFTER_WRITE` iff sync validation is actually on),
+and `release(h) = Base.finalize(h)` (see upstream defect 2). Probes release
+top-level resources in `finally` blocks so an error mid-probe still
+deterministically cleans up (buffer before memory where practical; messenger
+stays alive through device destruction).
 
 ## Running
 
@@ -199,55 +208,91 @@ R010 backends must adopt the same release discipline (and the
   safe-storage evidence.
 - **pNext flake/retry**: not a flake — deterministic upstream defect #1; the
   bounded-retry workaround was removed in favor of owned Refs.
-- **Validation enablement**: `VK_EXT_validation_features` is not enumerated
-  on this driver (promoted), so sync validation is requested via the
-  `ValidationFeaturesEXT` pNext at instance creation *without* the ext name,
-  and each child process asserts the layer is actually enabled
-  (no silent downgrade accepted).
+- **Sync validation enablement (second correction)**: `VK_EXT_validation_features`
+  is **not** core-promoted — it is a LAYER-PROVIDED instance extension
+  (deprecated by `VK_EXT_layer_settings`), enumerated under
+  `VK_LAYER_KHRONOS_validation` (`debug_report`, `debug_utils`,
+  `layer_settings`, `validation_features`) and absent from the global
+  enumeration. The probe now enables it by name with the pNext chain, and
+  p20's bounded hazard control proves it is actually active (flagged only
+  when ON). Ref: <https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_validation_features.html>.
+- **p60 "process dies before the catch"**: false. The 1.10 child CATCHES the
+  `cached_return_type` LoadError, reports `LOAD=failed` with the full
+  diagnostic, and exits normally. (The earlier nonzero exit was a probe bug:
+  a blind `[:1:300]` slice of the 121-char diagnostic raised a BoundsError.)
+  The evidence now records the structured failure, and the parent requires
+  the known diagnostic rather than any failure.
+- **p50 source identity**: the first fix matched depot checkouts by
+  `Project.toml` version string; two git revisions can share a version. The
+  copy now resolves the exact checkout by uuid + `git-tree-sha1`
+  (`Base.version_slug` depot dir) and verifies the copy landed at that exact
+  path in the temp depot.
+- **Validation enablement**: superseded by the "Sync validation
+  enablement (second correction)" above — the first fix's "promoted
+  extension, no name needed" explanation was wrong.
 - **"Stripped Julia build" host-quirk list**: most of those items are
-  standard Julia API gaps, not host bugs. The list below was re-verified on
-  this host's 1.10.13 / 1.11.9 / 1.13.3 channels and trimmed to what
-  actually affected the probe code.
+  standard Julia API semantics, not host bugs, and the list has been
+  removed. Only genuinely host-specific facts remain in "Note for running
+  on this host" (registry snapshot; two verified parser defects).
 
-## Verified host/API notes (1.10.13 / 1.11.9 / 1.13.3)
+## Note for running on this host
 
-- `Pkg.activeproject` is absent → use `Pkg.project().path`.
-- `run(cmd; stdout=…)` is a MethodError → `run(pipeline(cmd; stdout=IOBuffer(), stderr=IOBuffer()))`.
-- `setenv` **replaces** the environment (child loses `PATH` → ENOENT); `addenv` **merges** — `run_capture`/`run_jll` merge.
-- `takebuffer` is not visible from a module in this build → string building without `IOBuffer`.
-- `Base.pointer(::RefValue)` is a MethodError → `Base.unsafe_convert(Ptr{Cvoid}, ref)`.
-- Two-argument `Cmd(vec, extra)` is absent → `Cmd(vcat(base, extra))`.
 - This host's `General.toml` registry snapshot does **not** contain SPIRV →
-  name-based `Pkg.add`/specs by uuid+rev fail; the probe pins SPIRV as a git
-  source in the committed Manifest (p60's 1.10 cell resolves it via a
-  `Pkg.develop` path dependency, which bypasses the julia-compat resolver).
-- Julia 1.10 Pkg API differs (`Pkg.Types.GitRepo(url, user, token)` 3-arg,
-  keyword `PackageSpec`) — only exercised statically in p60's foreign-manifest
-  cell, which is labeled mechanics, not compatibility.
+  name-based `Pkg.add` (or uuid+rev specs) fail. The probe pins SPIRV as a git
+  source in the committed Manifest; p60's 1.10 cell resolves it through a
+  `Pkg.develop` path dependency (bypasses the julia-compat resolver).
+
+Two parser defects in this Julia channel build (verified on 1.10.13 and
+1.11.9 with minimal reproductions; they shaped the probe's error handling):
+
+- `throw e` inside a `catch e` block is a **ParseError** (even with preceding
+  statements). Use a catch **without** a binding + `rethrow()`.
+- One-line `try f() catch <stmt> end` (no binding) is a **ParseError**
+  ("a variable name is expected after catch"). Use multi-line catch or a
+  binding.
+
+One string-handling difference: string **indexing is byte-based** while
+`length`/`first`/`last` are character-based — `u[3]` on
+`"x\u2014y\U0001F600z"` is byte 3 (mid-em-dash → `StringIndexError`), and
+`u[5]` returns `'y'`, not the 5th character. The probe's char-safe
+`shorten`/`tailshort` helpers therefore build via `collect`, and
+`test/runtests.jl` pins this with multibyte cases.
+
+And one semantic difference that inverts every call site if violated:
+`occursin` takes **(pattern, haystack)** in this build —
+`occursin("world", "hello world")` → true. All probe/test code is written
+to that order and `test/runtests.jl` pins it with a regression test.
 
 ## Platform scope — what was executed vs what is static
 
 **Executed (the only execution evidence): Linux x86_64**, NVIDIA discrete
-GPU (RTX 3050 Ti Laptop, driver 1.4.351), system loader 1.4.341, VVL
-1.4.363.1. All p10–p50 GPU results come from this configuration.
+GPU (RTX 3050 Ti Laptop, device API version 1.4.351 — an API version, not a
+driver version), system loader 1.4.341, VVL 1.4.363.1. All p10–p50 GPU
+results come from this configuration.
 
 Static, source-based notes for the platforms that were **not** executed
 (no hosts available here); each needs a real run before R010 may claim
-cross-platform validation:
+cross-platform validation. Loader names are pinned to the VulkanCore 1.3.1
+source in the committed Manifest (`src/LibVulkan.jl`: windows `vulkan-1.dll`,
+apple `libvulkan.dylib`, linux `libvulkan.so.1`, other `libvulkan`,
+overridable via `JULIA_VULKAN_LIBNAME`/`Libdl.DL_LOAD_PATH`);
+Vulkan.jl 0.6.x has **no JLL loader** — it always dlopens the system loader.
 
-- **Windows**: VulkanCore dlopens `vulkan-1.dll` (generated
-  `LibVulkan.jl`, windows branch); Vulkan.jl 0.6.x has **no JLL loader** —
-  a system loader (Vulkan SDK/Install) is required, and the probe's
-  manifest dirs (`icd.d`, `*/layer.d`), `realpath`, and jq inventory are
-  Linux-specific and would need porting.
-- **macOS**: loader name `libvulkan.dylib`; the Apple GPU surface is exposed
-  through the **portability driver** mechanism (`VK_KHR_portability_enumeration`
-  instance extension + `physicalDevicePortabilityEnumeration` feature), which
-  the probe's device-selection/queue/feature-minimum logic does not handle;
-  MoltenVK's support for the BDA/storage-buffer 1.3 surface used by p30 is
-  unverified.
-- **FreeBSD**: loader name `libvulkan` (other-OS branch); ports-provided
-  loader/ICDs; no execution data at all.
+- **Windows** (ref: [Vulkan-Loader](https://github.com/KhronosGroup/Vulkan-Loader),
+  [SDK download](https://vulkan.lunarg.com/sdk.html)): `vulkan-1.dll` from the
+  Vulkan SDK/Install; the probe's manifest dirs (`icd.d`, `*/layer.d`),
+  `realpath`, and jq inventory are Linux-specific and would need porting.
+- **macOS** (ref: [VK_KHR_portability_enumeration](https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_portability_enumeration.html),
+  [MoltenVK](https://github.com/KhronosGroup/MoltenVK)): `libvulkan.dylib`;
+  the Apple GPU surface arrives through the **portability driver** mechanism —
+  instance creation needs the `VK_KHR_portability_enumeration` instance
+  extension plus `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR` in
+  `VkInstanceCreateInfo.flags`; if the selected device then advertises
+  `VK_KHR_portability_subset`, that DEVICE extension must be enabled and its
+  subset features/limits inspected before the probe's queue/feature-minimum
+  logic can run. None of that is handled (or testable) here.
+- **FreeBSD** (ref: [Vulkan-Loader](https://github.com/KhronosGroup/Vulkan-Loader)):
+  `libvulkan` (other-OS branch); ports-provided loader/ICDs; no execution data.
 
 ## Blocked / not verified
 

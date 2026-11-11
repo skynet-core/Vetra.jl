@@ -20,6 +20,8 @@ ProbeCommon: shared helpers for the R040 Vulkan.jl / SPIRV.jl compatibility spik
 module ProbeCommon
 
 using Logging
+using UUIDs
+using Pkg
 using Vulkan
 using Vulkan: Vk, VkCore, unwrap
 
@@ -51,6 +53,7 @@ import Vulkan:
 
 const LAYER_VALIDATION = "VK_LAYER_KHRONOS_validation"
 const EXT_DEBUG_UTILS = "VK_EXT_debug_utils"
+const EXT_VALIDATION_FEATURES = "VK_EXT_validation_features"
 
 # Severity bits as the callback actually receives them. Derived from the
 # enum values, not hardcoded: synthetic_severity_regression proves the
@@ -177,6 +180,20 @@ function jesc(s::AbstractString)
   join(parts)
 end
 
+"""Char-safe prefix: the first `n` characters, or the whole string if shorter.
+Built via `collect` because this build's string indexing is BYTE-based while
+`length` is character-based — direct `s[1:n]` throws on multibyte content."""
+function shorten(s::AbstractString, n)
+  cs = collect(s)
+  length(cs) > n ? String(cs[1:n]) : s
+end
+
+"""Char-safe suffix: the last `n` characters, or the whole string if shorter."""
+function tailshort(s::AbstractString, n)
+  cs = collect(s)
+  length(cs) > n ? String(cs[length(cs) - n + 1 : end]) : s
+end
+
 function jval(x, ind)
   pad = " "^(2 * (ind + 1))
   pad0 = "  "^ind
@@ -241,6 +258,32 @@ function run_jll(jllcmd::Cmd, args::Vector{String})
   run_capture(Cmd(vcat(exec, args)); env = envpairs)
 end
 
+"""Resolve the EXACT depot source dir for a package pinned in `manifest_path`.
+
+The depot directory name is `Base.version_slug(uuid, tree_sha1)` — a hash of
+the package UUID plus its git tree SHA1 (registry `tree_hash`, git
+`git_tree_sha1`), NOT the version string. Two git revisions can share a
+version; only the tree hash pins the exact source. Returns a named tuple
+`(dir, slug, version, tree_sha1, git_rev)` with `dir=nothing` when no depot
+holds that exact checkout. `skip_first_depot` lets a probe running in an
+isolated temp first-depot resolve against the read-through depots."""
+function manifest_source_dir(manifest_path::AbstractString, name::AbstractString; skip_first_depot = false)
+  man = Pkg.TOML.parsefile(manifest_path)
+  e = man["deps"][name][1]
+  uuid = UUID(e["uuid"])
+  tree = e["git-tree-sha1"]
+  sha = Base.SHA1(UInt8[parse(UInt8, tree[i:i+1]; base = 16) for i in 1:2:40])
+  slug = Base.version_slug(uuid, sha)
+  depots = skip_first_depot ? DEPOT_PATH[2:end] : DEPOT_PATH
+  found = nothing
+  for depot in depots
+    p = joinpath(depot, "packages", name, slug)
+    isdir(p) && (found = p)
+  end
+  (dir = found, slug = slug, version = e["version"], tree_sha1 = tree,
+   git_rev = get(e, "repo-rev", ""))
+end
+
 # ---------------------------------------------------------------------------
 # Instance / device
 # ---------------------------------------------------------------------------
@@ -253,10 +296,12 @@ instance_extensions() = [e.extension_name for e in unwrap(Vulkan.enumerate_insta
 With `validation=true` the KHRONOS layer AND the messenger are REQUIRED:
 a missing layer or debug extension errors out (no silent downgrade — an
 unvalidated run must never masquerade as a validated one).
-With `sync_validation=true`, VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_
-VALIDATION is requested through VkValidationFeaturesEXT in the instance
-pNext chain (a promoted extension: no enabled-extension name needed;
-verified by p00 evidence that the instance accepts the chain).
+With `sync_validation=true`, VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_
+VALIDATION is requested. `VK_EXT_validation_features` is a LAYER-PROVIDED
+instance extension (not core-promoted), so it is enumerated under the
+KHRONOS layer and enabled by name, with the VkValidationFeaturesEXT pNext
+chain carried at instance creation. (It is deprecated by `VK_EXT_layer_settings`;
+this pinned layer 1.4.363 still provides it.)
 Returns (instance, messenger, layers_enabled)."""
 function make_instance(; validation = false, sync_validation = false, api = v"1.3")
   layers = String[]
@@ -268,16 +313,28 @@ function make_instance(; validation = false, sync_validation = false, api = v"1.
       error("VK_EXT_debug_utils is not available: the messenger required together with validation is impossible on this loader.")
     push!(layers, LAYER_VALIDATION)
   end
-  next = sync_validation ?
-    Vulkan.ValidationFeaturesEXT([Vulkan.VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT], String[]) :
-    C_NULL
+  next = C_NULL
+  if sync_validation
+    layer_exts = [e.extension_name for e in
+                  unwrap(Vulkan.enumerate_instance_extension_properties(; layer_name = LAYER_VALIDATION))]
+    EXT_VALIDATION_FEATURES in layer_exts ||
+      error("VK_EXT_validation_features is not provided by the KHRONOS layer here (superseded by VK_EXT_layer_settings in newer layers); cannot request sync validation. Refusing to run.")
+    push!(exts, EXT_VALIDATION_FEATURES)
+    next = Vulkan.ValidationFeaturesEXT([Vulkan.VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT], String[])
+  end
   inst = Instance(layers, exts; application_info = ApplicationInfo(v"0.1", v"1.0", api), next = next)
-  msg = DebugUtilsMessengerEXT(inst,
-    DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-      DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-    DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-      DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-    @cfunction(capture_callback, UInt32, (UInt32, UInt32, Ptr{VkCore.VkDebugUtilsMessengerCallbackDataEXT}, Ptr{Cvoid})))
+  local msg
+  try
+    msg = DebugUtilsMessengerEXT(inst,
+      DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+      DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+      @cfunction(capture_callback, UInt32, (UInt32, UInt32, Ptr{VkCore.VkDebugUtilsMessengerCallbackDataEXT}, Ptr{Cvoid})))
+  catch
+    release(inst)
+    rethrow()
+  end
   return (inst, msg, layers)
 end
 
@@ -466,26 +523,43 @@ end
 # ---------------------------------------------------------------------------
 
 """Create a host-coherent transfer buffer (no device-address usage).
-Returns (buffer, memory)."""
+Returns (buffer, memory). On partial failure the created handles are
+released (reverse creation order) and the error is rethrown — no leaked
+refcount on the parent device."""
 function plain_buffer(dev, ph, nbytes; usage = BUFFER_USAGE_TRANSFER_SRC_BIT | BUFFER_USAGE_TRANSFER_DST_BIT)
   buf = Buffer(dev, nbytes, usage, SHARING_MODE_EXCLUSIVE, [0])
-  req = unwrap(Vulkan.get_buffer_memory_requirements(dev, buf))
-  idx = memory_index(ph, req.memory_type_bits, MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  mem = DeviceMemory(dev, req.size, idx)
-  unwrap(Vulkan.bind_buffer_memory(dev, buf, mem, 0))
+  mem = nothing
+  try
+    req = unwrap(Vulkan.get_buffer_memory_requirements(dev, buf))
+    idx = memory_index(ph, req.memory_type_bits, MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    mem = DeviceMemory(dev, req.size, idx)
+    unwrap(Vulkan.bind_buffer_memory(dev, buf, mem, 0))
+  catch
+    mem !== nothing && release(mem)
+    release(buf)
+    rethrow()
+  end
   (buffer = buf, memory = mem)
 end
 
 """Create a host-coherent storage buffer with the shader-device-address usage.
-Returns (buffer, memory, device_address)."""
+Returns (buffer, memory, device_address). On partial failure the created
+handles are released (reverse creation order) and the error is rethrown."""
 function bda_buffer(dev, ph, nbytes)
   buf = Buffer(dev, nbytes, BUFFER_USAGE_STORAGE_BUFFER_BIT | BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, SHARING_MODE_EXCLUSIVE, [0])
-  req = unwrap(Vulkan.get_buffer_memory_requirements(dev, buf))
-  idx = memory_index(ph, req.memory_type_bits, MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)
-  mem = DeviceMemory(dev, req.size, idx; next = MemoryAllocateFlagsInfo(UInt32(0); flags = MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT))
-  unwrap(Vulkan.bind_buffer_memory(dev, buf, mem, 0))
-  addr = unwrap(Vulkan.get_buffer_device_address(dev, BufferDeviceAddressInfo(buf)))
-  (buffer = buf, memory = mem, address = addr)
+  mem = nothing
+  try
+    req = unwrap(Vulkan.get_buffer_memory_requirements(dev, buf))
+    idx = memory_index(ph, req.memory_type_bits, MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    mem = DeviceMemory(dev, req.size, idx; next = MemoryAllocateFlagsInfo(UInt32(0); flags = MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT))
+    unwrap(Vulkan.bind_buffer_memory(dev, buf, mem, 0))
+    addr = unwrap(Vulkan.get_buffer_device_address(dev, BufferDeviceAddressInfo(buf)))
+    (buffer = buf, memory = mem, address = addr)
+  catch
+    mem !== nothing && release(mem)
+    release(buf)
+    rethrow()
+  end
 end
 
 """Map memory, run `f(mapped_bytes)`, unmap, and return `f`'s result.
@@ -544,6 +618,44 @@ function with_commands(dev, qi, f)
   nothing
 end
 
+"""Bounded synchronization-validation control (positive + negative).
+Two `vkCmdFillBuffer` writes to the same range in ONE command buffer with no
+barrier between them — a genuine WRITE_AFTER_WRITE hazard. Runs on its own
+instance/device (so the probe's capture window is not polluted) and counts
+WRITE_AFTER_WRITE validation errors in an isolated capture window:
+sync validation ON must flag it, OFF (negative control) must not. This proves
+the feature is actually active, not merely requested. Returns the WAW count."""
+function sync_hazard_control(; sync_validation)
+  inst = nothing; msg = nothing; dev = nothing; r = nothing
+  empty!(_CAP[])
+  try
+    (inst, msg, _layers) = make_instance(; validation = true, sync_validation = sync_validation)
+    ph, _p = pick_device(inst; name_substring = "NVIDIA GeForce")
+    qi = queue_family(ph, QUEUE_COMPUTE_BIT)
+    dev = make_device(inst, ph; qi = qi)
+    r = plain_buffer(dev, ph, 256)
+    with_commands(dev, qi, (cb) -> begin
+      Vulkan.cmd_fill_buffer(cb, r.buffer, 0, 256, UInt32(1))
+      Vulkan.cmd_fill_buffer(cb, r.buffer, 0, 256, UInt32(2))
+      nothing
+    end)
+    # buffer before memory; messenger stays alive through device destruction
+    release(r.buffer)
+    release(r.memory)
+    release(dev)
+  finally
+    dev !== nothing && release(dev)
+    if r !== nothing
+      release(r.buffer)
+      release(r.memory)
+    end
+    msg !== nothing && release(msg)
+    inst !== nothing && release(inst)
+    GC.gc()
+  end
+  count(m -> occursin("WRITE_AFTER_WRITE", m[3]), validation_errors())
+end
+
 # ---------------------------------------------------------------------------
 # Offscreen images
 # ---------------------------------------------------------------------------
@@ -559,14 +671,23 @@ function offscreen_image(dev, ph, w, h; usage = IMAGE_USAGE_TRANSFER_SRC_BIT | I
   end
   img = Image(dev, IMAGE_TYPE_2D, fmt, Extent3D(UInt32(w), UInt32(h), 1), 1, 1, SAMPLE_COUNT_1_BIT,
               IMAGE_TILING_OPTIMAL, usage, SHARING_MODE_EXCLUSIVE, [0], IMAGE_LAYOUT_UNDEFINED)
-  req = unwrap(Vulkan.get_image_memory_requirements(dev, img))
-  idx = memory_index(ph, req.memory_type_bits, MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-  mem = DeviceMemory(dev, req.size, idx)
-  unwrap(Vulkan.bind_image_memory(dev, img, mem, 0))
-  # The view must be created after the image memory is bound (VUID 01020).
-  view = ImageView(dev, img, IMAGE_VIEW_TYPE_2D, fmt,
-                   ComponentMapping(COMPONENT_SWIZZLE_R, COMPONENT_SWIZZLE_G, COMPONENT_SWIZZLE_B, COMPONENT_SWIZZLE_A),
-                   ImageSubresourceRange(IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1))
+  mem = nothing
+  view = nothing
+  try
+    req = unwrap(Vulkan.get_image_memory_requirements(dev, img))
+    idx = memory_index(ph, req.memory_type_bits, MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+    mem = DeviceMemory(dev, req.size, idx)
+    unwrap(Vulkan.bind_image_memory(dev, img, mem, 0))
+    # The view must be created after the image memory is bound (VUID 01020).
+    view = ImageView(dev, img, IMAGE_VIEW_TYPE_2D, fmt,
+                     ComponentMapping(COMPONENT_SWIZZLE_R, COMPONENT_SWIZZLE_G, COMPONENT_SWIZZLE_B, COMPONENT_SWIZZLE_A),
+                     ImageSubresourceRange(IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1))
+  catch
+    view !== nothing && release(view)
+    mem !== nothing && release(mem)
+    release(img)
+    rethrow()
+  end
   (image = img, view = view, memory = mem)
 end
 

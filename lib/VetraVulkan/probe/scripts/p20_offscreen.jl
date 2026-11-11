@@ -21,7 +21,7 @@ using Vulkan
 include(joinpath(@__DIR__, "probe_common.jl"))
 using .ProbeCommon: check, write_evidence, reset_checks, make_instance, pick_device, make_device,
                     queue_family, plain_buffer, write_mem, read_mem, with_commands, offscreen_image,
-                    to_general_layout, memory_barrier!, release, refcount_ok,
+                    to_general_layout, memory_barrier!, release, refcount_ok, sync_hazard_control,
                     validation_errors, validation_warnings, validation_messages, validation_clean,
                     validation_evidence, CHECKS
 
@@ -70,6 +70,9 @@ function main()
   reset_checks()
   ev = Dict{String, Any}()
 
+  inst = nothing; msg = nothing; dev = nothing; view = nothing
+  img = nothing; img_mem = nothing; staging = nothing; staging_mem = nothing
+  try
   inst, msg, layers_used = make_instance(; validation = true, sync_validation = true, api = v"1.3")
   ph, props = pick_device(inst; name_substring = "NVIDIA GeForce")
   ev["device"] = props.device_name
@@ -130,14 +133,34 @@ function main()
   check("clear/readback byte-exact vs hand-derived clear value", ok_clear,
         "first=$(cleared[1:4]) last=$(cleared[end - 3:end])")
 
-  # --- deterministic cleanup (reverse dependency order; messenger stays alive
-  #     through destruction so destruction-time messages are still captured) ----
-  release(view)
-  release(img)
-  release(img_mem)
-  release(staging_mem)
-  release(staging)
-  release(dev)
+  # --- sync-validation control (positive + negative) ------------------------------
+  # A real hazard (two fills, no barrier) must be flagged ONLY when sync
+  # validation is actually active — proves the feature is on, not merely
+  # requested. Each control runs on its own instance/device.
+  waw_on = sync_hazard_control(; sync_validation = true)
+  waw_off = sync_hazard_control(; sync_validation = false)
+  ev["sync_validation_control"] = Dict("waw_detected_sync_on" => waw_on,
+                                       "waw_detected_sync_off" => waw_off)
+  check("sync validation ON: no-barrier WAW hazard flagged (WRITE_AFTER_WRITE)", waw_on >= 1, "waw=$waw_on")
+  check("sync validation OFF (negative control): no WAW flagged", waw_off == 0, "waw=$waw_off")
+
+  # --- deterministic cleanup (reverse dependency order; buffer before memory where
+  #     practical; messenger stays alive through destruction so destruction-time
+  #     messages are still captured; runs on EVERY path incl. mid-probe errors) ----
+  finally
+    if view !== nothing
+      release(view)
+      release(img)
+      release(img_mem)
+    end
+    if staging !== nothing
+      release(staging)
+      release(staging_mem)
+    end
+    dev !== nothing && release(dev)
+    msg !== nothing && release(msg)
+    inst !== nothing && release(inst)
+  end
   GC.gc()
   check("refcount clean after release (no underflow)", refcount_ok(dev) && refcount_ok(img) && refcount_ok(inst), "")
 

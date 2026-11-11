@@ -25,6 +25,7 @@
 # (p50_errors.jl) captures it through run_capture; a crash is recorded as an
 # exit code. Created handles are released in a finally block on every path.
 using Pkg
+using UUIDs
 
 const PROBE_ROOT = dirname(@__DIR__)
 
@@ -54,29 +55,34 @@ try
     end
     # Force a FRESH precompile in this owned env (the read-through user depot
     # holds valid .ji caches that would otherwise be reused and silently skip
-    # Vulkan's @compile_workload): copy the manifest-resolved package sources
-    # into the temp first depot so the source path (and .ji cache key) differs.
-    # Only the exact resolved version is copied — never the whole depot dir.
-    function copy_source(pkg, into)
+    # Vulkan's @compile_workload): copy the EXACT manifest-pinned sources into
+    # the temp first depot. Identity is uuid + git-tree-sha1 -> the
+    # Base.version_slug depot dir — never a version-string match (two git
+    # revisions can share a version), so the copied tree is exactly what Pkg
+    # resolves.
+    function copy_exact(pkg, into)
+      e = man["deps"][pkg][1]
+      tree = e["git-tree-sha1"]
+      slug = Base.version_slug(UUID(e["uuid"]),
+                               Base.SHA1(UInt8[parse(UInt8, tree[i:i+1]; base = 16) for i in 1:2:40]))
+      src = nothing
       for depot in DEPOT_PATH[2:end]
-        srcroot = joinpath(depot, "packages", pkg)
-        isdir(srcroot) || continue
-        for sub in readdir(srcroot)
-          pt = joinpath(srcroot, sub, "Project.toml")
-          isfile(pt) || continue
-          string(Pkg.TOML.parsefile(pt)["version"]) == mv(pkg) || continue
-          mkpath(joinpath(into, "packages", pkg))
-          cp(joinpath(srcroot, sub), joinpath(into, "packages", pkg, sub))
-          return sub
-        end
+        p = joinpath(depot, "packages", pkg, slug)
+        isdir(p) && (src = p)
       end
-      nothing
+      src === nothing && error("manifest-pinned $pkg (tree $(tree[1:12])…, slug $slug) not found in the read-through depots")
+      mkpath(joinpath(into, "packages", pkg))
+      cp(src, joinpath(into, "packages", pkg, slug))
+      slug
     end
-    sub_vk = copy_source("Vulkan", DEPOT_PATH[1])
-    sub_sp = copy_source("SPIRV", DEPOT_PATH[1])
-    sub_vk === nothing && error("manifest-resolved Vulkan $(mv("Vulkan")) source not found in the read-through depots")
-    sub_sp === nothing && error("manifest-resolved SPIRV $(mv("SPIRV")) source not found in the read-through depots")
-    report("SOURCES_COPIED=", "Vulkan/", sub_vk, " SPIRV/", sub_sp, " -> ", DEPOT_PATH[1])
+    sub_vk = copy_exact("Vulkan", DEPOT_PATH[1])
+    sub_sp = copy_exact("SPIRV", DEPOT_PATH[1])
+    # the copies must land at the exact slug paths in the temp depot, so Pkg's
+    # first-depot resolution uses them (not the user-depot sources)
+    isdir(joinpath(DEPOT_PATH[1], "packages", "Vulkan", sub_vk)) || error("Vulkan copy did not land at the exact slug path")
+    isdir(joinpath(DEPOT_PATH[1], "packages", "SPIRV", sub_sp)) || error("SPIRV copy did not land at the exact slug path")
+    report("SOURCES_EXACT=", "Vulkan/", sub_vk, " tree=$(string(man["deps"]["Vulkan"][1]["git-tree-sha1"])[1:12])…",
+           " SPIRV/", sub_sp, " rev=$(string(get(man["deps"]["SPIRV"][1], "repo-rev", ""))[1:12])…", " -> ", DEPOT_PATH[1])
     # The preference lives in the TEMP project's LocalPreferences.toml only
     # (the parent deletes the whole temp tree afterwards; the user's
     # preferences are never touched). Written BEFORE Pkg.instantiate so the

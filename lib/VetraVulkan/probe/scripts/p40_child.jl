@@ -58,6 +58,9 @@ function main()
   pad = cld(length(code), 4) * 4 - length(code)
   pad > 0 && append!(code, zeros(UInt8, pad))
 
+  inst = nothing; msg = nothing; dev = nothing
+  in_res = nothing; out_res = nothing; shader = nothing; layout = nothing; pipeline = nothing
+  try
   inst, msg, layers_used = make_instance(; validation = layer == 1)
   report("LAYER_ENABLED=", layer == 1 ? "yes" : "no")
   # make_instance errors (no silent downgrade) when validation is requested
@@ -125,32 +128,39 @@ function main()
   ok = val == expected
   report("RESULT=", ok ? "MATCH" : "MISMATCH expected=$expected got=$(val & 0xff)")
 
-  # deterministic cleanup (reverse order); messenger stays alive so
-  # destruction-time validation messages are still captured.
-  release(pipeline)
-  release(shader)
-  release(layout)
-  release(out_res.memory)
-  release(out_res.buffer)
-  release(in_res.memory)
-  release(in_res.buffer)
-  release(dev)
-  GC.gc()
+  # deterministic cleanup (reverse order; buffer before memory where practical;
+  # messenger stays alive so destruction-time validation messages are captured;
+  # runs on EVERY path incl. mid-probe errors).
+  finally
+    pipeline !== nothing && release(pipeline)
+    shader !== nothing && release(shader)
+    layout !== nothing && release(layout)
+    if out_res !== nothing
+      release(out_res.buffer)
+      release(out_res.memory)
+    end
+    if in_res !== nothing
+      release(in_res.buffer)
+      release(in_res.memory)
+    end
+    dev !== nothing && release(dev)
+    GC.gc()
 
-  errs = validation_errors()
-  warns = validation_warnings()
-  report("VAL_ERRORS=", length(errs))
-  for (i, _m) in enumerate(errs)
-    report("VAL_ERROR_", string(i), "=", _m[3])
-  end
-  report("VAL_WARNINGS=", length(warns))
-  for (i, _m) in enumerate(warns)
-    report("VAL_WARNING_", string(i), "=", _m[3])
-  end
+    errs = validation_errors()
+    warns = validation_warnings()
+    report("VAL_ERRORS=", length(errs))
+    for (i, _m) in enumerate(errs)
+      report("VAL_ERROR_", string(i), "=", _m[3])
+    end
+    report("VAL_WARNINGS=", length(warns))
+    for (i, _m) in enumerate(warns)
+      report("VAL_WARNING_", string(i), "=", _m[3])
+    end
 
-  release(msg)
-  release(inst)
-  GC.gc()
+    msg !== nothing && release(msg)
+    inst !== nothing && release(inst)
+    GC.gc()
+  end
   report("REFCOUNT_OK=", refcount_ok(inst) && refcount_ok(dev) && refcount_ok(pipeline) ? "yes" : "no")
   report("CHILD_DONE")
 end

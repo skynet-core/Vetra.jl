@@ -28,7 +28,8 @@ using Vulkan
 using Vulkan: unwrap
 include(joinpath(@__DIR__, "probe_common.jl"))
 using .ProbeCommon: check, write_evidence, reset_checks, make_instance, pick_device,
-                    query_supported_features, run_capture, run_jll, release, refcount_ok, CHECKS
+                    query_supported_features, run_capture, run_jll, release, refcount_ok,
+                    tailshort, CHECKS
 
 const PROBE_ROOT = dirname(@__DIR__)
 const EVIDENCE = joinpath(PROBE_ROOT, "evidence")
@@ -76,6 +77,10 @@ function main()
   ev = Dict{String, Any}()
 
   # --- compile (instance + physical device only, no logical device) -----------
+  inst = nothing
+  msg = nothing
+  spv_path = nothing
+  try
   inst, msg, _layers = make_instance(; validation = false)
   ph, props = pick_device(inst; name_substring = "NVIDIA GeForce")
   ev["device"] = props.device_name
@@ -111,8 +116,10 @@ function main()
   ev["spirv_val_vulkan1_2_negative_control"] = Dict("exit" => c12, "stderr" => e12)
   check("negative control: vulkan1.2 env rejected (module is SPIR-V 1.6)", c12 != 0, strip(e12))
 
-  release(msg)
-  release(inst)
+  finally
+    msg !== nothing && release(msg)
+    inst !== nothing && release(inst)
+  end
   GC.gc()
   check("parent refcount clean after release", refcount_ok(inst), "")
 
@@ -131,7 +138,7 @@ function main()
     r = run_child(spv_path, inh, osz, lay, exp)
     results[name] = r
     tail = r.stderr
-    length(tail) > 2000 && (tail = tail[end - 1999 : end])
+    length(tail) > 2000 && (tail = tailshort(tail, 2000))
     ev[name] = Dict("out_size" => osz, "layer" => lay == 1, "expected" => exp,
                     "child_exit" => r.exit,
                     "layer_enabled" => get(r.parsed, "LAYER_ENABLED", ""),

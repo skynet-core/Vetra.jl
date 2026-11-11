@@ -131,6 +131,9 @@ function main()
   reset_checks()
   ev = Dict{String, Any}()
 
+  inst = nothing; msg = nothing; dev = nothing
+  in_res = nothing; out_res = nothing; shader = nothing; layout = nothing; pipeline = nothing
+  try
   inst, msg, layers_used = make_instance(; validation = true, sync_validation = true, api = v"1.3")
   check("validation layer actually enabled (no silent downgrade)", layers_used == ["VK_LAYER_KHRONOS_validation"], "enabled=$(layers_used)")
   ph, props = pick_device(inst; name_substring = "NVIDIA GeForce")
@@ -273,15 +276,25 @@ function main()
   check("run3: runtime n=100 respected, elements beyond n untouched", m3 == 100 * 4 && sentinel_ok,
         "$m3/400 bytes + sentinel ok=$sentinel_ok")
 
-  # --- deterministic cleanup (messenger stays alive through destruction) -------------
-  release(pipeline)
-  release(shader)
-  release(layout)
-  release(out_res.memory)
-  release(out_res.buffer)
-  release(in_res.memory)
-  release(in_res.buffer)
-  release(dev)
+  # --- deterministic cleanup (reverse dependency order; buffer before memory where
+  #     practical; messenger stays alive through destruction; runs on EVERY path
+  #     incl. mid-probe errors) -------------
+  finally
+    pipeline !== nothing && release(pipeline)
+    shader !== nothing && release(shader)
+    layout !== nothing && release(layout)
+    if out_res !== nothing
+      release(out_res.buffer)
+      release(out_res.memory)
+    end
+    if in_res !== nothing
+      release(in_res.buffer)
+      release(in_res.memory)
+    end
+    dev !== nothing && release(dev)
+    msg !== nothing && release(msg)
+    inst !== nothing && release(inst)
+  end
   GC.gc()
   check("refcount clean after release (no underflow)", refcount_ok(dev) && refcount_ok(pipeline) && refcount_ok(inst), "")
 

@@ -49,17 +49,17 @@ if cell == "julia110_min_resolve"
     report("DEVELOP=failed")
     report("DEVELOP_MSG=", sanitize(sprint(showerror, e)))
   end
-  # NOTE: on Julia 1.10 the pinned SPIRV source precompiles against a
-  # 1.11-only Base API; the failure kills the process before this catch can
-  # run (observed: UndefVarError: `cached_return_type`). A nonzero child exit
-  # is itself the evidence in that case.
+  # The pinned SPIRV source precompiles against a 1.11-only Base API
+  # (cached_return_type); `using SPIRV` throws a LoadError that IS caught here.
+  # The child reports the structured failure and exits NORMALLY (exit 0) —
+  # the root diagnostic is preserved verbatim in LOAD_MSG (no blind slicing).
   try
     using SPIRV
     report("LOAD=ok")
     report("VERSIONS=", "julia=$(VERSION)")
   catch e
     report("LOAD=failed")
-    report("LOAD_MSG=", sanitize(sprint(showerror, e))[:1:300])
+    report("LOAD_MSG=", sanitize(sprint(showerror, e)))
   end
 elseif cell == "julia110_foreign_manifest"
   try

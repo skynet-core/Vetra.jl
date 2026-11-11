@@ -192,9 +192,10 @@ all_checks_pass(d) = d["summary"]["fail"] == 0 && d["summary"]["pass"] > 0 &&
 using Test
 include(joinpath(PROBE_ROOT, "scripts", "probe_common.jl"))
 using .ProbeCommon: SEV_VERBOSE, SEV_INFO, SEV_WARNING, SEV_ERROR, classify,
-    run_capture, run_jll, write_evidence,
-    make_instance, physical_devices, pick_device, make_device, release, refcount_ok,
-    synthetic_severity_regression
+    run_capture, run_jll, write_evidence, shorten, tailshort, manifest_source_dir,
+    make_instance, physical_devices, pick_device, make_device, release, refcount,
+    refcount_ok, synthetic_severity_regression, plain_buffer, map_with, with_commands
+using Pkg
 
 @testset "R040 Vulkan probe" begin
 @testset "severity classification vs the real Vulkan enum" begin
@@ -258,6 +259,42 @@ end
   end
 end
 
+@testset "text helpers: char-safe shorten/tailshort" begin
+  @test shorten("abcdef", 3) == "abc"
+  @test shorten("ab", 3) == "ab"
+  @test shorten("", 5) == ""
+  @test tailshort("abcdef", 3) == "def"
+  @test tailshort("ab", 3) == "ab"
+  # multibyte content must not split codepoints or throw
+  u = "x\u2014y\U0001F600z"
+  @test shorten(u, length(u)) == u
+  @test tailshort(u, 1) == "z"
+  @test shorten(u, 2) == "x\u2014"
+end
+
+@testset "occursin argument order (this build: pattern FIRST)" begin
+  # pins the build's occursin convention — every probe/test call relies on it;
+  # a port to a Julia with the opposite order must invert every call site
+  @test occursin("world", "hello world")
+  @test !occursin("hello world", "world")
+  @test occursin('w', "hello world")
+end
+
+@testset "manifest_source_dir: exact uuid+tree-hash identity" begin
+  act = dirname(Pkg.project().path)
+  mvk = manifest_source_dir(joinpath(act, "Manifest.toml"), "Vulkan")
+  msp = manifest_source_dir(joinpath(act, "Manifest.toml"), "SPIRV")
+  # the exact pinned checkout resolves by slug (uuid+tree hash), exists, and
+  # matches the committed pins — a version-string scan could not guarantee
+  # this (two revisions can share a version)
+  @test isdir(mvk.dir)
+  @test endswith(mvk.dir, joinpath("packages", "Vulkan", mvk.slug))
+  @test startswith(mvk.version, "0.6.")
+  @test isdir(msp.dir)
+  @test endswith(msp.dir, joinpath("packages", "SPIRV", msp.slug))
+  @test msp.git_rev == SPIRV_REV
+end
+
 @testset "GPU helpers: release + refcount + synthetic severity regression" begin
   # skipped on hosts without a usable Vulkan loader/device
   gpu_available = true
@@ -281,6 +318,60 @@ end
     release(dev)
     @test refcount_ok(dev)
     @test refcount_ok(inst)
+    # --- fault injection: partial-failure cleanup must restore the parent's
+    #     refcount IMMEDIATELY (before any GC), not eventually ---
+    dev2 = make_device(inst, ph; qi = 0)
+    rc0 = refcount(dev2)
+    @test rc0 < (UInt(1) << 32)   # a sane baseline
+    # fault memory_index -> plain_buffer must release the buffer it created
+    @eval ProbeCommon function memory_index(ph, bits::Integer, props)
+      error("injected-fault")
+    end
+    try
+      @test_throws ErrorException plain_buffer(dev2, ph, 256)
+      @test refcount(dev2) == rc0   # immediately — no GC.gc() in between
+      # map_with: a callback error must leave the memory UNMAPPED
+      b = nothing
+      try
+        @eval ProbeCommon function memory_index(ph, bits::Integer, props)
+          mp = unwrap(Vulkan.get_physical_device_memory_properties(ph))
+          for i in 1:mp.memory_type_count
+            ((Int(bits) >> (i - 1)) & 1 == 1) || continue
+            if mp.memory_types[i].property_flags & props == props
+              return i - 1
+            end
+          end
+          error("No device memory type for bits=$(bits) props=$(props)")
+        end
+        b = plain_buffer(dev2, ph, 64)
+        @test_throws ErrorException map_with(dev2, b.memory, 64, m -> error("map-callback-fault"))
+        back = map_with(dev2, b.memory, 64, m -> (fill!(m, 7); copy(m)))
+        @test all(back .== 7)   # remapped fine -> the earlier error unmapped it
+      finally
+        b !== nothing && (release(b.buffer), release(b.memory))
+      end
+      # with_commands: a record failure must release pool+cb, and the device
+      # must stay usable with the refcount restored
+      rc1 = refcount(dev2)
+      @test_throws ErrorException with_commands(dev2, 0, cb -> error("record-fault"))
+      @test refcount(dev2) == rc1
+      with_commands(dev2, 0, cb -> nothing)
+      @test refcount(dev2) == rc1
+    finally
+      # restore the original memory_index (same-signature redefinition)
+      @eval ProbeCommon function memory_index(ph, bits::Integer, props)
+        mp = unwrap(Vulkan.get_physical_device_memory_properties(ph))
+        for i in 1:mp.memory_type_count
+          ((Int(bits) >> (i - 1)) & 1 == 1) || continue
+          if mp.memory_types[i].property_flags & props == props
+            return i - 1
+          end
+        end
+        error("No device memory type for bits=$(bits) props=$(props)")
+      end
+      release(dev2)
+    end
+    @test refcount_ok(dev2)
     # synthetic severity regression (positive per severity + negative
     # controls) through vkSubmitDebugUtilsMessageEXT
     sev = synthetic_severity_regression(inst)
@@ -386,6 +477,10 @@ end
   @test p["clear_readback"]["first_pixel"] == [255, 0, 255, 255]
   @test p["sync_validation_requested"] === true
   @test p["validation_layer"] == ["VK_LAYER_KHRONOS_validation"]
+  # bounded positive/negative sync control: the hazard is flagged ONLY when sync
+  # validation is actually active — proves the feature, not just the request
+  @test p["sync_validation_control"]["waw_detected_sync_on"] >= 1
+  @test p["sync_validation_control"]["waw_detected_sync_off"] == 0
   @test isempty(p["validation"]["errors"])
   @test isempty(p["validation"]["warnings"])
 end
@@ -441,8 +536,10 @@ end
   @test occursin("INCOMPATIBLE_DRIVER", p["no_device"]["error_msg"])
   @test occursin("EXTENSION_NOT_PRESENT", p["bogus_ext"]["error_msg"])
   @test occursin("not supported on this device", p["bad_format"]["error_msg"])
-  # isolated precompile env: temp sources copied, workload proven per pref
-  @test startswith(p["precompile_false"]["sources_copied"], "Vulkan/")
+  # isolated precompile env: sources copied by EXACT uuid+tree-hash identity
+  # (not a version-string match), workload proven per pref
+  @test startswith(p["precompile_false"]["sources_exact"], "Vulkan/")
+  @test occursin("SPIRV/", p["precompile_false"]["sources_exact"])
   @test p["precompile_false"]["instantiate_ok"] == "yes"
   @test p["precompile_false"]["vulkan_precompile_ok"] == "yes"
   @test p["precompile_false"]["spirv_precompile_ok"] == "yes"
@@ -459,10 +556,16 @@ end
 @testset "R040 probe: p60 julia matrix" begin
   p = ev("p60_julia_matrix.json")
   @test all_checks_pass(p)
-  # the actual Julia-min blocker (source precompile failure), plus the
-  # separately-labeled foreign-manifest mechanics limitation
+  # the actual Julia-min blocker, recorded as a STRUCTURED failure: the child
+  # catches the 1.11-only-Base-API precompile error, reports it, and exits
+  # normally — the parent requires that exact known diagnostic (a resolver or
+  # unrelated load failure must not masquerade as the evidence)
+  @test p["julia110_min"]["exit"] == 0
   @test p["julia110_min"]["develop"] == "ok"
-  @test occursin("cached_return_type", p["julia110_min"]["stderr_tail"]) || p["julia110_min"]["exit"] != 0
+  @test p["julia110_min"]["load"] == "failed"
+  @test occursin("cached_return_type", p["julia110_min"]["load_msg"]) ||
+        occursin("cached_return_type", p["julia110_min"]["stderr_tail"])
+  # the separately-labeled foreign-manifest mechanics limitation
   @test p["julia110_manifest"]["result"] == "failed"
   @test occursin("different version of Julia", p["julia110_manifest"]["detail"])
   @test occursin("\"1.11\"", p["spirv_julia_compat"]["declared"])
