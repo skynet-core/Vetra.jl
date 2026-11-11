@@ -45,7 +45,7 @@ scope, ownership, dependencies, and acceptance checks:
 | M001 | Baseline, code audit, detailed task contract | done |
 | M002 | Reliable tests and four-platform test/benchmark CI | done (all 10 CI jobs passed) |
 | M003 | Julia-native API and package integration | done (independently approved; local gates and all 10 four-platform CI jobs pass) |
-| M004 | Correctness audit and reproduced bug fixes | done (52a40b9 independently validated; integrated through 7b6e7c0; remote CI pending) |
+| M004 | Correctness audit and reproduced bug fixes | integrated and locally approved; remote verification blocked by pre-existing Windows allocation-parity test (9/10 jobs passed) |
 | M005 | New README, interactive docs, GitHub Pages publication | moved to R098/R099 |
 | M006 | Remove obsolete port scaffolding | moved to R086 |
 | M007 | Final independent validation | moved to R090 |
@@ -80,7 +80,14 @@ test logs for independent validation before approval/push.
 | Task | Writer / worktree | Owned scope | Stop condition |
 | --- | --- | --- | --- |
 | M004 (done) | Qwen3.8, `/tmp/opencode/vetra-m004`, `modernization/correctness` | Crop bounds, cmap-12 validation, dash ownership, HarfBuzz lifecycle | Approved 52a40b9: both full gates, 113 independent probes/version and targeted benchmark comparison pass |
-| R040 | Qwen3.8, `/tmp/opencode/vetra-r040`, `canvas/vulkan-probe` | Isolated `lib/VetraVulkan/probe/` environment, scripts and evidence | Reproducible Julia/Vulkan shader/device probe and honest platform/feature matrix, or concrete blockers; handoff for R010 |
+| R040 | Qwen3.8, `/tmp/opencode/vetra-r040`, `canvas/vulkan-probe` | Isolated `lib/VetraVulkan/probe/` environment, scripts and evidence | 713543b rejected: validation masks, missing manifest and native ownership/evidence corrections assigned; see handoff |
+| Windows CI follow-up | Qwen3.8, `/tmp/opencode/vetra-windows-allocation`, `modernization/windows-allocation` | Constructor allocation-parity gate in `test/api_native_tests.jl` | 6eff5cd independently approved, integrated as e879026: both full gates and 304/304 probes per Julia pass; Windows CI pending |
+
+M004 push `a69027a`: [run 43002436891](https://github.com/skynet-core/Vetra.jl/actions/runs/43002436891)
+passed nine jobs and uploaded all four benchmark artifacts. Current-Julia
+Windows failed only constructor allocation parity (10359 vs 10343 bytes).
+The preceding `9826b7e` run 42914342763 also failed constructor parity on Windows;
+this pre-existing gate issue is assigned separately, not treated as a passing run.
 
 R040 continues independently. R010 awaits reviewed R040 evidence;
 downstream backend tasks retain their dependency gates. R099 stays last.

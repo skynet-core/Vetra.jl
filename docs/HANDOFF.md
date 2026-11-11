@@ -40,8 +40,9 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: review/validate R040's submission and freeze R010 using verified Vulkan
-constraints. M003/M004 are approved (evidence below); R010 awaits R040.
+Next: review/validate R040's corrected submission and the Windows allocation-gate
+follow-up, then freeze R010 using verified Vulkan constraints. M003/M004 are
+locally approved (evidence below); remote verification and R040 remain open.
 R099 remains the final task.
 
 ### Implementation wave started 2026-11-11
@@ -53,11 +54,12 @@ Pinned base: `9826b7e`. Qwen3.8 writers have disjoint ownership:
   lifetime/language/buffer cleanup and confirmed paragraph-shaping gaps. M003
   already fixed constructor/zero-PPM validation. Keep independent expectations,
   lazy optional providers and Julia 1.10 compatibility; both full gates passed.
-- **R040**, `/tmp/opencode/vetra-r040`, branch `canvas/vulkan-probe`:
+- **R040 (corrections assigned)**, `/tmp/opencode/vetra-r040`, branch `canvas/vulkan-probe`:
   isolated `lib/VetraVulkan/probe/` stack, discovery, clear/readback, nonconstant
   Julia-authored shaders, SPIR-V plus runtime validation and platform evidence.
   Investigate declared-compatible SPIRV/Vulkan first; missing drivers/devices or
-  incompatible toolchains are explicit blockers, not inferred support.
+  incompatible toolchains are explicit blockers, not inferred support. Initial
+  candidate `713543b` was rejected after independent review (below).
 
 Coordinator owns shared docs/metadata/exports and integration; writers do not
 push or approve their own work. No overlapping Canvas implementation is assigned.
@@ -152,7 +154,127 @@ julia --startup-file=no --project=/tmp/opencode/m004-coord-env113 /tmp/opencode/
 Logs: `/tmp/opencode/m004-coord-perf-{before,after}.log`. These are bounded
 workload observations, not general speed claims or native-allocation counts.
 The formerly discarded overlap now draws actual source pixels; its old output
-was wrong. Remote four-platform CI after push remains pending.
+was wrong.
+
+#### Remote CI and Windows follow-up
+
+Pushed implementation/evidence through `a69027a`. Coordinator watched
+`gh run watch 43002436891 --exit-status` (exit 1), then inspected jobs and failed
+logs. [Run 43002436891](https://github.com/skynet-core/Vetra.jl/actions/runs/43002436891)
+passed **9/10 jobs**: Linux/macOS both Julia versions, Windows 1.10, FreeBSD
+tests and all platform benchmarks. All four benchmark artifacts are present
+and unexpired (`gh api repos/skynet-core/Vetra.jl/actions/runs/43002436891/artifacts`).
+Current-Julia Windows failed `test/api_native_tests.jl:774`: constructor allocation
+parity, 10359 vs 10343 bytes. The prior documentation-only push `9826b7e` also
+failed this gate in run 42914342763 (lines 774/776: 10327 vs 10359 and 10343 vs
+10327). Earlier M003 run 42913541720 remains genuine passing evidence, but does
+not establish stability of this allocation check.
+
+Logs: `/tmp/opencode/m004-ci-43002436891-{watch,failed}.log` and
+`/tmp/opencode/m003-ci-42914342763-failed.log`. Qwen owns a bounded investigation
+and test correction in `/tmp/opencode/vetra-windows-allocation`, branch
+`modernization/windows-allocation`, base `a69027a`; no blind tolerance loosening.
+Coordinator will independently review the cause and candidate before pushing.
+Remote verification remains blocked on this follow-up. R040 continues independently.
+
+Windows follow-up candidate `6eff5cd` changes only the allocation-parity
+workload from 64×40 to 24×16, retaining exact equality and the existing drawing
+operations. Coordinator verified that `new_image === newImage` and both routes
+use the same `Image` constructor. Julia 1.13.3 source confirms large buffers
+are charged via `memory_block_usable_size` (`src/gc-stock.c:3932`), with Windows
+aligned allocation measured using `_msize` minus the alignment offset
+(`src/gc-common.c:121–149`). Pool-sized storage instead uses fixed size classes;
+1536 payload bytes plus the header remain below the 2024-byte pool ceiling
+(`src/genericmemory.c:30–48`, `src/julia_internal.h:605`). This removes the
+allocator-slack dependency rather than increasing a tolerance.
+
+Coordinator probes `/tmp/opencode/winalloc-coord-probe.jl` passed **304/304**
+per version, including 100 repeated measurements of all three constructor
+routes and an extra-copy negative control. Actual Linux measurements:
+Julia 1.13.3 **1664 vs 3296 bytes**, Julia 1.10.13 **1632 vs 3264 bytes**
+(constructor versus extra copy). Equality is within a runtime, not across
+versions. Logs `/tmp/opencode/winalloc-coord-probe{113,110}.log`.
+Both full gates passed on exact candidate `6eff5cd` in the reused coordinator
+worktrees: **95.79% (7762/8103)** on Julia 1.13.3 and **95.83% (7865/8207)**
+on Julia 1.10.13. Each includes all 383 API tests and 302 shaping tests;
+PyMuPDF interop was skipped because the module is unavailable.
+
+```sh
+# /tmp/opencode/vetra-m004-coord113 at 6eff5cd
+julia --startup-file=no --project=. scripts/check.jl
+# /tmp/opencode/vetra-m004-coord110 at 6eff5cd
+julia +1.10 --startup-file=no --project=. scripts/check.jl
+julia --startup-file=no --project=/tmp/opencode/m004-coord-env113 /tmp/opencode/winalloc-coord-probe.jl /tmp/opencode/vetra-m004-coord113
+julia +1.10 --startup-file=no --project=/tmp/opencode/m004-coord-env110 /tmp/opencode/winalloc-coord-probe.jl /tmp/opencode/vetra-m004-coord110
+```
+
+Full-gate logs: `/tmp/opencode/winalloc-coord-gate{113,110}.log`.
+Candidate independently approved and integrated as `e879026`; the coordinator
+shortened only its explanatory test comment, retaining detailed evidence here.
+Executable test logic matches the validated candidate. Windows CI confirmation
+after push remains pending. This does not approve the separate R040 candidate.
+
+### R040 first-candidate review: not approved
+
+Qwen submitted `713543b` (22 files under `lib/VetraVulkan/probe/`) with Linux
+NVIDIA execution evidence. Coordinator used detached worktree
+`/tmp/opencode/vetra-r040-coordinator`, without changing the writer's tree.
+
+- **Clean checkout fails:** the documented GPU-free self-check raises ENOENT
+  for `Manifest.toml`, which is absent from the commit. Log:
+  `/tmp/opencode/r040-coord-clean-check.log`. Coordinator copied the writer's
+  ignored Manifest solely to proceed with diagnostic execution; that does not
+  make the committed candidate reproducible.
+- **Validation false negatives:** `probe_common.jl` uses ERROR=8, WARNING=4,
+  INFO=2, whereas the actual Vulkan constants are 4096, 256 and 16. Injecting
+  actual error/warning flags into the captured messages yields zero classified
+  errors and warnings. All original clean-validation counts need rechecking.
+  Requested validation must also fail if the layer/messenger is unavailable;
+  checks must include cleanup and finalization rather than stop before them.
+- **Feature-query ownership:** pinned Vulkan 0.6.30's
+  `src/prewrap/pointers.jl` `_initialize_core` consumes its `refs` vector with
+  `popfirst!`; `_initialize` then stores the emptied vector as dependencies.
+  Coordinator observed an initialized feature-query structure with non-null
+  pNext and **zero retained dependency owners**. Retrying AssertionError does
+  not fix this lifetime defect or establish an ICD transient. A rooted query
+  path or explicitly recorded local patch, with GC checks, is required.
+- **Minimum-feature claim disproved:** original p30 passed locally. Coordinator
+  then corrected severity masks and removed both variable-pointer feature
+  requests; the same SPIR-V and all three readbacks still passed, 10/10 checks.
+  These features are not demonstrated requirements of this emitted module.
+  The Int8 capability mapping and p10 memory-property labels also use incorrect
+  features/bits; corrections must use actual enums and primary contracts.
+- **Cleanup needs correction:** manual wrapper `.destructor()` calls leave
+  registered finalizers in place; the pinned wrapper decrements an unsigned
+  refcount on every call. Review explicit finalization, dependency order and
+  exception-path cleanup, including memory mapping and submission. Check memory
+  dependencies with synchronization validation, not readback success alone.
+- **Unsupported host claims:** standard Julia do-block callback ordering,
+  UTF-8 character count versus byte indexing and ordinary `rm` semantics are
+  mislabeled as broken/stripped builds. Coordinator verified normal subprocess
+  stdout/stderr capture and exit status, do-block ordering and UTF-8 length on
+  Julia 1.11.9 (5/5). Remove the false claims and unnecessary shell workarounds.
+- **Isolation/coverage gaps:** precompile probes delete shared depot cache and
+  project preferences; move these to an isolated temporary environment. The
+  1.10 foreign-manifest failure is not a shader compatibility test, and the
+  first SPIRV depot directory is not necessarily the pinned revision. Bool
+  probes must require the requested layer and fail rather than skip mismatches.
+  Complete the fresh layer build recipe and distinguish platform source
+  investigations from unavailable Windows/macOS/FreeBSD execution.
+
+Independent commands (in the coordinator tree, with the diagnostic Manifest):
+
+```sh
+VK_LAYER_PATH=/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d LD_LIBRARY_PATH=/tmp/opencode/vvl/install/lib julia +1.11 --startup-file=no --project=lib/VetraVulkan/probe lib/VetraVulkan/probe/scripts/p20_offscreen.jl
+VK_LAYER_PATH=/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d LD_LIBRARY_PATH=/tmp/opencode/vvl/install/lib julia +1.11 --startup-file=no --project=lib/VetraVulkan/probe lib/VetraVulkan/probe/scripts/p30_compute.jl
+```
+
+Logs: `/tmp/opencode/r040-coord-p20.log` (8192/8192 upload bytes and exact clear),
+`/tmp/opencode/r040-coord-p30.log` (original 10/10), and
+`/tmp/opencode/r040-coord-p30-minimal.log` (10/10 after the two diagnostic edits
+described above). These establish bounded execution, not approval of the original
+validation/ownership claims. Corrections were returned to the existing Qwen
+writer. R010 remains gated; no R040 code has been merged or pushed.
 
 Vulkan source research is **reviewed for planning**, with coordinator qualifications
 recorded in `docs/CANVAS_RESEARCH.md`: SPIRV.jl exists (experimental,

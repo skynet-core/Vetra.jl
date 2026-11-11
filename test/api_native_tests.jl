@@ -755,18 +755,7 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
     end
 
     @testset "allocation parity (warmed calls, M002 rule)" begin
-        # Workload is pool-sized on purpose: the Image data buffer is
-        # 4*w*h bytes, and 4*24*16 = 1536 keeps it at/below Julia's GC
-        # pool ceiling (GC_MAX_SZCLASS = 2024; src/julia_internal.h), so
-        # `@allocated` counts fixed pool size classes — deterministic on
-        # every platform. A larger buffer takes the `jl_gc_managed_malloc`
-        # path, which since Julia 1.11.5 (PR #55223, "count bytes
-        # allocated through malloc more precisely") counts
-        # `memory_block_usable_size`: on Windows that is msvcrt `_msize`,
-        # which jitters by 16 bytes between identical calls — so exact
-        # parity would fail only on Windows/stable (CI 43002436891).
-        # Large-dimension constructor behavior stays covered by the
-        # "Image constructor trust boundary" set.
+        # Pool-sized buffers avoid Windows malloc-accounting jitter (evidence in docs/HANDOFF.md).
         # warm up both paths (compile + cache)
         for _ in 1:3
             img = newImage(24, 16)

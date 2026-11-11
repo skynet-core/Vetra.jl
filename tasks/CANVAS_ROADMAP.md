@@ -92,7 +92,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | ID | Task | Stream | Depends on | Initial status |
 | --- | --- | --- | --- | --- |
 | R000 | Architecture, research and reviewed task plan | Coordinator | — | done |
-| R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | in_progress (Qwen; isolated probe) |
+| R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | in_progress (713543b rejected; probe corrections assigned) |
 | R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | planned |
 | R011 | Independent conformance corpus and capability inventory | Q | R010 | planned |
 | R012 | Shared text/layout correctness and font contract | F | R010, M004 | planned |
@@ -192,6 +192,13 @@ temporary experiment output until the package boundary is approved.
 Assigned 2026-11-11: Qwen3.8, branch `canvas/vulkan-probe`, worktree
 `/tmp/opencode/vetra-r040`, base `9826b7e`; owns `lib/VetraVulkan/probe/` only.
 Coordinator reviews evidence and packaging proposals before R010 or approval.
+
+First submission `713543b` is not approved. Coordinator reproduced offscreen
+and compute readbacks on Linux NVIDIA, but found incorrect validation severity
+masks (errors/warnings silently omitted), an uncommitted Manifest, an unrooted
+feature-query pNext chain in the pinned wrapper, and unsupported minimum-feature
+claims. Bounded corrections are assigned to the same writer; exact findings and
+independent evidence are in `docs/HANDOFF.md`. Other OS execution remains open.
 
 - Start from the [reviewed research corrections](../docs/CANVAS_RESEARCH.md),
   not the superseded initial report's compiler/loader/platform conclusions.
