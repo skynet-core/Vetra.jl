@@ -1176,6 +1176,34 @@ Evidence: `test/api_native_tests.jl`, existing kernel/reference suites, coordina
 load-order probes and before/after benchmark smoke. No new Canvas backend is
 implied by these additive interfaces.
 
+## D036 — Correctness boundaries and HarfBuzz ownership (M004)
+
+Status: **accepted and independently validated**, 2026-11-11. Evidence in
+`docs/HANDOFF.md`; broader text/layout changes remain R012's responsibility.
+
+- Fix independently reproduced behavior rather than preserve the upstream crop
+  early-exit bug. Use overflow-safe containment on both crop APIs. Dash setters
+  and getters copy storage for Context and RecordingContext.
+- Keep cmap-12's standard 16-byte header and add range/length validation before
+  expansion. Reject the candidate's omitted-language-field layout; tests use
+  independent OpenType specification bytes.
+- Cache one HarfBuzz (blob, face, font) triple per live `OtcOpenType` in a
+  WeakKeyDict. A finalizer holding only native pointers releases font, face and
+  blob; the cache does not strongly retain every parsed font. Blob mode 0 is
+  DUPLICATE: HarfBuzz owns its byte copy. `GC.@preserve` keeps the owner alive
+  for the complete native-use interval. This adds no thread-safety guarantee.
+- Intern language via `hb_language_from_string`; require non-empty ASCII input
+  without introducing a BCP47 parser. Native buffer cleanup is in `finally`.
+  Constructors use their documented empty-object failure contracts, and
+  `hb_buffer_allocation_successful` is checked before input, after adding input
+  and after shaping. NULL-only checks are insufficient for these APIs.
+- Keep D033's documented pure-LTR paragraph engagement limit. R012 reviews the
+  broader text contract; documentation publication stays at final R099.
+
+The coordinator verified the OpenType 1.9.1 layout and HarfBuzz 15.1.0 source,
+then injected failures and GC through the existing native function table in
+isolated probes. RSS/Julia allocation measurements alone are not lifetime proofs.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

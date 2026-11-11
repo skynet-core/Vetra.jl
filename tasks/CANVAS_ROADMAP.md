@@ -41,7 +41,7 @@ Status vocabulary: `ready`, `in_progress`, `review`, `verification_pending`,
 | M001 baseline/audit | Done; retain evidence |
 | M002 four-platform CI | Done at `d2d44fa`, run 42811680553; extend, do not replace |
 | M003 Julia-native API | Done; independently validated additive foundation for Canvas (see handoff) |
-| M004 correctness fixes | Complete before the shared core is released; includes FFI ownership, malformed input and crop fixes |
+| M004 correctness fixes | Done: independently validated FFI ownership/failure handling, cmap-12 bounds, dash copies and crop fixes (see handoff) |
 | M005 new docs/Pages | Fold into **R099**, the last task; do not publish prospective backend support as current |
 | M006 obsolete-file cleanup | Fold into **R086**, after durable contracts have replacements |
 | M007 final validation | Fold into **R090**; R099 additionally validates the final published docs revision |
@@ -92,7 +92,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | ID | Task | Stream | Depends on | Initial status |
 | --- | --- | --- | --- | --- |
 | R000 | Architecture, research and reviewed task plan | Coordinator | — | done |
-| R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | ready (unassigned) |
+| R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | in_progress (Qwen; isolated probe) |
 | R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | planned |
 | R011 | Independent conformance corpus and capability inventory | Q | R010 | planned |
 | R012 | Shared text/layout correctness and font contract | F | R010, M004 | planned |
@@ -188,6 +188,10 @@ and acceptance updates; do not add speculative subprojects merely to occupy agen
 
 **Owner/paths:** G; isolated probe environment under `lib/VetraVulkan/` or
 temporary experiment output until the package boundary is approved.
+
+Assigned 2026-11-11: Qwen3.8, branch `canvas/vulkan-probe`, worktree
+`/tmp/opencode/vetra-r040`, base `9826b7e`; owns `lib/VetraVulkan/probe/` only.
+Coordinator reviews evidence and packaging proposals before R010 or approval.
 
 - Start from the [reviewed research corrections](../docs/CANVAS_RESEARCH.md),
   not the superseded initial report's compiler/loader/platform conclusions.

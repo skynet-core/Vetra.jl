@@ -2,8 +2,8 @@
 
 **Superseded in part by the user's Canvas milestone:** see
 [Canvas architecture](../docs/CANVAS_DESIGN.md) and
-[R000–R099 development plan](CANVAS_ROADMAP.md). M003 is complete; prerequisite
-M004 correctness work is ready for assignment. M005 documentation is folded into the
+[R000–R099 development plan](CANVAS_ROADMAP.md). M003 and prerequisite
+M004 correctness work are complete. M005 documentation is folded into the
 final R099 task; M006 cleanup becomes R086; M007 integrated validation becomes
 R090. Their original order below is historical, not the active execution order.
 
@@ -237,11 +237,50 @@ through `901b9d7`; validated source/tests/package metadata are identical.
   Exact commands, logs, benchmark table and PyMuPDF skip are in
   `docs/HANDOFF.md`. Remote run `42913541720` at `f8b2dfe` passed all 10 jobs,
   including Linux/Windows/macOS/FreeBSD tests and benchmarks; four benchmark
-  artifacts are present. M004 is now ready for assignment.
+  artifacts are present. M004 subsequently completed (see below).
 
 ## M004 — Correctness audit and reproduced bug fixes
 
 Depends on M003. Scope follows M001 findings and coordinator review.
+
+Assigned 2026-11-11 to Qwen3.8 in `/tmp/opencode/vetra-m004`, branch
+`modernization/correctness`, base `9826b7e`. Own existing image/context/font/
+shaping/paragraph implementation and their tests. R040 is a disjoint probe writer;
+shared docs, exports, root metadata and final integration remain coordinator-owned.
+M003 already closes zero-PPM/constructor validation; retain those regressions.
+
+Review history (resolved by final approval below), 2026-11-11: first candidate
+`e88aceb` rejected. Its cmap-12 change removed
+the required uint32 language field from the assumed layout (both source and new
+fixture), regressing valid subtables. Restore the 16-byte standard header and
+validate ranges against independent spec-built bytes. The weak HarfBuzz cache
+also needs explicit GC preservation through native calls; blob mode 0 is
+DUPLICATE, not READONLY. Coordinator reproduced the cmap regression and checked
+the primary OpenType specification and installed HarfBuzz header. Corrections
+are assigned to the same writer; implementer gate passes are not approval.
+The documented pure-LTR engagement limit stays deferred to R012.
+
+Correction `e91a5a1`: header/range probes pass (6/6 coordinator checks), and
+GC preservation/blob-copy claims are corrected. Further bounded correction is
+required: detect HarfBuzz's documented empty-buffer allocation-failure sentinel,
+not just NULL. Coordinator fault injection reproduced silent empty output;
+add failure/recovery coverage and remove an invalid assumption that a dead
+ephemeral font cannot be finalized before an explicit `GC.gc()`.
+Additional reproduced image-bound finding: positive Int-limit crop offsets wrap
+the endpoint sum and incorrectly enter `subImage`. Fix overflow-safe containment
+and bounds in both crop functions; retain transparent far-outside results and
+explicit invalid-subimage errors. Assigned to the same M004 writer.
+
+**Completed and independently approved 2026-11-11:** final `52a40b9`, integrated
+through `7b6e7c0` after the two correction rounds above. Source/tests match the
+validated candidate. Full coordinator gates: Julia 1.13.3 **95.79% (7762/8103)**;
+Julia 1.10.13 **95.83% (7865/8207)**. Independent probes: **113/113 each**,
+including native buffer failure injection at three stages with exactly-once
+cleanup, GC inside native-use intervals, spec-built cmap bytes and Int-limit
+crop cases. Targeted before/after shaping/crop benchmarks completed; exact
+commands/results and the unavailable PyMuPDF check are in `docs/HANDOFF.md`.
+Remote CI after push is pending. Pure-LTR paragraph engagement retains D033's
+named limitation for R012; R040 continues and R099 remains the final task.
 
 - Review image dimensions/indexing/aliasing, codec/font/parser bounds, FFI
   lifetime and error paths, recording/export mutation/validation, and paragraph

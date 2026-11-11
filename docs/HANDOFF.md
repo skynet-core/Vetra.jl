@@ -9,8 +9,9 @@ codecs and Jupyter integration. Independent architecture/task-plan review has
 passed; source review and final independent media consistency review are complete
 with no blocking findings.
 Coordinator owns these documents. Qwen's bounded M003 implementation in
-`modernization/native-api` is now approved and integrated; no writer is currently
-assigned. Future streams are gated by
+`modernization/native-api` is now approved and integrated. On 2026-11-11 the user
+requested implementation start; M004 is now independently approved and integrated,
+and R040 remains active in its separate worktree (below). Future streams are gated by
 R010's contract review. Final milestone task R099 publishes the real interactive
 tutorial via GitHub Pages CI; R098 prepares the illustrated README.
 
@@ -39,9 +40,119 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: assign bounded M004 correctness work and the dependency-ready R040 spike
-explicitly before starting them, with separate worktrees. M003's final candidate
-is approved (evidence below); R010 now awaits R040. R099 remains the final task.
+Next: review/validate R040's submission and freeze R010 using verified Vulkan
+constraints. M003/M004 are approved (evidence below); R010 awaits R040.
+R099 remains the final task.
+
+### Implementation wave started 2026-11-11
+
+Pinned base: `9826b7e`. Qwen3.8 writers have disjoint ownership:
+
+- **M004 (done)**, `/tmp/opencode/vetra-m004`, branch `modernization/correctness`:
+  reproduce/fix crop overlap, cmap-12 bounds, dash ownership, HarfBuzz handle
+  lifetime/language/buffer cleanup and confirmed paragraph-shaping gaps. M003
+  already fixed constructor/zero-PPM validation. Keep independent expectations,
+  lazy optional providers and Julia 1.10 compatibility; both full gates passed.
+- **R040**, `/tmp/opencode/vetra-r040`, branch `canvas/vulkan-probe`:
+  isolated `lib/VetraVulkan/probe/` stack, discovery, clear/readback, nonconstant
+  Julia-authored shaders, SPIR-V plus runtime validation and platform evidence.
+  Investigate declared-compatible SPIRV/Vulkan first; missing drivers/devices or
+  incompatible toolchains are explicit blockers, not inferred support.
+
+Coordinator owns shared docs/metadata/exports and integration; writers do not
+push or approve their own work. No overlapping Canvas implementation is assigned.
+
+#### M004 review history (resolved by final approval below)
+
+M004 first submission `e88aceb` was **rejected**. Coordinator reproduced a
+new cmap-12 regression: a standard 16-byte header with language=0 and one group
+U+10000–U+10002 → glyphs 1–3 parses on main but returns an empty mapping on the
+candidate. The implementation and its new fixture both omitted the required
+language field. Microsoft OpenType 1.9.1's cmap specification (source revision
+`810414e13e39f68adfb5f12d525e6b50c850fbbc`) confirms the original header offsets.
+Qwen must restore those offsets, retain independently justified range validation
+and repair the fixture. Passing candidate gates do not establish correctness.
+
+The HarfBuzz review also requires `GC.@preserve` across native handle use with
+the new weak cache/finalizer, plus accurate failure/cleanup handling and tests.
+Installed `hb-blob.h` confirms mode 0 is DUPLICATE, not the report's READONLY;
+retain the safe copy-per-live-font behavior and correct that ownership claim.
+Numbered corrections were returned to Qwen; full coordinator gates await the
+corrected candidate. The documented pure-LTR paragraph limitation remains for
+R012's contract review. R040 continues independently; no backend approval follows
+from these CPU fixes.
+
+Correction `e91a5a1` restores the standard cmap header; coordinator's six
+independent valid/invalid-range/truncation checks pass. Blob-copy documentation
+and GC preservation are corrected. Approval still awaits native-failure handling:
+HarfBuzz 15.1.0's `hb_buffer_create` never returns NULL on allocation failure;
+it returns an empty sentinel with `hb_buffer_allocation_successful == false`.
+Coordinator substituted `hb_buffer_get_empty` into the existing create-function
+pointer slot (restored in `finally`) and reproduced silent empty shaping output
+for three Arabic codepoints. Qwen must detect the published failure state and
+test cleanup/recovery. The lifecycle test must also allow collection after its
+ephemeral owner leaves scope rather than assert a particular GC schedule.
+Coordinator also reproduced crop-bound overflow on `e91a5a1`:
+`super_image(Image(3,2), typemax(Int), 0, 1, 1)` (and the y variant) takes the
+inside/subimage branch after integer wrap, then raises BoundsError rather than
+returning transparent pixels. Qwen is correcting containment/bounds arithmetic
+in both `superImage` and `subImage`, with Int-limit and partial-overlap tests.
+
+### M004 final approval and independent evidence (2026-11-11)
+
+**Final candidate `52a40b9` approved**, following the rejected assumptions and
+correction rounds above; integrated as `7b9ebda`, `a9f6997`, `7b6e7c0`.
+Validated source/tests match the integration exactly. Crop predicates now avoid
+endpoint overflow; HarfBuzz constructors/failure checks use published sentinels
+and buffer allocation status, with deterministic buffer cleanup and preserved
+font ownership. cmap header remains standard. See D036 and compatibility notes.
+
+Coordinator full gates in detached `/tmp/opencode/vetra-m004-coord{113,110}`:
+
+| Check | Julia 1.13.3 | Julia 1.10.13 |
+| --- | --- | --- |
+| `scripts/check.jl` | exit 0; **95.79% (7762/8103)** | exit 0; **95.83% (7865/8207)** |
+| Independent crop/cmap/dash probes | **96/96** | **96/96** |
+| Independent native failure/GC probes | **17/17** | **17/17** |
+
+```sh
+julia --startup-file=no --project=. scripts/check.jl
+julia +1.10 --startup-file=no --project=. scripts/check.jl
+julia --startup-file=no --project=/tmp/opencode/m004-coord-env113 /tmp/opencode/m004-coord-probes.jl /tmp/opencode/vetra-m004-coord113
+julia +1.10 --startup-file=no --project=/tmp/opencode/m004-coord-env110 /tmp/opencode/m004-coord-probes.jl /tmp/opencode/vetra-m004-coord110
+```
+
+Logs: `/tmp/opencode/m004-coord-gate{113,110}.log` and
+`/tmp/opencode/m004-coord-probes{113,110}.log`. Full suites include the 302-test
+shaping suite and 383 native-API tests, plus existing rendering/export/provider
+checks. PyMuPDF interop was skipped because the module is unavailable.
+
+The native probes inject failure at each allocation-status checkpoint (before
+input, after input and after shaping), force GC inside the native-use interval,
+assert exactly one buffer destroy on each path, verify owner survival during
+use and collection afterward, and verify correct Arabic glyphs after recovery.
+Function pointers are always restored. This supplements the published-empty-
+sentinel regression in the committed suite; no real system OOM was induced.
+
+Independent targeted performance runs on Linux Julia 1.13.3, baseline `9826b7e`
+and final `52a40b9`, same provider versions, three warmed samples:
+
+| Workload | Calls | Before median ms / Julia bytes | After median ms / Julia bytes |
+| --- | ---: | ---: | ---: |
+| Arabic shaping, same live font | 100 | 14.494 / 177600 | 0.203 / 131200 |
+| Interior crop | 1000 | 25.857 / 32072000 | 23.280 / 32072000 |
+| Already-overlapping padded crop | 1000 | 7.592 / 32072000 | 3.851 / 32072000 |
+| Formerly discarded overlap | 1000 | 12.250 / 160072000 | 13.015 / 160072000 |
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/m004-coord-env-before /tmp/opencode/m004-coord-perf.jl /tmp/opencode/vetra-m004-before
+julia --startup-file=no --project=/tmp/opencode/m004-coord-env113 /tmp/opencode/m004-coord-perf.jl /tmp/opencode/vetra-m004-coord113
+```
+
+Logs: `/tmp/opencode/m004-coord-perf-{before,after}.log`. These are bounded
+workload observations, not general speed claims or native-allocation counts.
+The formerly discarded overlap now draws actual source pixels; its old output
+was wrong. Remote four-platform CI after push remains pending.
 
 Vulkan source research is **reviewed for planning**, with coordinator qualifications
 recorded in `docs/CANVAS_RESEARCH.md`: SPIRV.jl exists (experimental,
@@ -54,7 +165,8 @@ exports, Vulkan extension, execution harness and CI definition. SPIRV.jl is the
 first candidate to probe, not a finalized choice; neither a one-line compat fix,
 the companion Julia minimum nor software/hardware platform support is established.
 R040 now checks nonconstant device work, actual minimum features and the upstream
-disabled-validation concern. Hardware evidence remains required. No runtime probe run.
+disabled-validation concern. Hardware evidence remains required; R040 runtime
+evidence awaits submission and independent review.
 
 Browser/notebook source research is also **reviewed for planning**. Independently
 checked BCD/IJulia/JupyterLab sources are in `docs/CANVAS_RESEARCH.md`: Safari
@@ -103,7 +215,7 @@ must remain labeled as plans until implemented and validated.
 **Approved and integrated:** Qwen's final `0c88c91`, following three reviewed
 correction rounds. Integration commits are `ae9faf6`, `5716ae2`, `bdf39a5` and
 `901b9d7`; source, tests, examples and package metadata match the validated
-candidate exactly. M004 is ready; registration remains user-owned.
+candidate exactly. M004 subsequently completed (see above); registration remains user-owned.
 
 Qwen submitted `c1ea06e` on `modernization/native-api`, based on `d2d44fa`.
 **Initial candidate rejected.** Coordinator read the diff and connected methods,
@@ -212,8 +324,9 @@ with `gh run watch 42913541720 --exit-status` (exit 0),
 2026-11-10: user requested independent Julia-native identity/API, obsolete
 port-document cleanup, rewritten interactive GitHub Pages documentation, and
 working Linux/Windows/macOS/FreeBSD tests and benchmarks. Follow
-`tasks/MODERNIZATION.md` M001–M007 in order. GPT-6 Astra validates; Qwen3.8
-implements. M001–M003 are complete; M004 correctness work is ready.
+the original `tasks/MODERNIZATION.md` M001–M007 sequence, since superseded by
+the Canvas plan above. GPT-6 Astra validates; Qwen3.8 implements. M001–M004
+are now complete. The following records the earlier M002/M003 integration:
 Baseline `415c7a0` was clean and already pushed. Existing remote CI fails;
 Pages workflow hosting is enabled but there is no deployment yet.
 M002 implementation and review fixes are integrated (`95185c3`, `8bfd7ae`).

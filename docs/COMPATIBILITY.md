@@ -27,6 +27,30 @@ not an `AbstractMatrix`. Invalid dimensions/lengths now raise `ArgumentError`,
 including zero-size PPM images previously accepted accidentally. Evidence:
 `test/api_native_tests.jl`, plus coordinator validation in [Handoff](HANDOFF.md).
 
+### Correctness fixes (M004)
+
+- `superImage`/`super_image` now retain negative-offset partial overlaps rather
+  than following the upstream absolute-offset early exit. Both crop APIs use
+  overflow-safe bounds: far-outside superimages are transparent, invalid
+  subimages raise `ArgumentError`, including Int-limit offsets.
+- cmap format 12 retains the standard **16-byte** header (including language).
+  Before expansion, reject inverted/non-Unicode ranges, glyph runs beyond uint16,
+  declared lengths too short for the groups and truncated subtables. No altered
+  header layout is adopted; the rejected candidate's 12-byte claim was false.
+- Context and RecordingContext dash setters/getters copy vectors, preventing
+  caller/getter aliases from mutating saved drawing state.
+- HarfBuzz state is reused per live font without permanently retaining parsed
+  fonts. Native bytes are copied; the owner is preserved through native use;
+  buffers are released on errors as well as success. Published empty-object and
+  allocation-failure states are checked. Explicit language input must be non-empty
+  ASCII (not a full BCP47 validator). D033's pure-LTR paragraph limitation remains.
+
+Evidence: existing image/font/context/recording/shaping suites plus **113
+independent coordinator probes per Julia version**, including published-sentinel
+and staged native-failure injection with GC/cleanup checks. See [Handoff](HANDOFF.md)
+for exact gates and benchmark evidence; native leak freedom is not inferred from
+Julia heap-allocation counters.
+
 | Upstream symbol(s) | Area | Julia status | Evidence |
 | --- | --- | --- | --- |
 | `Vec2` (`GVec2[float32]`), `+ - * /` scalar/vector, `dot`, `length`, `lengthSq`, `normalize`, `perpendicular` | `vmath` | **implemented** (T003, D011). Float32; zero `normalize` yields NaN like upstream | test/geometry_tests.jl "Vec2" (hand-computed values + literal expectations) |

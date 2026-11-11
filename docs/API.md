@@ -101,6 +101,10 @@ creates one. Drawing settings:
 | `textAlign`, `textBaseline` | Text alignment and baseline |
 | `lineDash` | Dash lengths; also `setLineDash`/`getLineDash` |
 
+`set_line_dash!`/`setLineDash` copy the supplied vector, and
+`get_line_dash`/`getLineDash` return a copy, for both Context and RecordingContext.
+Direct mutation of the public `lineDash` field still mutates that object's state.
+
 Drawing methods include `fillRect`, `strokeRect`, `clearRect`, `fill`,
 `stroke`, `strokeSegment`, `drawImage`, `fillText`, and `strokeText`.
 `beginPath` and context path builders operate on the current path; `fill`
@@ -172,6 +176,13 @@ L2E digit runs, mirrored punctuation; the logical→visual permutation is
 `ParagraphLayout.shaped`); pure-LTR complex scripts keep the T028
 isolated-forms `typeset` rendering (named v1 limit). Legacy single-line
 behavior is unchanged.
+
+M004 caches one HarfBuzz blob/face/font triple per live parsed font; the native
+font bytes are copied, and native resources are released when the owner is
+collected. Calls preserve the owner through native use and release temporary
+buffers on success or error. `language` must be a non-empty ASCII string;
+invalid input raises `ArgumentError`, without claiming full BCP47 validation.
+HarfBuzz buffer-allocation failures raise rather than return partial/empty output.
 
 `readImage`/`decodeImage` detect formats by contents; `writeFile` selects by
 extension, and `encodeImage` accepts a `FileFormat`. PNG read/write requires

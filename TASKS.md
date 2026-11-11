@@ -28,10 +28,11 @@ GUI or plotting frameworks in core.
 Coordinator owns the design and integration. Vulkan, browser/notebook and media
 source research is reviewed, with runtime decisions deferred to implementation
 probes. M003 is complete: Qwen's final `0c88c91` candidate was independently
-validated and integrated through `901b9d7`. M004 and R040 are ready for explicit
-assignment. New backend implementation is dependency-
+validated and integrated through `901b9d7`. On 2026-11-11 the user authorized
+starting implementation: M004 correctness is now approved and integrated;
+independent R040 Vulkan probes remain active (ownership below). New backend implementation is dependency-
 gated by R010's reviewed contracts. M005/M006/M007 are folded into R099/R086/R090
-respectively; the current M003 and M004 correctness work remain prerequisites.
+respectively; M003 and M004 prerequisites are complete.
 
 ## Active: Julia-native modernization (2026-11-10)
 
@@ -44,7 +45,7 @@ scope, ownership, dependencies, and acceptance checks:
 | M001 | Baseline, code audit, detailed task contract | done |
 | M002 | Reliable tests and four-platform test/benchmark CI | done (all 10 CI jobs passed) |
 | M003 | Julia-native API and package integration | done (independently approved; local gates and all 10 four-platform CI jobs pass) |
-| M004 | Correctness audit and reproduced bug fixes | ready (unassigned) |
+| M004 | Correctness audit and reproduced bug fixes | done (52a40b9 independently validated; integrated through 7b6e7c0; remote CI pending) |
 | M005 | New README, interactive docs, GitHub Pages publication | moved to R098/R099 |
 | M006 | Remove obsolete port scaffolding | moved to R086 |
 | M007 | Final independent validation | moved to R090 |
@@ -65,10 +66,24 @@ fix passed in [run 42811680553](https://github.com/skynet-core/Vetra.jl/actions/
 including full tests/coverage and benchmark smoke, with all four benchmark
 artifacts uploaded. Completed M003 implementation is retained at
 `/home/vasyl/.local/share/opencode/worktree/e72bb3/julia-native-api`
-(branch `modernization/native-api`); no active writer until the next assignment.
+(branch `modernization/native-api`); retained as completed work.
 M003 revision `f8b2dfe` passed all 10 jobs in
 [run 42913541720](https://github.com/skynet-core/Vetra.jl/actions/runs/42913541720):
 Linux, Windows, macOS and FreeBSD tests/benchmarks, with four benchmark artifacts.
+
+### Active implementation wave (2026-11-11)
+
+Both writers start at `9826b7e`; coordinator owns shared task/API/decision docs,
+root package metadata/exports and integration. Each returns commits and actual
+test logs for independent validation before approval/push.
+
+| Task | Writer / worktree | Owned scope | Stop condition |
+| --- | --- | --- | --- |
+| M004 (done) | Qwen3.8, `/tmp/opencode/vetra-m004`, `modernization/correctness` | Crop bounds, cmap-12 validation, dash ownership, HarfBuzz lifecycle | Approved 52a40b9: both full gates, 113 independent probes/version and targeted benchmark comparison pass |
+| R040 | Qwen3.8, `/tmp/opencode/vetra-r040`, `canvas/vulkan-probe` | Isolated `lib/VetraVulkan/probe/` environment, scripts and evidence | Reproducible Julia/Vulkan shader/device probe and honest platform/feature matrix, or concrete blockers; handoff for R010 |
+
+R040 continues independently. R010 awaits reviewed R040 evidence;
+downstream backend tasks retain their dependency gates. R099 stays last.
 
 ## Historical board (retired after M006 consolidation)
 
