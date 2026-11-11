@@ -64,9 +64,11 @@ global _HB_FUNCS = nothing # Dict{Symbol,Ptr{Cvoid}}, once loaded
 # the cache must reuse live font state without permanently retaining
 # every parsed font): when the caller's last reference to an
 # `OtcOpenType` is collected, its finalizer destroys the native triple
-# and the dead entry drops out lazily. The blob is READONLY over
-# `OtcOpenType.buf`, which stays rooted exactly while the font object
-# lives, so the cached handles are valid exactly while cached.
+# and the dead entry drops out lazily. The blob is DUPLICATE (mode 0 —
+# harfbuzz copies the bytes and owns the copy), so the native handles
+# are self-contained: they are valid exactly while `ot` is rooted, and
+# every shaping call keeps `ot` rooted for its whole native-use
+# interval (`GC.@preserve` in `_hbShape`), never weak-only.
 global _HB_FACES = WeakKeyDict{OtcOpenType, NTuple{3, Ptr{Cvoid}}}()
 
 """Destroy a cached (blob, face, font) triple (font, face, blob order —
@@ -125,7 +127,7 @@ function _hbFace(ot::OtcOpenType)
     st !== nothing && return st
     blob = ccall(_HB_FUNCS[:hb_blob_create], Ptr{Cvoid},
         (Ptr{Cchar}, UInt32, UInt32, Ptr{Cvoid}, Ptr{Cvoid}),
-        ot.buf, UInt32(length(ot.buf)), 0, C_NULL, C_NULL) # READONLY
+        ot.buf, UInt32(length(ot.buf)), 0, C_NULL, C_NULL) # DUPLICATE
     blob === C_NULL &&
         throw(ErrorException(
             "HarfBuzz: hb_blob_create failed for $(length(ot.buf)) font bytes"))
@@ -160,55 +162,74 @@ units; `clusters` are 0-based indices into `codepoints`."""
 function _hbShape(ot::OtcOpenType, codepoints::Vector{UInt32},
     script::UInt32, direction::UInt32, lang::String)
     (blob, face, font) = _hbFace(ot)
-    buf = ccall(_HB_FUNCS[:hb_buffer_create], Ptr{Cvoid}, ())
-    try
-        ccall(_HB_FUNCS[:hb_buffer_set_direction], Cvoid,
-            (Ptr{Cvoid}, UInt32), buf, direction)
-        ccall(_HB_FUNCS[:hb_buffer_set_script], Cvoid,
-            (Ptr{Cvoid}, UInt32), buf, script)
-        # M004: `hb_language_t` is not a C string — the language must
-        # come from `hb_language_from_string` (the tag is interned by
-        # harfbuzz; the result is documented "transfer none", so no free
-        # is needed and it outlives this call). The previous code passed
-        # a temporary Julia char vector as the language: a dangling
-        # pointer once the vector is collected, and a wrong tag for any
-        # language longer than 4 bytes.
-        lc = Vector{Cchar}(vcat([Cchar(c) for c in lang], Cchar(0)))
-        langt = ccall(_HB_FUNCS[:hb_language_from_string], Ptr{Cvoid},
-            (Ptr{Cchar}, Cint), lc, -1)
-        ccall(_HB_FUNCS[:hb_buffer_set_language], Cvoid,
-            (Ptr{Cvoid}, Ptr{Cvoid}), buf, langt)
-        for (i, cp) in enumerate(codepoints)
-            ccall(_HB_FUNCS[:hb_buffer_add], Cvoid,
-                (Ptr{Cvoid}, UInt32, UInt32), buf, cp, UInt32(i - 1))
+    # `ot` is the owner of the cached native triple (its finalizer
+    # destroys it), and from here on only the raw handles are used —
+    # keep `ot` rooted for the whole native-use interval so a GC
+    # triggered by the allocations below cannot collect it mid-shape
+    # (M004). The blob is DUPLICATE, so the bytes need no separate
+    # preservation.
+    GC.@preserve ot begin
+        buf = ccall(_HB_FUNCS[:hb_buffer_create], Ptr{Cvoid}, ())
+        # HarfBuzz's documented OOM contract for create: NULL on
+        # allocation failure — never use the pointer unchecked.
+        buf === C_NULL &&
+            throw(ErrorException("HarfBuzz: hb_buffer_create failed"))
+        try
+            ccall(_HB_FUNCS[:hb_buffer_set_direction], Cvoid,
+                (Ptr{Cvoid}, UInt32), buf, direction)
+            ccall(_HB_FUNCS[:hb_buffer_set_script], Cvoid,
+                (Ptr{Cvoid}, UInt32), buf, script)
+            # `hb_language_t` is an interned handle, not a C string —
+            # the tag must come from `hb_language_from_string` (the
+            # result is documented "transfer none": no free needed, the
+            # interned tag outlives this call). The String is passed as
+            # a C string (rooted for the call); -1 means NUL-terminated.
+            # BCP47 tags are ASCII, and harfbuzz silently sanitizes
+            # other input (e.g. "é" -> empty language) instead of
+            # failing, so reject empty/non-ASCII up front (M004).
+            if isempty(lang) || any(c -> Int(c) > 0x7f, lang)
+                throw(ArgumentError("Invalid language tag: $(lang)"))
+            end
+            langt = ccall(_HB_FUNCS[:hb_language_from_string], Ptr{Cvoid},
+                (Cstring, Cint), lang, -1)
+            langt === C_NULL &&
+                throw(ErrorException(
+                    "HarfBuzz: invalid language tag: $(lang)"))
+            ccall(_HB_FUNCS[:hb_buffer_set_language], Cvoid,
+                (Ptr{Cvoid}, Ptr{Cvoid}), buf, langt)
+            for (i, cp) in enumerate(codepoints)
+                ccall(_HB_FUNCS[:hb_buffer_add], Cvoid,
+                    (Ptr{Cvoid}, UInt32, UInt32), buf, cp, UInt32(i - 1))
+            end
+            ccall(_HB_FUNCS[:hb_shape], Cvoid,
+                (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, UInt32), font, buf,
+                C_NULL, 0)
+            nref = Ref{UInt32}(0)
+            infoptr = ccall(_HB_FUNCS[:hb_buffer_get_glyph_infos],
+                Ptr{UInt32}, (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
+            n = Int(nref[])
+            poss = ccall(_HB_FUNCS[:hb_buffer_get_glyph_positions],
+                Ptr{Int32}, (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
+            gids = Vector{UInt32}(undef, n)
+            clusters = Vector{UInt32}(undef, n)
+            xadv = Vector{Int32}(undef, n)
+            xoff = Vector{Int32}(undef, n)
+            yoff = Vector{Int32}(undef, n)
+            for i in 1:n
+                # 1-based index of field k of glyph i (stride 5) =
+                # 5i - 4 + k
+                gids[i] = unsafe_load(infoptr, 5i - 4)
+                clusters[i] = unsafe_load(infoptr, 5i - 2)
+                xadv[i] = unsafe_load(poss, 5i - 4)
+                xoff[i] = unsafe_load(poss, 5i - 2)
+                yoff[i] = unsafe_load(poss, 5i - 1)
+            end
+            return (gids, clusters, xadv, xoff, yoff)
+        finally
+            # The buffer is freed even when shaping or reading the
+            # result throws (the previous path leaked it on any error).
+            ccall(_HB_FUNCS[:hb_buffer_destroy], Cvoid, (Ptr{Cvoid},), buf)
         end
-        ccall(_HB_FUNCS[:hb_shape], Cvoid,
-            (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, UInt32), font, buf,
-            C_NULL, 0)
-        nref = Ref{UInt32}(0)
-        infoptr = ccall(_HB_FUNCS[:hb_buffer_get_glyph_infos], Ptr{UInt32},
-            (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
-        n = Int(nref[])
-        poss = ccall(_HB_FUNCS[:hb_buffer_get_glyph_positions], Ptr{Int32},
-            (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
-        gids = Vector{UInt32}(undef, n)
-        clusters = Vector{UInt32}(undef, n)
-        xadv = Vector{Int32}(undef, n)
-        xoff = Vector{Int32}(undef, n)
-        yoff = Vector{Int32}(undef, n)
-        for i in 1:n
-            # 1-based index of field k of glyph i (stride 5) = 5i - 4 + k
-            gids[i] = unsafe_load(infoptr, 5i - 4)
-            clusters[i] = unsafe_load(infoptr, 5i - 2)
-            xadv[i] = unsafe_load(poss, 5i - 4)
-            xoff[i] = unsafe_load(poss, 5i - 2)
-            yoff[i] = unsafe_load(poss, 5i - 1)
-        end
-        return (gids, clusters, xadv, xoff, yoff)
-    finally
-        # M004: the buffer is freed even when shaping or reading the
-        # result throws (the previous path leaked it on any error).
-        ccall(_HB_FUNCS[:hb_buffer_destroy], Cvoid, (Ptr{Cvoid},), buf)
     end
 end
 
@@ -328,9 +349,10 @@ returns `Vector{Vector{ShapedGlyph}}` — one entry per cluster in
 visual order for RTL runs, so RTL entries are reversed); within an
 entry the glyphs keep the shaper's buffer order. `script` is a UAX#24
 4-byte tag (UInt32, e.g. `0x41726162` "Arab"); it defaults to the first
-non-neutral codepoint of the run (§5.4). `language` defaults to the
-script's default. Raises the D033 install hint when the provider is
-not installed.
+non-neutral codepoint of the run (§5.4). `language` is a non-empty
+ASCII BCP47 tag (ArgumentError otherwise — harfbuzz would silently
+sanitize non-ASCII input); it defaults to the script's default. Raises
+the D033 install hint when the provider is not installed.
 """
 function shapeText(tf::Typeface, codepoints::Vector{UInt32};
     script::Union{UInt32, Nothing} = nothing,

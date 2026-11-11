@@ -208,24 +208,34 @@ function _otParseCmap(buf::Vector{UInt8}, off::Int)
                 end
             end
         elseif format == 12
-            # Spec header (OpenType cmap format 12): format(2) reserved(2)
-            # length(4) numGroups(4), groups at relative 12 — 12-byte
-            # header. The upstream port read a non-spec 16-byte header
-            # (numGroups after an extra u32), which rejected/misread every
-            # real format-12 subtable; fixed in M004.
-            _otEof(buf, s + 11)
-            numGroups = _u32(buf, s + 8)
-            i2 = s + 12
-            _otEof(buf, i2 + 12 * numGroups - 1)
+            # OpenType cmap format 12 (Microsoft OpenType 1.9.1 spec,
+            # https://learn.microsoft.com/en-us/typography/opentype/spec/
+            # cmap#format-12-segmented-coverage): 16-byte header
+            # format(2) reserved(2) length(4) language(4) numGroups(4),
+            # then numGroups SequentialMapGroup records
+            # (startCharCode, endCharCode, startGlyphID) of 12 bytes each.
+            # Codes are 32-bit; glyph ids are sequential from startGlyphID.
+            _otEof(buf, s + 15)
+            length12 = _u32(buf, s + 4)
+            numGroups = _u32(buf, s + 12)
+            # Validate the declared subtable before expanding (M004): it
+            # must cover the header plus all groups and fit in the buffer
+            # (a short `length` or a buffer-truncated subtable is rejected
+            # up front, not mid-read).
+            length12 < 16 + 12 * numGroups &&
+                throw(ArgumentError(
+                    "Invalid cmap format 12 length: $length12 < $(
+                        16 + 12 * numGroups) for $numGroups groups"))
+            _otEof(buf, s + length12 - 1)
+            i2 = s + 16
             for k in 1:numGroups
                 startCharCode = _u32(buf, i2)
                 endCharCode = _u32(buf, i2 + 4)
                 startGlyphId = _u32(buf, i2 + 8)
-                # Validate before expansion (M004): character codes are
-                # bounded by U+10FFFF per spec, the range must be
-                # non-inverted, and the whole glyph run must stay in the
-                # uint16 GID space (the old per-codepoint guard only
-                # fired mid-loop, after partial expansion).
+                # Validate each range before expansion (M004): non-inverted,
+                # within Unicode, and the whole sequential run stays in the
+                # uint16 GID space (the old per-codepoint guard only fired
+                # mid-loop, after partial writes).
                 endCharCode < startCharCode &&
                     throw(ArgumentError(
                         "Invalid cmap format 12 range: start U+$(

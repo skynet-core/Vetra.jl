@@ -473,7 +473,8 @@ end
     # M004 FFI lifecycle: the previous `_hbFace` used `get` with a
     # default block, so its cache was never populated and every shaping
     # call leaked a fresh native (blob, face, font) triple. Now: one
-    # triple per live font object, reused across calls, destroyed by a
+    # triple per live font object, reused across calls, kept rooted with
+    # GC.@preserve for the duration of each shape, destroyed by a
     # finalizer when the font is collected, and the shape buffer is freed
     # on every exit path (success and error).
     @testset "FFI lifecycle (face reuse, bounded retention, cleanup)" begin
@@ -490,31 +491,57 @@ end
         @test Vetra._hbFace(tfA.opentype) == st1
         @test length(Vetra._HB_FACES) == n0 # no growth while live
 
-        # A font object that dies releases its entry (and native triple):
-        # a fresh parse is a distinct object; once it is collected the
-        # cache returns to its previous size. The throwaway font is built
-        # in its own function frame: a top-level `let` local is not
-        # reliably dead at GC time (the interpreter conservatively marks
-        # the stale stack slot of its still-active frame).
-        function _m004throwawayEntries()
+        # GC pressure on ephemeral fonts: each font is shaped from its
+        # own frame (a top-level `let` local would not be reliably dead
+        # at GC time — the interpreter conservatively marks the stale
+        # slot of its still-active frame), the GIDs must stay correct
+        # (the native triple must not be destroyed mid-use), and once
+        # the font is collected the cache returns to its previous size.
+        # The finalizer flag observes the collection directly; dict
+        # length alone would not prove the font was reclaimed.
+        finalized = Ref(false)
+        function _m004ephemeralGids()
             fresh = parseOpenType(Vector{UInt8}(read(AR)))
-            shapeText(Typeface(fresh, ""), UInt32[0x0643];
-                script = scriptTag("Arab"), language = "ar")
-            return length(Vetra._HB_FACES)
+            finalizer(fresh) do _
+                finalized[] = true
+            end
+            return [g.gid for cl in shapeText(
+                Typeface(fresh, ""), UInt32[0x0643, 0x062a, 0x0628];
+                script = scriptTag("Arab"), direction = RightToLeft,
+                language = "ar") for g in cl]
         end
-        @test _m004throwawayEntries() == n0 + 1
+        @test _m004ephemeralGids() == [424, 59, 36]
+        @test !finalized[]
         GC.gc()
+        @test finalized[]
+        @test length(Vetra._HB_FACES) == n0
+        for _ in 1:50
+            @test _m004ephemeralGids() == [424, 59, 36]
+            GC.gc()
+        end
         @test length(Vetra._HB_FACES) == n0
 
-        # Error path: a language tag with a non-ASCII char throws an
-        # InexactError inside the buffer's lifetime; the buffer is
-        # cleaned up and the cached face still shapes correctly after.
-        try
-            shapeText(tfA, UInt32[0x0643, 0x062a, 0x0628];
-                script = scriptTag("Arab"), language = "\u00e9")
-            @test false
-        catch e
-            @test e isa InexactError
+        # Language interop: a valid tag longer than 4 bytes reaches
+        # harfbuzz intact and is interned (ar-EG shapes this run as ar —
+        # oracle-checked), not truncated or misread.
+        @test [g.gid for cl in shapeText(
+            tfA, UInt32[0x0643, 0x062a, 0x0628];
+            script = scriptTag("Arab"), direction = RightToLeft,
+            language = "ar-EG") for g in cl] == [424, 59, 36]
+        # Invalid input: BCP47 tags are ASCII; empty/non-ASCII tags are
+        # rejected with a clear error (harfbuzz would otherwise silently
+        # sanitize, e.g. "é" -> empty language). The error is thrown
+        # inside the buffer's lifetime, and the cached face still shapes
+        # correctly after.
+        for bad in ("", "\u00e9")
+            try
+                shapeText(tfA, UInt32[0x0643];
+                    script = scriptTag("Arab"), language = bad)
+                @test false
+            catch e
+                @test e isa ArgumentError &&
+                    e.msg == "Invalid language tag: $(bad)"
+            end
         end
         @test length(Vetra._HB_FACES) == n0
         # RTL direction: the pinned katab values (Arab LTR shapes the
