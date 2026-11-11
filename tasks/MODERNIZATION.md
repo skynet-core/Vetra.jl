@@ -282,10 +282,12 @@ commands/results and the unavailable PyMuPDF check are in `docs/HANDOFF.md`.
 Remote CI run 43002436891 passed 9/10 jobs; current-Julia Windows failed the
 pre-existing constructor allocation-parity test, also seen on baseline 9826b7e.
 All four benchmark artifacts are present. A bounded Qwen follow-up in
-`modernization/windows-allocation` investigates the gate; remote verification
-remains open (see handoff). Follow-up `6eff5cd` is independently approved and
+`modernization/windows-allocation` corrected the gate (see handoff).
+Follow-up `6eff5cd` is independently approved and
 integrated as `e879026`: pool-sized allocation workload, exact equality retained,
-both full gates and 304 independent probes/version passed; Windows CI pending.
+both full gates and 304 independent probes/version passed. Revision `c31626a`
+passed all 10 jobs in run 43019390200, including both Windows Julia lanes;
+all four benchmark artifacts are present. Remote verification is complete.
 Pure-LTR paragraph engagement retains D033's
 named limitation for R012; R040 continues and R099 remains the final task.
 

@@ -40,9 +40,9 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: review/validate R040's corrected submission and the Windows allocation-gate
-follow-up, then freeze R010 using verified Vulkan constraints. M003/M004 are
-locally approved (evidence below); remote verification and R040 remain open.
+Next: review/validate R040's corrected submission, then freeze R010 using verified
+Vulkan constraints. M003/M004 and the Windows allocation-gate follow-up are
+approved with passing four-platform CI (evidence below); R040 remains open.
 R099 remains the final task.
 
 ### Implementation wave started 2026-11-11
@@ -171,11 +171,11 @@ failed this gate in run 42914342763 (lines 774/776: 10327 vs 10359 and 10343 vs
 not establish stability of this allocation check.
 
 Logs: `/tmp/opencode/m004-ci-43002436891-{watch,failed}.log` and
-`/tmp/opencode/m003-ci-42914342763-failed.log`. Qwen owns a bounded investigation
-and test correction in `/tmp/opencode/vetra-windows-allocation`, branch
+`/tmp/opencode/m003-ci-42914342763-failed.log`. Qwen completed the bounded
+investigation and test correction in `/tmp/opencode/vetra-windows-allocation`, branch
 `modernization/windows-allocation`, base `a69027a`; no blind tolerance loosening.
-Coordinator will independently review the cause and candidate before pushing.
-Remote verification remains blocked on this follow-up. R040 continues independently.
+Coordinator independently reviewed and validated the candidate before pushing;
+remote verification subsequently passed (below). R040 continues independently.
 
 Windows follow-up candidate `6eff5cd` changes only the allocation-parity
 workload from 64×40 to 24×16, retaining exact equality and the existing drawing
@@ -211,8 +211,20 @@ julia +1.10 --startup-file=no --project=/tmp/opencode/m004-coord-env110 /tmp/ope
 Full-gate logs: `/tmp/opencode/winalloc-coord-gate{113,110}.log`.
 Candidate independently approved and integrated as `e879026`; the coordinator
 shortened only its explanatory test comment, retaining detailed evidence here.
-Executable test logic matches the validated candidate. Windows CI confirmation
-after push remains pending. This does not approve the separate R040 candidate.
+Executable test logic matches the validated candidate. This does not approve
+the separate R040 candidate.
+
+**Remote verification passed:** `c31626ad8e8735cae8c2d734573e3b64dd8e5495`
+passed all **10 jobs** in
+[run 43019390200](https://github.com/skynet-core/Vetra.jl/actions/runs/43019390200).
+Both Windows Julia lanes now pass; Linux/macOS both lanes and FreeBSD 14.3 /
+Julia 1.10.13 pass, alongside all platform benchmarks. The four benchmark
+artifacts (Windows, macOS, Ubuntu, FreeBSD) are present and unexpired.
+Coordinator verified `gh run watch 43019390200 --exit-status` (exit 0),
+`gh run view 43019390200 --json conclusion,headSha,url,jobs`, and
+`gh api repos/skynet-core/Vetra.jl/actions/runs/43019390200/artifacts`.
+Watch log: `/tmp/opencode/winalloc-ci-43019390200-watch.log`.
+M004 remote verification and the Windows follow-up are closed.
 
 ### R040 first-candidate review: not approved
 
