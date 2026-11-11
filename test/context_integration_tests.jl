@@ -115,6 +115,16 @@ const ROBO = joinpath(@__DIR__, "..", ".reference", "upstream", "tests",
         ctx.lineWidth = Float32(10)
         setLineDash(ctx, [5f0, 15f0])
         @test getLineDash(ctx) == [5f0, 15f0]
+        # M004: Nim `seq[float32]` value semantics — the context stores
+        # its own copy, so neither caller mutation of the input vector
+        # nor mutation of the getter's result reaches the context state.
+        dashIn = Float32[5f0, 15f0]
+        setLineDash(ctx, dashIn)
+        dashIn[1] = 999f0
+        @test getLineDash(ctx) == Float32[5f0, 15f0]
+        dashOut = getLineDash(ctx)
+        push!(dashOut, 1f0)
+        @test getLineDash(ctx) == Float32[5f0, 15f0]
         strokeSegment(ctx, 0f0, 16f0, 75f0, 16f0)
         @test pxv(ctx.image, 3, 16) == red
         @test pxv(ctx.image, 5, 16) == red

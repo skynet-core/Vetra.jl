@@ -462,6 +462,15 @@ const REC_ROBO = joinpath(REC_FONT_DIR, "Roboto-Regular_1.ttf")
         stroke(c, c.path)
         setLineDash(c, Float32[])
         @test getLineDash(c) == Float32[]
+        # M004: setLineDash/getLineDash copy (Nim seq value semantics) —
+        # caller input and getter result are not the stored state.
+        dashIn = Float32[3f0, 1f0]
+        setLineDash(c, dashIn)
+        dashIn[1] = 42f0
+        @test getLineDash(c) == Float32[3f0, 1f0]
+        dashOut = getLineDash(c)
+        push!(dashOut, 2f0)
+        @test getLineDash(c) == Float32[3f0, 1f0]
         c.font = REC_ROBO
         fillText(c, "x", 5, 28)
         drawImage(c, newImage(3, 3), 24, 4)

@@ -384,6 +384,148 @@ end
             "Unsupported font format")
     end
 
+    # ---------- cmap format 12 (M004) ----------
+    # The pinned fixtures carry only platform-3 format-4 subtables, so the
+    # format-12 path is exercised here with a hand-built spec-layout font.
+    # Expected values are the OpenType spec semantics (cmap format 12), not
+    # the code under test: 12-byte subtable header (format, reserved,
+    # length, numGroups) then numGroups (start, end, startGlyph) ranges,
+    # glyph = startGlyph + (c - start), char codes bounded by U+10FFFF.
+    @testset "cmap format 12 (spec layout + range validation)" begin
+        be16(v::Integer) = UInt8[(v >> 8) & 0xff, v & 0xff]
+        be32(v::Integer) =
+            UInt8[(v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff,
+                v & 0xff]
+        b16(v::Integer) = be16(v & 0xffff)
+
+        # Spec format-12 cmap: one Windows (3,1) record at offset 12.
+        function cmap12(groups)
+            numGroups = length(groups)
+            sublen = 12 + 12 * numGroups
+            sub = vcat(be16(12), be16(0), be32(sublen), be32(numGroups),
+                [be32(a) for g in groups for a in g]...)
+            return vcat(be16(0), be16(1), be16(3), be16(1), be32(12), sub)
+        end
+
+        # A complete valid TTF whose only variable table is the cmap.
+        # All other tables are the hand-derived mini-font's (same
+        # provenance as the "synthetic mini font" testset above).
+        function f12font(cmap)
+            utf16be(s) = vcat(
+                [UInt8[0, cp] for cp in (Int(s[i]) for i in 1:length(s))]...)
+            head = vcat(
+                be32(0x0001_0000), be32(0), be32(0), be32(0x5f0f_3cf5),
+                be16(0), be16(100), zeros(UInt8, 16), zeros(UInt8, 8),
+                be16(0), be16(0), be16(0), be16(1), be16(0))
+            hhea = vcat(be16(1), be16(0), b16(80), b16(-20), be16(0),
+                be16(50), b16(0), b16(0), b16(0), b16(1), be16(0), be16(0),
+                zeros(UInt8, 8), be16(0), be16(2))
+            maxp = vcat(be32(0x0001_0000), be16(4), be16(4), be16(1),
+                be16(0), be16(0), be16(2), be16(0), be16(0), be16(0),
+                be16(0), be16(0), be16(0), be16(2), be16(1))
+            hmtx = vcat(be16(20), b16(0), be16(50), b16(10), b16(7), b16(9))
+            namerec = vcat(be16(3), be16(1), be16(1033), be16(6),
+                be16(length("MiniFont") * 2), be16(0))
+            nameTable = vcat(be16(0), be16(1), be16(18), namerec,
+                utf16be("MiniFont"))
+            os2 = vcat(
+                be16(2), b16(50), be16(400), be16(5), be16(0),
+                b16(700), b16(500), b16(0), b16(140),
+                b16(700), b16(500), b16(0), b16(500),
+                b16(50), b16(100), b16(0),
+                zeros(UInt8, 10), zeros(UInt8, 16), zeros(UInt8, 4),
+                be16(0), be16(65), be16(67), b16(80), b16(-20), be16(0),
+                be16(80), be16(20), zeros(UInt8, 8),
+                b16(75), b16(123), be16(32), be16(10), be16(3))
+            post = vcat(be32(0x0003_0000), be32(0), b16(-10), b16(4),
+                be32(0), be16(0))
+            loca = vcat(be32(0), be32(0), be32(34), be32(60))
+            glyphA = vcat(b16(1), b16(10), b16(10), b16(50), b16(90),
+                be16(3), be16(0), UInt8[1, 1, 1, 1],
+                b16(10), b16(40), b16(0), b16(-40),
+                b16(10), b16(0), b16(80), b16(0))
+            glyphB = vcat(b16(-1), zeros(UInt8, 8),
+                be16(0x0023), be16(1), b16(0), b16(0),
+                be16(0x0003), be16(0), b16(60), b16(0))
+            glyphC = vcat(b16(0), zeros(UInt8, 8))
+            glyf = vcat(glyphA, glyphB, glyphC)
+            kern = vcat(be16(0), be16(1),
+                be16(0), be16(20), be16(1), be16(1), be16(2), be16(0),
+                be16(0), be16(1), be16(3), b16(-3))
+            tables = [
+                ("head", head), ("hhea", hhea), ("maxp", maxp),
+                ("hmtx", hmtx), ("cmap", cmap), ("name", nameTable),
+                ("OS/2", os2), ("post", post), ("loca", loca),
+                ("glyf", glyf), ("kern", kern)
+            ]
+            off = 12 + 16 * length(tables)
+            total = off
+            for (_, tbl) in tables
+                total += length(tbl)
+            end
+            buf = zeros(UInt8, total)
+            buf[1:4] = be32(0x0001_0000)
+            buf[5:6] = be16(length(tables))
+            buf[7:8] = be16(0)
+            buf[9:10] = be16(1)
+            buf[11:12] = be16(0)
+            for (idx, (tag, tbl)) in enumerate(tables)
+                base = 13 + 16 * (idx - 1)
+                buf[base:(base + 3)] = codeunits(tag)
+                buf[base + 4:(base + 7)] = be32(0)
+                # Directory offsets are 0-based per spec; `off` starts at
+                # 0-based 188 (12-byte header + 11 x 16-byte records), so
+                # table data is written at 1-based `off + 1`.
+                buf[base + 8:(base + 11)] = be32(off)
+                buf[base + 12:(base + 15)] = be32(length(tbl))
+                buf[off + 1:(off + length(tbl))] = tbl
+                off += length(tbl)
+            end
+            return buf
+        end
+
+        # Valid single group A..C -> glyphs 1,2,3 (spec semantics).
+        ot = parseOpenType(f12font(cmap12([(0x41, 0x43, 1)])))
+        map12 = ot.cmap.runeToGlyphId
+        @test Int(map12[UInt32(0x41)]) == 1
+        @test Int(map12[UInt32(0x42)]) == 2
+        @test Int(map12[UInt32(0x43)]) == 3
+        @test !haskey(map12, UInt32(0x44))
+        # Two disjoint groups, second starts at glyph 10.
+        ot2 = parseOpenType(f12font(cmap12([(0x41, 0x41, 1),
+            (0x61, 0x62, 10)])))
+        map2 = ot2.cmap.runeToGlyphId
+        @test Int(map2[UInt32(0x41)]) == 1
+        @test Int(map2[UInt32(0x61)]) == 10
+        @test Int(map2[UInt32(0x62)]) == 11
+        # Zero groups is a valid (empty) subtable.
+        ot0 = parseOpenType(f12font(cmap12([])))
+        @test isempty(ot0.cmap.runeToGlyphId)
+
+        # Inverted range is rejected before any expansion.
+        @test throws_arg(
+            () -> parseOpenType(f12font(cmap12([(0x42, 0x41, 1)]))),
+            "Invalid cmap format 12 range: start U+42 > end U+41")
+        # A start above U+10FFFF is inverted-or-out-of-range: rejected.
+        @test throws_arg(
+            () -> parseOpenType(
+                f12font(cmap12([(0x110000, 0x110002, 1)]))),
+            "Invalid cmap format 12 range: end U+110002 > U+10FFFF")
+        # A range spanning the U+10FFFF boundary is rejected.
+        @test throws_arg(
+            () -> parseOpenType(f12font(cmap12([(0x10fffe, 0x110001, 0)]))),
+            "Invalid cmap format 12 range: end U+110001 > U+10FFFF")
+        # The glyph run must stay in the uint16 GID space; the old
+        # per-codepoint guard only fired mid-expansion, after partial
+        # writes. Now the whole range is checked up front.
+        @test throws_arg(
+            () -> parseOpenType(f12font(cmap12([(0x41, 0x43, 0x110000)]))),
+            "Found glyph outside of uint16 range: 1114114")
+        # The maximum valid run (startGlyph 0xffff-2 over 3 codes) parses.
+        okmax = parseOpenType(f12font(cmap12([(0x41, 0x43, 0xfffd)])))
+        @test Int(okmax.cmap.runeToGlyphId[UInt32(0x43)]) == 0xffff
+    end
+
     @testset "textCase conversion (pinned Nim case tables)" begin
         f = newFont(readTypeface(ROBO))
         f.size = 24f0

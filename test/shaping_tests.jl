@@ -297,6 +297,36 @@ end
             Float32(373) * sA - Float32(412) * sA)) - 1
     end
 
+    # M004: the LTR-base engagement case ("ab katab cd") was previously
+    # permutation-pinned only; its placement is now pinned against the
+    # independent C oracle (hb_refshape over NotoSansArabic, 12.3.2):
+    # Latin a/b/c/d -> .notdef advance 600 (script Latn, en), space ->
+    # 260 (both scripts), katab -> 412/373/1093 (pinned TSV). Pen model:
+    # forward in visual order, x = pen + sum of earlier advances (xoff 0).
+    @testset "LTR-base mixed placement (cairo-bridge pen model)" begin
+        l = layoutParagraph(newParagraph("ab \u0643\u062a\u0628 cd", fA))
+        @test !isempty(l.shapedPos)
+        @test l.shaped[1] == [1, 2, 3, 6, 5, 4, 7, 8, 9]
+        slp = l.shapedPos[1]
+        x(e) = slp.pos[findfirst(==(e), slp.order)].glyphs[1][2]
+        # font-unit pen sums (entry -> expected units before it)
+        for (e, fu) in [(1, 0), (2, 600), (3, 1200), (6, 1460),
+            (5, 2553), (4, 2926), (7, 3338), (8, 3598), (9, 4198)]
+            @test abs(x(e) / sA - fu) < Float32(0.001)
+        end
+        # content width = the non-wrap entries' advances in line order
+        @test l.lines[1].width == Float32(600) * sA + Float32(600) * sA +
+            Float32(412) * sA + Float32(373) * sA + Float32(1093) * sA +
+            Float32(600) * sA + Float32(600) * sA
+        # render: the RTL block's ink sits right of the Latin lead
+        img = newImage(96, 40)
+        fillParagraph(img, l, 2, 4)
+        cols = _inkColumns(img, 96)
+        @test !isempty(cols)
+        @test minimum(cols) >= 2
+        @test maximum(cols) <= 2 + Int(ceil(4198 * sA + 600 * sA))
+    end
+
     @testset "shaped render: joined vs isolated forms (§7.4)" begin
         # contextual forms: the shaped GIDs differ from the isolated
         # cmap mapping (420/56/34)
@@ -438,5 +468,61 @@ end
         p = newParagraph("hello", fR; dir = RightToLeft)
         @test p.dir === RightToLeft
         @test layoutParagraph(p).shaped[1] == [1, 2, 3, 4, 5]
+    end
+
+    # M004 FFI lifecycle: the previous `_hbFace` used `get` with a
+    # default block, so its cache was never populated and every shaping
+    # call leaked a fresh native (blob, face, font) triple. Now: one
+    # triple per live font object, reused across calls, destroyed by a
+    # finalizer when the font is collected, and the shape buffer is freed
+    # on every exit path (success and error).
+    @testset "FFI lifecycle (face reuse, bounded retention, cleanup)" begin
+        # The cache is populated and reused (the `get` bug left it
+        # empty: every call built and leaked a fresh triple).
+        st1 = Vetra._hbFace(tfA.opentype)
+        st2 = Vetra._hbFace(tfA.opentype)
+        @test st1 == st2
+        n0 = length(Vetra._HB_FACES)
+        for _ in 1:10
+            shapeText(tfA, UInt32[0x0643]; script = scriptTag("Arab"),
+                language = "ar")
+        end
+        @test Vetra._hbFace(tfA.opentype) == st1
+        @test length(Vetra._HB_FACES) == n0 # no growth while live
+
+        # A font object that dies releases its entry (and native triple):
+        # a fresh parse is a distinct object; once it is collected the
+        # cache returns to its previous size. The throwaway font is built
+        # in its own function frame: a top-level `let` local is not
+        # reliably dead at GC time (the interpreter conservatively marks
+        # the stale stack slot of its still-active frame).
+        function _m004throwawayEntries()
+            fresh = parseOpenType(Vector{UInt8}(read(AR)))
+            shapeText(Typeface(fresh, ""), UInt32[0x0643];
+                script = scriptTag("Arab"), language = "ar")
+            return length(Vetra._HB_FACES)
+        end
+        @test _m004throwawayEntries() == n0 + 1
+        GC.gc()
+        @test length(Vetra._HB_FACES) == n0
+
+        # Error path: a language tag with a non-ASCII char throws an
+        # InexactError inside the buffer's lifetime; the buffer is
+        # cleaned up and the cached face still shapes correctly after.
+        try
+            shapeText(tfA, UInt32[0x0643, 0x062a, 0x0628];
+                script = scriptTag("Arab"), language = "\u00e9")
+            @test false
+        catch e
+            @test e isa InexactError
+        end
+        @test length(Vetra._HB_FACES) == n0
+        # RTL direction: the pinned katab values (Arab LTR shapes the
+        # other contextual forms — oracle-checked).
+        @test [g.gid for cl in shapeText(
+            tfA, UInt32[0x0643, 0x062a, 0x0628];
+            script = scriptTag("Arab"), direction = RightToLeft,
+            language = "ar") for g in cl] ==
+            [424, 59, 36]
     end
 end

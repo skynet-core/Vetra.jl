@@ -830,15 +830,16 @@ function measureText(rctx::RecordingContext, text::String)
     return TextMetrics(bounds.x)
 end
 
-"""Mirror of Context.setLineDash."""
+"""Mirror of Context.setLineDash (copy semantics — the recorder stores its
+own dash vector, as Context does)."""
 function setLineDash(rctx::RecordingContext, lineDash::Vector{Float32})
     _recCheck(rctx)
-    rctx.lineDash = lineDash
+    rctx.lineDash = copy(lineDash)
     return nothing
 end
 
-"""Mirror of Context.getLineDash."""
-getLineDash(rctx::RecordingContext) = rctx.lineDash
+"""Mirror of Context.getLineDash (returns a copy of the stored vector)."""
+getLineDash(rctx::RecordingContext) = copy(rctx.lineDash)
 
 # ---------- replay (CPU) ----------
 

@@ -836,11 +836,14 @@ function measureText(ctx::Context, text::String)
     return TextMetrics(bounds.x)
 end
 
-"""Upstream `setLineDash`."""
+"""Upstream `setLineDash`. Nim's `seq[float32]` is a value: the context
+stores its own copy, so later mutation of the caller's vector does not
+change the context (M004: the port initially aliased caller storage)."""
 function setLineDash(ctx::Context, lineDash::Vector{Float32})
-    ctx.lineDash = lineDash
+    ctx.lineDash = copy(lineDash)
     return nothing
 end
 
-"""Upstream `getLineDash`."""
-getLineDash(ctx::Context) = ctx.lineDash
+"""Upstream `getLineDash`. Returns a copy — the context's storage is not
+exposed (Nim `seq` value semantics, M004)."""
+getLineDash(ctx::Context) = copy(ctx.lineDash)

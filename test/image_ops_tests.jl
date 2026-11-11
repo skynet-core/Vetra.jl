@@ -721,6 +721,44 @@ end
         @test pxv(e, 1, 1) == (0, 0, 0, 0)
         e2 = superImage(img, -4, 0, 2, 2)
         @test pxv(e2, 1, 1) == (0, 0, 0, 0)
+
+        # M004: partial overlaps with negative offsets. The upstream
+        # `abs(offset) >= extent` early exit discarded these (window
+        # starts before the image but reaches into it); canvas pixel
+        # (cx, cy) 1-based shows image pixel (cx + x - 1, cy + y - 1).
+        nx = superImage(img, -4, 0, 6, 4) # image cols 1..2 -> canvas 5..6
+        @test pxv(nx, 5, 1) == (0, 0, 0, 255)
+        @test pxv(nx, 6, 1) == (10, 0, 0, 255)
+        @test pxv(nx, 6, 2) == (10, 0, 10, 255)
+        @test pxv(nx, 4, 4) == (0, 0, 0, 0)
+        @test pxv(nx, 1, 1) == (0, 0, 0, 0)
+        ny = superImage(img, 0, -4, 4, 6) # image rows 1..2 -> canvas 5..6
+        @test pxv(ny, 1, 5) == (0, 0, 0, 255)
+        @test pxv(ny, 2, 6) == (10, 0, 10, 255)
+        @test pxv(ny, 4, 4) == (0, 0, 0, 0)
+        @test pxv(ny, 1, 1) == (0, 0, 0, 0)
+        both = superImage(img, -4, -4, 5, 5) # image (1, 1) -> canvas (5, 5)
+        @test pxv(both, 5, 5) == (0, 0, 0, 255)
+        @test pxv(both, 4, 5) == (0, 0, 0, 0)
+        @test pxv(both, 5, 4) == (0, 0, 0, 0)
+        @test pxv(both, 1, 1) == (0, 0, 0, 0)
+        # non-square extent: 6x2, window x in [-6, 2)
+        imgB = newImage(6, 2)
+        for x in 1:6
+            setColor(imgB, x, 1, rgbx(x, 0, 0, 255))
+        end
+        nsq = superImage(imgB, -6, 0, 8, 2) # image cols 1..2 -> canvas 7..8
+        @test pxv(nsq, 7, 1) == (1, 0, 0, 255)
+        @test pxv(nsq, 8, 1) == (2, 0, 0, 255)
+        @test pxv(nsq, 6, 1) == (0, 0, 0, 0)
+        # touching windows stay empty (derived no-overlap boundary):
+        # x + w == 0 (left edge) and x == width (right edge)
+        @test all(pxv(superImage(img, -4, 0, 4, 2), x, y) == (0, 0, 0, 0)
+            for y in 1:2 for x in 1:4)
+        @test all(pxv(superImage(img, 4, 0, 4, 2), x, y) == (0, 0, 0, 0)
+            for y in 1:2 for x in 1:4)
+        @test all(pxv(superImage(img, 0, 4, 2, 2), x, y) == (0, 0, 0, 0)
+            for y in 1:2 for x in 1:2)
     end
 
     @testset "opaqueBounds" begin

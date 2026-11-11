@@ -208,20 +208,40 @@ function _otParseCmap(buf::Vector{UInt8}, off::Int)
                 end
             end
         elseif format == 12
-            _otEof(buf, s + 15)
-            numGroups = _u32(buf, s + 12)
-            i2 = s + 16
+            # Spec header (OpenType cmap format 12): format(2) reserved(2)
+            # length(4) numGroups(4), groups at relative 12 — 12-byte
+            # header. The upstream port read a non-spec 16-byte header
+            # (numGroups after an extra u32), which rejected/misread every
+            # real format-12 subtable; fixed in M004.
+            _otEof(buf, s + 11)
+            numGroups = _u32(buf, s + 8)
+            i2 = s + 12
             _otEof(buf, i2 + 12 * numGroups - 1)
             for k in 1:numGroups
                 startCharCode = _u32(buf, i2)
                 endCharCode = _u32(buf, i2 + 4)
                 startGlyphId = _u32(buf, i2 + 8)
+                # Validate before expansion (M004): character codes are
+                # bounded by U+10FFFF per spec, the range must be
+                # non-inverted, and the whole glyph run must stay in the
+                # uint16 GID space (the old per-codepoint guard only
+                # fired mid-loop, after partial expansion).
+                endCharCode < startCharCode &&
+                    throw(ArgumentError(
+                        "Invalid cmap format 12 range: start U+$(
+                            Base.string(startCharCode, base = 16)) > end U+$(
+                            Base.string(endCharCode, base = 16))"))
+                endCharCode > 0x10ffff &&
+                    throw(ArgumentError(
+                        "Invalid cmap format 12 range: end U+$(
+                            Base.string(endCharCode, base = 16)) > U+10FFFF"))
+                glyphId = startGlyphId + (endCharCode - startCharCode)
+                glyphId > 0xffff &&
+                    throw(ArgumentError(
+                        "Found glyph outside of uint16 range: $glyphId"))
                 for c in startCharCode:endCharCode
-                    glyphId = startGlyphId + (c - startCharCode)
-                    glyphId > 0xffff &&
-                        throw(ArgumentError(
-                            "Found glyph outside of uint16 range: $glyphId"))
-                    map[UInt32(c)] = UInt16(glyphId)
+                    map[UInt32(c)] = UInt16(startGlyphId +
+                        (c - startCharCode))
                 end
                 i2 += 12
             end

@@ -56,13 +56,31 @@ const _HB_SYMBOLS = (
     :hb_blob_create, :hb_blob_destroy, :hb_face_create, :hb_face_destroy,
     :hb_font_create, :hb_font_destroy, :hb_buffer_create,
     :hb_buffer_destroy, :hb_buffer_set_direction, :hb_buffer_set_script,
-    :hb_buffer_set_language, :hb_buffer_add, :hb_shape,
-    :hb_buffer_get_glyph_infos, :hb_buffer_get_glyph_positions)
+    :hb_buffer_set_language, :hb_language_from_string, :hb_buffer_add,
+    :hb_shape, :hb_buffer_get_glyph_infos, :hb_buffer_get_glyph_positions)
 
 global _HB_FUNCS = nothing # Dict{Symbol,Ptr{Cvoid}}, once loaded
-# Cached (blob, face, font) per parsed font: the raw bytes are already
-# retained in `OtcOpenType.buf`, so one blob per typeface buffer.
-global _HB_FACES = IdDict{OtcOpenType, NTuple{3, Ptr{Cvoid}}}()
+# Cached (blob, face, font) per live parsed font. Keys are WEAK (M004:
+# the cache must reuse live font state without permanently retaining
+# every parsed font): when the caller's last reference to an
+# `OtcOpenType` is collected, its finalizer destroys the native triple
+# and the dead entry drops out lazily. The blob is READONLY over
+# `OtcOpenType.buf`, which stays rooted exactly while the font object
+# lives, so the cached handles are valid exactly while cached.
+global _HB_FACES = WeakKeyDict{OtcOpenType, NTuple{3, Ptr{Cvoid}}}()
+
+"""Destroy a cached (blob, face, font) triple (font, face, blob order —
+each destroy frees only its own allocation)."""
+function _hbDestroyTriple(st)
+    blob, face, font = st
+    font !== C_NULL && ccall(_HB_FUNCS[:hb_font_destroy], Cvoid,
+        (Ptr{Cvoid},), font)
+    face !== C_NULL && ccall(_HB_FUNCS[:hb_face_destroy], Cvoid,
+        (Ptr{Cvoid},), face)
+    blob !== C_NULL && ccall(_HB_FUNCS[:hb_blob_destroy], Cvoid,
+        (Ptr{Cvoid},), blob)
+    return nothing
+end
 
 """HarfBuzz provider state, loaded on first use (lazy discovery, D028),
 or a clear install hint (D033). Environments without HarfBuzz_jll load
@@ -98,24 +116,42 @@ end
 
 _hbLibPath(m) = m.libharfbuzz # String path (JLLWrappers 1.7 style)
 
-"""Cached (blob, face, font) for `ot`'s raw bytes (created once)."""
+"""Cached (blob, face, font) for `ot`'s raw bytes, created once per live
+font object and destroyed by a finalizer when `ot` is collected (M004:
+the previous `get`-with-default never stored the entry, so every
+shaping call leaked a fresh native triple)."""
 function _hbFace(ot::OtcOpenType)
-    get(_HB_FACES, ot) do
-        blob = ccall(_HB_FUNCS[:hb_blob_create], Ptr{Cvoid},
-            (Ptr{Cchar}, UInt32, UInt32, Ptr{Cvoid}, Ptr{Cvoid}),
-            ot.buf, UInt32(length(ot.buf)), 0, C_NULL, C_NULL) # DUPLICATE
-        blob === C_NULL &&
-            throw(ErrorException(
-                "HarfBuzz: hb_blob_create failed for $(length(ot.buf)) font bytes"))
-        face = ccall(_HB_FUNCS[:hb_face_create], Ptr{Cvoid},
-            (Ptr{Cvoid}, UInt32), blob, 0)
-        face === C_NULL &&
-            throw(ErrorException(
-                "HarfBuzz: hb_face_create failed (unsupported font data?)"))
-        font = ccall(_HB_FUNCS[:hb_font_create], Ptr{Cvoid},
-            (Ptr{Cvoid},), face)
-        return (blob, face, font)
+    st = get(_HB_FACES, ot, nothing)
+    st !== nothing && return st
+    blob = ccall(_HB_FUNCS[:hb_blob_create], Ptr{Cvoid},
+        (Ptr{Cchar}, UInt32, UInt32, Ptr{Cvoid}, Ptr{Cvoid}),
+        ot.buf, UInt32(length(ot.buf)), 0, C_NULL, C_NULL) # READONLY
+    blob === C_NULL &&
+        throw(ErrorException(
+            "HarfBuzz: hb_blob_create failed for $(length(ot.buf)) font bytes"))
+    face = ccall(_HB_FUNCS[:hb_face_create], Ptr{Cvoid},
+        (Ptr{Cvoid}, UInt32), blob, 0)
+    face === C_NULL && begin
+        ccall(_HB_FUNCS[:hb_blob_destroy], Cvoid, (Ptr{Cvoid},), blob)
+        throw(ErrorException(
+            "HarfBuzz: hb_face_create failed (unsupported font data?)"))
     end
+    font = ccall(_HB_FUNCS[:hb_font_create], Ptr{Cvoid},
+        (Ptr{Cvoid},), face)
+    font === C_NULL && begin
+        ccall(_HB_FUNCS[:hb_face_destroy], Cvoid, (Ptr{Cvoid},), face)
+        ccall(_HB_FUNCS[:hb_blob_destroy], Cvoid, (Ptr{Cvoid},), blob)
+        throw(ErrorException("HarfBuzz: hb_font_create failed"))
+    end
+    st = (blob, face, font)
+    # The closure captures only the pointer triple (never `ot`), so it
+    # cannot keep the font alive; the runtime argument is unused by
+    # design (mutating the weak dict from a finalizer is avoided).
+    finalizer(ot) do _dead
+        _hbDestroyTriple(st)
+    end
+    _HB_FACES[ot] = st
+    return st
 end
 
 """Shape one run of codepoints against `ot`'s raw bytes. Returns the
@@ -125,40 +161,55 @@ function _hbShape(ot::OtcOpenType, codepoints::Vector{UInt32},
     script::UInt32, direction::UInt32, lang::String)
     (blob, face, font) = _hbFace(ot)
     buf = ccall(_HB_FUNCS[:hb_buffer_create], Ptr{Cvoid}, ())
-    ccall(_HB_FUNCS[:hb_buffer_set_direction], Cvoid,
-        (Ptr{Cvoid}, UInt32), buf, direction)
-    ccall(_HB_FUNCS[:hb_buffer_set_script], Cvoid,
-        (Ptr{Cvoid}, UInt32), buf, script)
-    lc = Vector{Cchar}(vcat([Cchar(c) for c in lang], Cchar(0)))
-    ccall(_HB_FUNCS[:hb_buffer_set_language], Cvoid,
-        (Ptr{Cvoid}, Ptr{Cchar}), buf, lc)
-    for (i, cp) in enumerate(codepoints)
-        ccall(_HB_FUNCS[:hb_buffer_add], Cvoid,
-            (Ptr{Cvoid}, UInt32, UInt32), buf, cp, UInt32(i - 1))
+    try
+        ccall(_HB_FUNCS[:hb_buffer_set_direction], Cvoid,
+            (Ptr{Cvoid}, UInt32), buf, direction)
+        ccall(_HB_FUNCS[:hb_buffer_set_script], Cvoid,
+            (Ptr{Cvoid}, UInt32), buf, script)
+        # M004: `hb_language_t` is not a C string — the language must
+        # come from `hb_language_from_string` (the tag is interned by
+        # harfbuzz; the result is documented "transfer none", so no free
+        # is needed and it outlives this call). The previous code passed
+        # a temporary Julia char vector as the language: a dangling
+        # pointer once the vector is collected, and a wrong tag for any
+        # language longer than 4 bytes.
+        lc = Vector{Cchar}(vcat([Cchar(c) for c in lang], Cchar(0)))
+        langt = ccall(_HB_FUNCS[:hb_language_from_string], Ptr{Cvoid},
+            (Ptr{Cchar}, Cint), lc, -1)
+        ccall(_HB_FUNCS[:hb_buffer_set_language], Cvoid,
+            (Ptr{Cvoid}, Ptr{Cvoid}), buf, langt)
+        for (i, cp) in enumerate(codepoints)
+            ccall(_HB_FUNCS[:hb_buffer_add], Cvoid,
+                (Ptr{Cvoid}, UInt32, UInt32), buf, cp, UInt32(i - 1))
+        end
+        ccall(_HB_FUNCS[:hb_shape], Cvoid,
+            (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, UInt32), font, buf,
+            C_NULL, 0)
+        nref = Ref{UInt32}(0)
+        infoptr = ccall(_HB_FUNCS[:hb_buffer_get_glyph_infos], Ptr{UInt32},
+            (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
+        n = Int(nref[])
+        poss = ccall(_HB_FUNCS[:hb_buffer_get_glyph_positions], Ptr{Int32},
+            (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
+        gids = Vector{UInt32}(undef, n)
+        clusters = Vector{UInt32}(undef, n)
+        xadv = Vector{Int32}(undef, n)
+        xoff = Vector{Int32}(undef, n)
+        yoff = Vector{Int32}(undef, n)
+        for i in 1:n
+            # 1-based index of field k of glyph i (stride 5) = 5i - 4 + k
+            gids[i] = unsafe_load(infoptr, 5i - 4)
+            clusters[i] = unsafe_load(infoptr, 5i - 2)
+            xadv[i] = unsafe_load(poss, 5i - 4)
+            xoff[i] = unsafe_load(poss, 5i - 2)
+            yoff[i] = unsafe_load(poss, 5i - 1)
+        end
+        return (gids, clusters, xadv, xoff, yoff)
+    finally
+        # M004: the buffer is freed even when shaping or reading the
+        # result throws (the previous path leaked it on any error).
+        ccall(_HB_FUNCS[:hb_buffer_destroy], Cvoid, (Ptr{Cvoid},), buf)
     end
-    ccall(_HB_FUNCS[:hb_shape], Cvoid,
-        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, UInt32), font, buf, C_NULL, 0)
-    nref = Ref{UInt32}(0)
-    infoptr = ccall(_HB_FUNCS[:hb_buffer_get_glyph_infos], Ptr{UInt32},
-        (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
-    n = Int(nref[])
-    poss = ccall(_HB_FUNCS[:hb_buffer_get_glyph_positions], Ptr{Int32},
-        (Ptr{Cvoid}, Ptr{UInt32}), buf, nref)
-    gids = Vector{UInt32}(undef, n)
-    clusters = Vector{UInt32}(undef, n)
-    xadv = Vector{Int32}(undef, n)
-    xoff = Vector{Int32}(undef, n)
-    yoff = Vector{Int32}(undef, n)
-    for i in 1:n
-        # 1-based index of field k of glyph i (stride 5) = 5i - 4 + k
-        gids[i] = unsafe_load(infoptr, 5i - 4)
-        clusters[i] = unsafe_load(infoptr, 5i - 2)
-        xadv[i] = unsafe_load(poss, 5i - 4)
-        xoff[i] = unsafe_load(poss, 5i - 2)
-        yoff[i] = unsafe_load(poss, 5i - 1)
-    end
-    ccall(_HB_FUNCS[:hb_buffer_destroy], Cvoid, (Ptr{Cvoid},), buf)
-    return (gids, clusters, xadv, xoff, yoff)
 end
 
 # ---------- script / bidi / mirroring (vendored tables below) ----------

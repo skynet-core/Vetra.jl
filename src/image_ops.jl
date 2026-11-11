@@ -981,12 +981,17 @@ shadow(image::Image, offset::Vec2, spreadPx::Real, blurPx::Real, color) = # T014
 Sub-image or padded super image (upstream `superImage`): inside the
 bounds it is `subImage`; fully outside, a transparent (w, h) image;
 else the source drawn at (-x, -y) over a transparent canvas.
+Deviation (M004): upstream's `abs(offset) >= extent` early exit wrongly
+reported "no overlap" for negative offsets whose window still reaches
+the image (e.g. x = -width with w > width); the no-overlap test here is
+the derived rectangle intersection `[x, x+w) × [y, y+h)` vs
+`[0, width) × [0, height)`.
 """
 function superImage(image::Image, x::Int, y::Int, w::Int, h::Int)
     if x >= 0 && x + w <= image.width && y >= 0 && y + h <= image.height
         return subImage(image, x, y, w, h)
     end
-    if abs(x) >= image.width || abs(y) >= image.height
+    if x >= image.width || x + w <= 0 || y >= image.height || y + h <= 0
         return newImage(w, h)
     end
     result = newImage(w, h)
