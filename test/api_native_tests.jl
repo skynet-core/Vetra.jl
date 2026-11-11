@@ -755,14 +755,26 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
     end
 
     @testset "allocation parity (warmed calls, M002 rule)" begin
+        # Workload is pool-sized on purpose: the Image data buffer is
+        # 4*w*h bytes, and 4*24*16 = 1536 keeps it at/below Julia's GC
+        # pool ceiling (GC_MAX_SZCLASS = 2024; src/julia_internal.h), so
+        # `@allocated` counts fixed pool size classes — deterministic on
+        # every platform. A larger buffer takes the `jl_gc_managed_malloc`
+        # path, which since Julia 1.11.5 (PR #55223, "count bytes
+        # allocated through malloc more precisely") counts
+        # `memory_block_usable_size`: on Windows that is msvcrt `_msize`,
+        # which jitters by 16 bytes between identical calls — so exact
+        # parity would fail only on Windows/stable (CI 43002436891).
+        # Large-dimension constructor behavior stays covered by the
+        # "Image constructor trust boundary" set.
         # warm up both paths (compile + cache)
         for _ in 1:3
-            img = newImage(64, 40)
+            img = newImage(24, 16)
             fill(img, rgb(1, 2, 3))
             ctx = Context(img)
             fillRect(ctx, 1f0, 1f0, 8f0, 8f0)
             translate(ctx, Vec2(1f0, 2f0))
-            img2 = new_image(64, 40)
+            img2 = new_image(24, 16)
             fill!(img2, rgb(1, 2, 3))
             ctx2 = Context(img2)
             fill_rect!(ctx2, 1f0, 1f0, 8f0, 8f0)
@@ -770,16 +782,16 @@ Base.getindex(A::OffsetMatrix, i, j) = A.d[i + 1, j + 1]
             scale(ctx2, Vec2(2f0, 3f0))
             scale!(ctx2, Vec2(2f0, 3f0))
         end
-        @test @allocated(newImage(64, 40)) > 0
-        @test @allocated(newImage(64, 40)) == @allocated(new_image(64, 40))
+        @test @allocated(newImage(24, 16)) > 0
+        @test @allocated(newImage(24, 16)) == @allocated(new_image(24, 16))
         # the two constructor roots agree
-        @test @allocated(Image(64, 40)) == @allocated(newImage(64, 40))
-        i1 = newImage(64, 40)
-        i2 = new_image(64, 40)
+        @test @allocated(Image(24, 16)) == @allocated(newImage(24, 16))
+        i1 = newImage(24, 16)
+        i2 = new_image(24, 16)
         @test @allocated(fill(i1, rgb(1, 2, 3))) ==
             @allocated(fill!(i2, rgb(1, 2, 3)))
-        c1 = Context(newImage(64, 40))
-        c2 = Context(new_image(64, 40))
+        c1 = Context(newImage(24, 16))
+        c2 = Context(new_image(24, 16))
         @test @allocated(fillRect(c1, 1f0, 1f0, 8f0, 8f0)) > 0
         @test @allocated(fillRect(c1, 1f0, 1f0, 8f0, 8f0)) ==
             @allocated(fill_rect!(c2, 1f0, 1f0, 8f0, 8f0))
