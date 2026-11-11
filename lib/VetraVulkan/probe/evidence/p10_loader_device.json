@@ -141,14 +141,14 @@
       "uuid": "Int649Int6452Int64142Int64158Int6437Int6496Int64237Int6468Int64175Int64245Int64125Int64247Int64206Int6464Int6414Int6493",
       "memory_types": {
         "4": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT)",
           "host_coherent": true
         },
         "1": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
@@ -165,14 +165,14 @@
           "host_coherent": false
         },
         "2": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
         "3": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)",
           "host_coherent": true
         }
@@ -382,50 +382,50 @@
           "host_coherent": true
         },
         "1": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
         "2": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)",
           "host_coherent": true
         },
         "6": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT)",
           "host_coherent": true
         },
         "5": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT)",
           "host_coherent": true
         },
         "7": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT | MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD | MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)",
           "host_coherent": false
         },
         "8": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD | MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)",
           "host_coherent": true
         },
         "10": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT | MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD | MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)",
           "host_coherent": true
         },
         "0": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
@@ -659,7 +659,7 @@
   },
   "summary": {
     "fail": 0,
-    "pass": 6
+    "pass": 8
   },
   "checks": [
     {
@@ -668,7 +668,7 @@
       "detail": "resolved=libvulkan.so.1"
     },
     {
-      "name": "validation layer enabled when requested",
+      "name": "validation layer enabled when requested (make_instance refuses to downgrade)",
       "ok": true,
       "detail": "enabled=[\"VK_LAYER_KHRONOS_validation\"]"
     },
@@ -691,6 +691,16 @@
       "name": "R8G8B8A8_UNORM supports transfer+color-attach (optimal)",
       "ok": true,
       "detail": "Dict{String, Integer}(\"optimal_features\" => 122243, \"optimal_transfer\" => true, \"linear_features\" => 122115, \"optimal_color_attach\" => true)"
+    },
+    {
+      "name": "refcount clean after release (no underflow)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no validation-layer ERROR/WARNING messages through cleanup + GC",
+      "ok": true,
+      "detail": "0 errors, 0 warnings"
     }
   ],
   "loader": {
@@ -891,14 +901,14 @@
       "uuid": "Int649Int6452Int64142Int64158Int6437Int6496Int64237Int6468Int64175Int64245Int64125Int64247Int64206Int6464Int6414Int6493",
       "memory_types": {
         "4": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT)",
           "host_coherent": true
         },
         "1": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
@@ -915,14 +925,14 @@
           "host_coherent": false
         },
         "2": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
         "3": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)",
           "host_coherent": true
         }
@@ -1132,50 +1142,50 @@
           "host_coherent": true
         },
         "1": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
         "2": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)",
           "host_coherent": true
         },
         "6": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT)",
           "host_coherent": true
         },
         "5": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT)",
           "host_coherent": true
         },
         "7": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT | MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD | MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)",
           "host_coherent": false
         },
         "8": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD | MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)",
           "host_coherent": true
         },
         "10": {
-          "device_local": true,
-          "host_visible": false,
+          "device_local": false,
+          "host_visible": true,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT | MEMORY_PROPERTY_HOST_CACHED_BIT | MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD | MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD)",
           "host_coherent": true
         },
         "0": {
-          "device_local": false,
-          "host_visible": true,
+          "device_local": true,
+          "host_visible": false,
           "properties": "MemoryPropertyFlag(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)",
           "host_coherent": false
         },
@@ -1405,6 +1415,529 @@
         "optimal_color_attach": true
       },
       "api_version": "1.4.335"
+    }
+  },
+  "validation": {
+    "errors": [],
+    "n_messages": 102,
+    "info_verbose": [
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_virtio.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_gfxstream.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_intel.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_asahi.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_intel_hasvk.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_nouveau.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      }
+    ],
+    "warnings": [],
+    "severity_bits": {
+      "error": 4096,
+      "warning": 256,
+      "verbose": 1,
+      "info": 16
     }
   }
 }

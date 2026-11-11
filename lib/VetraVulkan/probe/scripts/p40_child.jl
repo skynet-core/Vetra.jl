@@ -12,24 +12,32 @@
 # Prints "READBACK=...", "VAL_ERRORS=n", "VAL_WARNINGS=n", "CHILD_DONE" on a
 # normal finish. The parent (p40_bool_layers.jl) captures this through
 # run_capture so a layer crash is recorded as an exit code, not fatal here.
+#
+# The 1-byte output case is a DIAGNOSTIC, not a safe-storage claim: the
+# module stores through the emitted type (OpStore ... Aligned 2 = 2-byte
+# access), so a 1-byte buffer is a potential out-of-bounds store. Whether the
+# layer reports it depends on its store-bounds validation; the external
+# validator and the ordinary layer do not prove BDA access bounds either way.
 using SPIRV
 using SPIRV_Tools_jll
 using Vulkan
 using Vulkan: Vk, VkCore, unwrap
 include(joinpath(@__DIR__, "probe_common.jl"))
 using .ProbeCommon: make_instance, pick_device, make_device, queue_family, bda_buffer, write_mem,
-                    read_mem, with_commands, supported_features, features_from_capabilities,
-                    validation_errors, validation_warnings, run_capture
+                    read_mem, with_commands, memory_barrier!, query_supported_features,
+                    features_from_capabilities, assert_features_supported,
+                    release, refcount_ok, validation_errors, validation_warnings, run_capture, run_jll
 
 import Vulkan:
   SHADER_STAGE_COMPUTE_BIT, PIPELINE_BIND_POINT_COMPUTE,
   QUEUE_GRAPHICS_BIT, QUEUE_COMPUTE_BIT,
+  PIPELINE_STAGE_HOST_BIT, PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+  ACCESS_HOST_WRITE_BIT, ACCESS_HOST_READ_BIT, ACCESS_SHADER_READ_BIT, ACCESS_SHADER_WRITE_BIT,
   PushConstantRange, PipelineLayout, PipelineShaderStageCreateInfo, ComputePipelineCreateInfo
 
 const PROBE_ROOT = dirname(@__DIR__)
 
-"""println + flush: the host build's file-redirected stdout flushes
-unreliably, so every status line is flushed before the parent reads it."""
+"""println + flush: parent reads this through run_capture."""
 function report(xs...)
   println(xs...)
   flush(stdout)
@@ -51,27 +59,34 @@ function main()
   pad > 0 && append!(code, zeros(UInt8, pad))
 
   inst, msg, layers_used = make_instance(; validation = layer == 1)
-  report("LAYER_ENABLED=", layer == 1 && !isempty(layers_used) ? "yes" : "no (requested)")
+  report("LAYER_ENABLED=", layer == 1 ? "yes" : "no")
+  # make_instance errors (no silent downgrade) when validation is requested
+  # but the layer is unavailable, so LAYER_ENABLED=yes means actually enabled.
+  (layer == 1) == !isempty(layers_used) || error("layer state mismatch: requested=$(layer) enabled=$(layers_used)")
+
   ph, props = pick_device(inst; name_substring = "NVIDIA GeForce")
 
   # derive the minimal feature set from the module's declared capabilities
   bin = SPIRV_Tools_jll.spirv_dis()
-  execv = getfield(bin, :exec)
-  tmp = joinpath(tempdir(), "r040-p40-child.spv")
-  open(tmp, "w") do io; write(io, code); end
-  (dis, _e, rc) = run_capture(setenv(Cmd(vcat(execv, ["--no-color", tmp])), bin.env))
+  (dis, _e, rc) = run_jll(bin, ["--no-color", spv_path])
   rc == 0 || error("spirv-dis failed in child: $rc")
   dlines = split(dis, "\n")
   capnames = [String(m.captures[1]) for m in (match(r"OpCapability\s+(\S+)", strip(l)) for l in dlines) if !isnothing(m)]
-  (f10, f11, f12) = features_from_capabilities(capnames)
-  push!(f11, :variable_pointers)
-  push!(f11, :variable_pointers_storage_buffer)
+  (f10, f11, f12, _f13caps) = features_from_capabilities(capnames)
+  # OpExecutionMode LocalSizeId requires maintenance4 (VUID 06434) — derive
+  # from the module, not by default.
   f13 = Symbol[]
-  sup = supported_features(ph)
-  sup.f13.maintenance4 != 0 && push!(f13, :maintenance4)
+  occursin("LocalSizeId", dis) && push!(f13, :maintenance4)
+  report("STORE_ALIGNED=", let
+    m = match(r"OpStore\s+\S+\s+\S+\s+Aligned\s+(\d+)", dis)
+    isnothing(m) ? "none" : m.captures[1]
+  end)
+
+  sup = query_supported_features(ph)
+  assert_features_supported(sup; need10 = f10, need11 = f11, need12 = f12, need13 = f13)
 
   qi = queue_family(ph, QUEUE_GRAPHICS_BIT | QUEUE_COMPUTE_BIT)
-  dev = make_device(inst, ph; f10 = f10, f11 = f11, f12 = f12, f13 = f13, layers = layers_used, qi = qi)
+  dev = make_device(inst, ph; f10 = f10, f11 = f11, f12 = f12, f13 = f13, qi = qi)
 
   # runtime input: two floats, the bool is their comparison (not constant)
   in_bytes = [parse(UInt8, input_hex[i:i + 1], base = 16) for i in 1:2:16]
@@ -92,9 +107,11 @@ function main()
   pc_ptr = Base.unsafe_convert(Ptr{Cvoid}, pc_ref)
   GC.@preserve pc_ref shader pipeline layout begin
     with_commands(dev, qi, (cb) -> begin
+      memory_barrier!(cb, PIPELINE_STAGE_HOST_BIT, PIPELINE_STAGE_COMPUTE_SHADER_BIT, ACCESS_HOST_WRITE_BIT, ACCESS_SHADER_READ_BIT)
       Vulkan.cmd_bind_pipeline(cb, PIPELINE_BIND_POINT_COMPUTE, pipeline)
       Vulkan.cmd_push_constants(cb, layout, SHADER_STAGE_COMPUTE_BIT, 0, sizeof(BoolBlock), pc_ptr)
       Vulkan.cmd_dispatch(cb, 1, 1, 1)
+      memory_barrier!(cb, PIPELINE_STAGE_COMPUTE_SHADER_BIT, PIPELINE_STAGE_HOST_BIT, ACCESS_SHADER_WRITE_BIT, ACCESS_HOST_READ_BIT)
       nothing
     end)
   end
@@ -108,27 +125,33 @@ function main()
   ok = val == expected
   report("RESULT=", ok ? "MATCH" : "MISMATCH expected=$expected got=$(val & 0xff)")
 
+  # deterministic cleanup (reverse order); messenger stays alive so
+  # destruction-time validation messages are still captured.
+  release(pipeline)
+  release(shader)
+  release(layout)
+  release(out_res.memory)
+  release(out_res.buffer)
+  release(in_res.memory)
+  release(in_res.buffer)
+  release(dev)
+  GC.gc()
+
   errs = validation_errors()
   warns = validation_warnings()
   report("VAL_ERRORS=", length(errs))
-  for (sev, mtype, m) in errs
-    report("VAL_ERROR: ", m)
+  for (i, _m) in enumerate(errs)
+    report("VAL_ERROR_", string(i), "=", _m[3])
   end
   report("VAL_WARNINGS=", length(warns))
-  for (sev, mtype, m) in warns
-    report("VAL_WARNING: ", m)
+  for (i, _m) in enumerate(warns)
+    report("VAL_WARNING_", string(i), "=", _m[3])
   end
 
-  pipeline.destructor()
-  shader.destructor()
-  layout.destructor()
-  out_res.memory.destructor()
-  out_res.buffer.destructor()
-  in_res.memory.destructor()
-  in_res.buffer.destructor()
-  dev.destructor()
-  isnothing(msg) || msg.destructor()
-  inst.destructor()
+  release(msg)
+  release(inst)
+  GC.gc()
+  report("REFCOUNT_OK=", refcount_ok(inst) && refcount_ok(dev) && refcount_ok(pipeline) ? "yes" : "no")
   report("CHILD_DONE")
 end
 

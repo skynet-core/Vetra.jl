@@ -8,62 +8,101 @@
     {
       "name": "external spirv-val --target-env vulkan1.3 passes on the bool module",
       "ok": true,
-      "detail": "exitcode=0"
+      "detail": ""
     },
     {
       "name": "negative control: vulkan1.2 env rejected (module is SPIR-V 1.6)",
       "ok": true,
-      "detail": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics).\nexitcode=1"
+      "detail": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics)."
     },
     {
-      "name": "no layer crash on Bool-returning shader (all 3 layer runs completed, exit 0)",
+      "name": "parent refcount clean after release",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "true_layer_4byte: requested layer state actually in effect (child-verified)",
+      "ok": true,
+      "detail": "layer_enabled=yes completed=true"
+    },
+    {
+      "name": "false_layer_4byte: requested layer state actually in effect (child-verified)",
+      "ok": true,
+      "detail": "layer_enabled=yes completed=true"
+    },
+    {
+      "name": "true_layer_1byte_upstream_size: requested layer state actually in effect (child-verified)",
+      "ok": true,
+      "detail": "layer_enabled=yes completed=true"
+    },
+    {
+      "name": "true_nolayer_4byte_control: requested layer state actually in effect (child-verified)",
+      "ok": true,
+      "detail": "layer_enabled=no completed=true"
+    },
+    {
+      "name": "true_layer_4byte: completed without crash",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "name": "true_layer_4byte: bool readback byte-exact vs independent expectation (1)",
+      "ok": true,
+      "detail": "result=MATCH readback=01000000"
+    },
+    {
+      "name": "false_layer_4byte: completed without crash",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "name": "false_layer_4byte: bool readback byte-exact vs independent expectation (0)",
+      "ok": true,
+      "detail": "result=MATCH readback=00000000"
+    },
+    {
+      "name": "true_layer_1byte_upstream_size: completed without crash",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "name": "true_layer_1byte_upstream_size: bool readback byte-exact vs independent expectation (1)",
+      "ok": true,
+      "detail": "result=MATCH readback=01"
+    },
+    {
+      "name": "true_nolayer_4byte_control: completed without crash",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "name": "true_nolayer_4byte_control: bool readback byte-exact vs independent expectation (1)",
+      "ok": true,
+      "detail": "result=MATCH readback=01000000"
+    },
+    {
+      "name": "4-byte layer runs: no validation ERROR messages",
+      "ok": true,
+      "detail": "errs=0,0"
+    },
+    {
+      "name": "no layer crash on Bool-returning shader (all 4 experiments completed, exit 0)",
       "ok": true,
       "detail": "completed=4/4"
-    },
-    {
-      "name": "true_layer_4byte: bool readback byte-exact vs independent expectation",
-      "ok": true,
-      "detail": "01000000"
-    },
-    {
-      "name": "false_layer_4byte: bool readback byte-exact vs independent expectation",
-      "ok": true,
-      "detail": "00000000"
-    },
-    {
-      "name": "true_layer_1byte_upstream_size: bool readback byte-exact vs independent expectation",
-      "ok": true,
-      "detail": "01"
-    },
-    {
-      "name": "true_nolayer_4byte_control: bool readback byte-exact vs independent expectation",
-      "ok": true,
-      "detail": "01000000"
-    },
-    {
-      "name": "true_layer_4byte: independent expectation true(1) met",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "false_layer_4byte: independent expectation false(0) met",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "no validation ERROR messages in any layer experiment",
-      "ok": true,
-      "detail": "errs=0,0,0"
-    },
-    {
-      "name": "upstream sizeof(Bool)=1 byte sizing: store accepted, first byte correct",
-      "ok": true,
-      "detail": "01"
     }
   ],
+  "finding_1byte": {
+    "classification": "NOT flagged: limitation — the ordinary layer configuration does not prove BDA access bounds; the 1-byte case remains diagnostic, not a safe-storage claim",
+    "store_bounds_flagged": false,
+    "store_aligned": "2",
+    "flagged_messages": [],
+    "validation_errors": 0,
+    "buffer_bytes": 1
+  },
   "true_layer_4byte": {
     "out_size": 4,
     "validation_warnings": 0,
+    "validation_error_messages": [],
     "layer": true,
     "pipeline_created": true,
     "layer_enabled": "yes",
@@ -73,11 +112,11 @@
     "validation_errors": 0,
     "child_exit": 0,
     "child_completed": true,
-    "stderr_tail": "┌ Warning: Device: enabled_layers is long deprecated, will be ignored\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/device.jl:122\nexitcode=0\n"
+    "stderr_tail": ""
   },
   "spirv_val_vulkan1_3": {
     "exit": 0,
-    "stderr": "exitcode=0\n"
+    "stderr": ""
   },
   "device": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
   "spirv": {
@@ -87,6 +126,7 @@
   "false_layer_4byte": {
     "out_size": 4,
     "validation_warnings": 0,
+    "validation_error_messages": [],
     "layer": true,
     "pipeline_created": true,
     "layer_enabled": "yes",
@@ -96,11 +136,11 @@
     "validation_errors": 0,
     "child_exit": 0,
     "child_completed": true,
-    "stderr_tail": "┌ Warning: Device: enabled_layers is long deprecated, will be ignored\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/device.jl:122\nexitcode=0\n"
+    "stderr_tail": ""
   },
   "summary": {
     "fail": 0,
-    "pass": 12
+    "pass": 18
   },
   "spirv_shape": {
     "opstore_bool_aligned": "2",
@@ -109,7 +149,7 @@
   },
   "spirv_val_vulkan1_2_negative_control": {
     "exit": 1,
-    "stderr": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics).\nexitcode=1\n"
+    "stderr": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics).\n"
   },
   "finding": {
     "reproduced_crash": false,
@@ -119,6 +159,7 @@
   "true_layer_1byte_upstream_size": {
     "out_size": 1,
     "validation_warnings": 0,
+    "validation_error_messages": [],
     "layer": true,
     "pipeline_created": true,
     "layer_enabled": "yes",
@@ -128,20 +169,21 @@
     "validation_errors": 0,
     "child_exit": 0,
     "child_completed": true,
-    "stderr_tail": "┌ Warning: Device: enabled_layers is long deprecated, will be ignored\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/device.jl:122\nexitcode=0\n"
+    "stderr_tail": ""
   },
   "true_nolayer_4byte_control": {
     "out_size": 4,
     "validation_warnings": 0,
+    "validation_error_messages": [],
     "layer": false,
     "pipeline_created": true,
-    "layer_enabled": "no (requested)",
+    "layer_enabled": "no",
     "result": "MATCH",
     "expected": 1,
     "readback_hex": "01000000",
     "validation_errors": 0,
     "child_exit": 0,
     "child_completed": true,
-    "stderr_tail": "exitcode=0\n"
+    "stderr_tail": ""
   }
 }

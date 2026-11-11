@@ -1,12 +1,76 @@
 {
-  "summary": {
-    "fail": 0,
-    "pass": 7
-  },
-  "julia": {
-    "bindir": "/home/vasyl/.julia/juliaup/julia-1.11.9+0.x64.linux.gnu/bin",
-    "version": "1.11.9"
-  },
+  "checks": [
+    {
+      "name": "package resolved: SPIRV",
+      "ok": true,
+      "detail": "0.6.11"
+    },
+    {
+      "name": "package resolved: Vulkan",
+      "ok": true,
+      "detail": "0.6.30"
+    },
+    {
+      "name": "package resolved: VulkanCore",
+      "ok": true,
+      "detail": "1.3.1"
+    },
+    {
+      "name": "package resolved: SPIRV_Tools_jll",
+      "ok": true,
+      "detail": "2026.4.0+0"
+    },
+    {
+      "name": "SPIRV pinned to reviewed revision",
+      "ok": true,
+      "detail": "rev=218b33b21e5b23d7c3c34bb07f6c114723a5e193"
+    },
+    {
+      "name": "spirv-val runs",
+      "ok": true,
+      "detail": "SPIRV-Tools v2026.4 v2026.4-0-gef96ed76\nTargets:\n  SPIR-V 1.0\n  SPIR-V 1.1\n  SPIR-V 1.2\n  SPIR-V 1.3\n  SPIR-V 1.4\n  SPIR-V 1.5\n  SPIR-V 1.6\n  SPIR-V 1.2 (under OpenCL 2.2 Full Profile semantics)\n  SPIR-V 1.0 (under Vulkan 1.0 semantics)\n  SPIR-V 1.3 (under Vulkan 1.1 semantics)\n  SPIR-V 1.4 (under Vulkan 1.1 semantics)\n  SPIR-V 1.5 (under Vulkan 1.2 semantics)\n  SPIR-V 1.6 (under Vulkan 1.3 semantics) SPIR-V 1.6 (under Vulkan 1.4 semantics)"
+    },
+    {
+      "name": "KHRONOS validation layer discoverable through wrapper",
+      "ok": true,
+      "detail": "instance layers: VK_LAYER_MESA_device_select, VK_LAYER_NV_optimus, VK_LAYER_NV_present, VK_LAYER_MESA_anti_lag, VK_LAYER_KHRONOS_validation"
+    },
+    {
+      "name": "VK_EXT_debug_utils available (required with validation)",
+      "ok": true,
+      "detail": "debug utils ext"
+    },
+    {
+      "name": "validation layer enabled when requested (no silent downgrade)",
+      "ok": true,
+      "detail": "enabled=[\"VK_LAYER_KHRONOS_validation\"]"
+    },
+    {
+      "name": "synchronization-validation instance created (VkValidationFeaturesEXT pNext)",
+      "ok": true,
+      "detail": "VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION requested; VVL behaviorally confirmed by the barrier checks in p20/p30 evidence"
+    },
+    {
+      "name": "synthetic regression: VERBOSE captured with raw value 1",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "synthetic regression: INFO captured with raw value 16",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "synthetic regression: WARNING captured with raw value 256",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "synthetic regression: ERROR captured with raw value 4096",
+      "ok": true,
+      "detail": ""
+    }
+  ],
   "manifest": {
     "manifest_format": "2.0",
     "julia_version": "1.11.9",
@@ -514,57 +578,6 @@
       "version": "0.6.11"
     }
   },
-  "checks": [
-    {
-      "name": "package resolved: SPIRV",
-      "ok": true,
-      "detail": "0.6.11"
-    },
-    {
-      "name": "package resolved: Vulkan",
-      "ok": true,
-      "detail": "0.6.30"
-    },
-    {
-      "name": "package resolved: VulkanCore",
-      "ok": true,
-      "detail": "1.3.1"
-    },
-    {
-      "name": "package resolved: SPIRV_Tools_jll",
-      "ok": true,
-      "detail": "2026.4.0+0"
-    },
-    {
-      "name": "SPIRV pinned to reviewed revision",
-      "ok": true,
-      "detail": "rev=218b33b21e5b23d7c3c34bb07f6c114723a5e193"
-    },
-    {
-      "name": "spirv-val runs",
-      "ok": true,
-      "detail": "SPIRV-Tools v2026.4 v2026.4-0-gef96ed76\nTargets:\n  SPIR-V 1.0\n  SPIR-V 1.1\n  SPIR-V 1.2\n  SPIR-V 1.3\n  SPIR-V 1.4\n  SPIR-V 1.5\n  SPIR-V 1.6\n  SPIR-V 1.2 (under OpenCL 2.2 Full Profile semantics)\n  SPIR-V 1.0 (under Vulkan 1.0 semantics)\n  SPIR-V 1.3 (under Vulkan 1.1 semantics)\n  SPIR-V 1.4 (under Vulkan 1.1 semantics)\n  SPIR-V 1.5 (under Vulkan 1.2 semantics)\n  SPIR-V 1.6 (under Vulkan 1.3 semantics) SPIR-V 1.6 (under Vulkan 1.4 semantics)"
-    },
-    {
-      "name": "KHRONOS validation layer discoverable through wrapper",
-      "ok": true,
-      "detail": "instance layers: VK_LAYER_MESA_device_select, VK_LAYER_NV_optimus, VK_LAYER_NV_present, VK_LAYER_MESA_anti_lag, VK_LAYER_KHRONOS_validation"
-    }
-  ],
-  "validation_layer_external": {
-    "VK_LAYER_KHRONOS_validation": {
-      "library_sha256": "5c77f94500f1ee60d4305037a6efe74f76d6a3348f47bdb5fe6d9b1449557cc7",
-      "manifest": "/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json",
-      "library": "/tmp/opencode/vvl/install/lib/libVkLayer_khronos_validation.so"
-    }
-  },
-  "spirv_tools": {
-    "spirv_val": {
-      "sha256": "9c2da31d6b16f0fd01cdb739e03d22fad31039e825d8c6b69250611676155299",
-      "path": "/home/vasyl/.julia/artifacts/320990bcba9ae21f030fb0d9eccb7ad9bc223084/bin/spirv-val"
-    },
-    "version_output": "SPIRV-Tools v2026.4 v2026.4-0-gef96ed76\nTargets:\n  SPIR-V 1.0\n  SPIR-V 1.1\n  SPIR-V 1.2\n  SPIR-V 1.3\n  SPIR-V 1.4\n  SPIR-V 1.5\n  SPIR-V 1.6\n  SPIR-V 1.2 (under OpenCL 2.2 Full Profile semantics)\n  SPIR-V 1.0 (under Vulkan 1.0 semantics)\n  SPIR-V 1.3 (under Vulkan 1.1 semantics)\n  SPIR-V 1.4 (under Vulkan 1.1 semantics)\n  SPIR-V 1.5 (under Vulkan 1.2 semantics)\n  SPIR-V 1.6 (under Vulkan 1.3 semantics) SPIR-V 1.6 (under Vulkan 1.4 semantics)"
-  },
   "instance_extensions": [
     "VK_KHR_device_group_creation",
     "VK_KHR_display",
@@ -594,6 +607,53 @@
     "VK_LUNARG_direct_driver_loading",
     "VK_EXT_layer_settings"
   ],
+  "validation_layer_provenance": {
+    "file": "/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d/PROVENANCE.txt",
+    "contents": "source: https://github.com/KhronosGroup/Vulkan-ValidationLayers\ntag: vulkan-sdk-1.4.363.1\nrevision: 317cff060893783f96d4174f50491e6374eb3714\nbuilt: 2026-11-11T13:32:07Z\nbuilder: Linux 7.0.0-42-generic x86_64\ndeps (scripts/known_good.json):\n  Vulkan-Headers @ v1.4.363\n  Vulkan-Utility-Libraries @ d498a40c2e1fa6ce49667e8aaa4472c0db623cda\n  SPIRV-Headers @ 496543121ce6419f23d6fa5d7194ba66c36212d2\n  SPIRV-Tools @ ef96ed763b43b59b33b31b362f09a02b729fa1c9\n  mimalloc @ v3.5.3\n  googletest @ v1.14.0\n  glslang @ e1b562a8bed273a02f30b59b66a5d499793cede5\n  Vulkan-Loader @ v1.4.363\n  Vulkan-Profiles @ v1.4.362\n  slang @ ?\nconfigure: cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DBUILD_WSI_XCB_SUPPORT=OFF -DBUILD_WSI_XLIB_SUPPORT=OFF -DBUILD_WSI_XLIB_XRANDR_SUPPORT=OFF -DBUILD_WSI_WAYLAND_SUPPORT=OFF"
+  },
+  "severity_bits": {
+    "error": 4096,
+    "warning": 256,
+    "verbose": 1,
+    "info": 16
+  },
+  "severity_regression": {
+    "error": {
+      "in_warning_bucket": false,
+      "received": true,
+      "in_error_bucket": true,
+      "raw_severity": 4096
+    },
+    "warning": {
+      "in_warning_bucket": true,
+      "received": true,
+      "in_error_bucket": false,
+      "raw_severity": 256
+    },
+    "verbose": {
+      "in_warning_bucket": false,
+      "received": true,
+      "in_error_bucket": false,
+      "raw_severity": 1
+    },
+    "info": {
+      "in_warning_bucket": false,
+      "received": true,
+      "in_error_bucket": false,
+      "raw_severity": 16
+    }
+  },
+  "summary": {
+    "fail": 0,
+    "pass": 14
+  },
+  "spirv_tools": {
+    "spirv_val": {
+      "sha256": "9c2da31d6b16f0fd01cdb739e03d22fad31039e825d8c6b69250611676155299",
+      "path": "/home/vasyl/.julia/artifacts/320990bcba9ae21f030fb0d9eccb7ad9bc223084/bin/spirv-val"
+    },
+    "version_output": "SPIRV-Tools v2026.4 v2026.4-0-gef96ed76\nTargets:\n  SPIR-V 1.0\n  SPIR-V 1.1\n  SPIR-V 1.2\n  SPIR-V 1.3\n  SPIR-V 1.4\n  SPIR-V 1.5\n  SPIR-V 1.6\n  SPIR-V 1.2 (under OpenCL 2.2 Full Profile semantics)\n  SPIR-V 1.0 (under Vulkan 1.0 semantics)\n  SPIR-V 1.3 (under Vulkan 1.1 semantics)\n  SPIR-V 1.4 (under Vulkan 1.1 semantics)\n  SPIR-V 1.5 (under Vulkan 1.2 semantics)\n  SPIR-V 1.6 (under Vulkan 1.3 semantics) SPIR-V 1.6 (under Vulkan 1.4 semantics)"
+  },
   "system_vulkan": {
     "loader": {
       "sha256": "def4af45e9e5784cf65eaaaa289530a5c73546b01015da4c0920ef0a144fe189",
@@ -605,31 +665,50 @@
         "kind": "explicit_layer.d",
         "library_sha256": "e44b67b1eae10409b54b6ac720c2e28b0f7c5da07d49d6ec2445911064d62a1a",
         "library_path": "libVkLayer_INTEL_nullhw.so",
-        "file": "VkLayer_INTEL_nullhw.json"
+        "file": "VkLayer_INTEL_nullhw.json",
+        "api_version": "1.1.73"
       },
       "VK_LAYER_MESA_screenshot": {
         "kind": "explicit_layer.d",
         "library_sha256": "cf5c4713c796d8958f3c02b4fbb4c02ecce5a9777d5c85199723fc43d81a4103",
         "library_path": "libVkLayer_MESA_screenshot.so",
-        "file": "VkLayer_MESA_screenshot.json"
+        "file": "VkLayer_MESA_screenshot.json",
+        "api_version": "1.4.303"
       },
       "VK_LAYER_MESA_overlay": {
         "kind": "explicit_layer.d",
         "library_sha256": "82960803fcc6f265516280f9f93bb09771be189192a5a6043472704145848c71",
         "library_path": "libVkLayer_MESA_overlay.so",
-        "file": "VkLayer_MESA_overlay.json"
+        "file": "VkLayer_MESA_overlay.json",
+        "api_version": "1.4.303"
+      },
+      "VK_LAYER_NV_present": {
+        "kind": "implicit_layer.d",
+        "library_sha256": "11c9359fdc5afaf670abfe5185b5534fcf110d98c27f256f12cc9698a1a79bd4",
+        "library_path": "libnvidia-present.so.615.71.09",
+        "file": "nvidia_layers.json",
+        "api_version": "1.4.351"
+      },
+      "VK_LAYER_NV_optimus": {
+        "kind": "implicit_layer.d",
+        "library_sha256": "d48eb3be2b08a4b51b8b9d6f4996509b36764cc90d479aea3642f98749b632d7",
+        "library_path": "libGLX_nvidia.so.0",
+        "file": "nvidia_layers.json",
+        "api_version": "1.4.351"
       },
       "VK_LAYER_MESA_anti_lag": {
         "kind": "implicit_layer.d",
         "library_sha256": "fcf8b509fd008f80633ae5afe9c6b5219d5c70e3dab2cd5f3102e7d095d4090e",
         "library_path": "libVkLayer_MESA_anti_lag.so",
-        "file": "VkLayer_MESA_anti_lag.json"
+        "file": "VkLayer_MESA_anti_lag.json",
+        "api_version": "1.4.303"
       },
       "VK_LAYER_MESA_device_select": {
         "kind": "implicit_layer.d",
         "library_sha256": "de1880d4c750f871d3491d2e8d77f1ca13f31eaa5ba0784bd4dfca0fa7dc9531",
         "library_path": "libVkLayer_MESA_device_select.so",
-        "file": "VkLayer_MESA_device_select.json"
+        "file": "VkLayer_MESA_device_select.json",
+        "api_version": "1.4.303"
       }
     },
     "icds": {
@@ -678,6 +757,18 @@
         "library_path": "libvulkan_intel_hasvk.so",
         "api_version": "1.3.335"
       }
+    }
+  },
+  "julia": {
+    "bindir": "/home/vasyl/.julia/juliaup/julia-1.11.9+0.x64.linux.gnu/bin",
+    "version": "1.11.9"
+  },
+  "validation_layer_external": {
+    "VK_LAYER_KHRONOS_validation": {
+      "library_sha256": "5c77f94500f1ee60d4305037a6efe74f76d6a3348f47bdb5fe6d9b1449557cc7",
+      "manifest": "/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json",
+      "library": "/tmp/opencode/vvl/install/lib/libVkLayer_khronos_validation.so",
+      "api_version": "1.4.363"
     }
   },
   "os": {

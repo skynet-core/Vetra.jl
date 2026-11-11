@@ -3,16 +3,24 @@
 #
 # Records, with exact versions and file hashes:
 # - Julia/OS, resolved package set (registry + git rev of SPIRV.jl)
-# - system Vulkan loader/ICD/layer inventory (read-only)
+# - system Vulkan loader/ICD/layer inventory (read-only; manifests parsed
+#   with the host's jq — no hand-rolled JSON parser in the probe)
 # - spirv-val provenance (SPIRV_Tools_jll) and version
-# - Vulkan validation layer build provenance (if present on VK_LAYER_PATH)
+# - Vulkan validation layer build provenance (if present on VK_LAYER_PATH,
+#   incl. a PROVENANCE.txt written by the README build recipe)
+# - the severity-classification regression (vkSubmitDebugUtilsMessageEXT per
+#   severity, positive + negative controls) with the layer + messenger
+#   actually enabled, and a synchronization-validation instance
 #
-# Self-checks: spirv-val runs; KHRONOS validation layer is discoverable.
+# Self-checks: spirv-val runs; KHRONOS validation layer is discoverable AND
+# enabled when requested; severity buckets classify the synthetic messages.
 using Pkg
 using SPIRV_Tools_jll
 using Vulkan
 include(joinpath(@__DIR__, "probe_common.jl"))
-using .ProbeCommon: check, write_evidence, reset_checks, instance_layers, instance_extensions, run_capture, CHECKS
+using .ProbeCommon: check, write_evidence, reset_checks, instance_layers, instance_extensions,
+                    run_capture, run_jll, make_instance, release,
+                    synthetic_severity_regression, CHECKS
 
 const PROBE_ROOT = dirname(@__DIR__)
 const EVIDENCE = joinpath(PROBE_ROOT, "evidence")
@@ -27,83 +35,26 @@ function sha256sum(path)
   return split(out)[1]
 end
 
-# ---------------------------------------------------------------------------
-# Minimal JSON reader for the flat Vulkan .json manifests (only the fields we
-# need: top-level object, nested objects, strings). Keeps the probe free of
-# any JSON package dependency.
-# ---------------------------------------------------------------------------
-
-function parse_json_object(s)
-  @assert startswith(s, "{")
-  rest = s[2:end]
-  obj = Dict{String, Any}()
-  while true
-    rest = strip(rest)
-    isempty(rest) && error("unterminated object in: $s")
-    if rest[1] == '}'
-      rest = rest[2:end]
-      break
-    end
-    key, rest = parse_json_string(rest)
-    rest = strip(rest)
-    rest[1] == ':' || error("expected ':' while parsing manifest: $rest")
-    rest = strip(rest[2:end])
-    val, rest = parse_json_value(rest)
-    obj[key] = val
-    rest = strip(rest)
-    if rest[1] == ','
-      rest = rest[2:end]
-    elseif rest[1] == '}'
-      rest = rest[2:end]
-      break
-    else
-      error("expected ',' or '}' while parsing manifest: $rest")
-    end
+"""Parse a flat Vulkan manifest field list with the host's jq.
+`selector` is a jq expression over the manifest; expected output: one line
+`name<TAB>library_path<TAB>api_version` per entry. Returns Dict name=>fields."""
+function manifest_entries(path, selector)
+  (out, err, code) = run_capture(Cmd(["jq", "-r", selector, path]))
+  code != 0 && error("jq failed on $path: $err")
+  entries = Dict{String, Dict{String, Any}}()
+  for line in split(chomp(out), "\n")
+    isempty(line) && continue
+    parts = split(line, "\t")
+    name = parts[1]
+    lib = length(parts) > 2 && parts[2] != "" ? parts[2] : nothing
+    api = length(parts) > 2 && parts[3] != "" ? parts[3] : nothing
+    entries[name] = Dict("library_path" => lib, "api_version" => api)
   end
-  return (obj, rest)
+  entries
 end
 
-function parse_json_string(s)
-  s[1] == '"' || error("expected string: $s")
-  i = findnext('"', s, 2)
-  i === nothing && error("unterminated string in: $s")
-  return (s[2:(i - 1)], s[(i + 1):end])
-end
-
-function parse_json_value(s)
-  if s[1] == '{'
-    obj, rest = parse_json_object(s)
-    return (obj, rest)
-  end
-  s[1] == '"' && return parse_json_string(s)
-  if s[1] == '['
-    depth = 0
-    in_str = false
-    for (i, c) in enumerate(s)
-      c == '"' && (in_str = !in_str)
-      in_str && continue
-      c == '[' && (depth += 1)
-      c == ']' && (depth -= 1)
-      depth == 0 && return (Any[], s[i + 1:end])
-    end
-    error("unterminated array in: $s")
-  end
-  for (lit, val) in (("true", true), ("false", false), ("null", nothing))
-    startswith(s, lit) && return (val, s[length(lit) + 1:end])
-  end
-  m = match(r"^-?[\d.eE+]+", s)
-  isnothing(m) && error("cannot parse JSON value: $s")
-  str = m.match
-  val = occursin(('.', 'e', 'E'), str) ? parse(Float64, str) : parse(Int64, str)
-  return (val, s[length(str) + 1:end])
-end
-
-function json_read(path)
-  (obj, _rest) = parse_json_object(read(path, String))
-  obj
-end
-
-# ---------------------------------------------------------------------------
+const ICD_SELECTOR = ".ICD | [.library_path, .api_version] | @tsv"
+const LAYER_SELECTOR = "(.layer? // .layers? // empty) | (if type == \"array\" then .[] else . end) | select(.name != null) | [.name, .library_path, .api_version] | @tsv"
 
 function main()
   reset_checks()
@@ -143,7 +94,7 @@ function main()
         get(pkgs["SPIRV"], "git_rev", "") == "218b33b21e5b23d7c3c34bb07f6c114723a5e193",
         "rev=$(get(pkgs["SPIRV"], "git_rev", ""))")
 
-  # --- system Vulkan inventory (read-only) ------------------------------------
+  # --- system Vulkan inventory (read-only, jq-parsed) -------------------------
   sys = Dict{String, Any}()
   if Sys.islinux()
     (real, _err, _code) = run_capture(`realpath /usr/lib/x86_64-linux-gnu/libvulkan.so.1`)
@@ -153,11 +104,14 @@ function main()
   icd_dir = "/usr/share/vulkan/icd.d"
   for f in sort(readdir(icd_dir))
     endswith(f, ".json") || continue
-    d = json_read(joinpath(icd_dir, f))
-    icd = get(d, "ICD", Dict())
-    lib = get(icd, "library_path", nothing)
+    # ICD files have a single entry under .ICD (no name): parse directly
+    (out, _e2, c2) = run_capture(Cmd(["jq", "-r", "[.ICD.library_path, .ICD.api_version] | @tsv", joinpath(icd_dir, f)]))
+    c2 != 0 && continue
+    parts = split(chomp(out), "\t")
+    lib = get(parts, 1, "") == "" ? nothing : parts[1]
+    api = get(parts, 2, "") == "" ? nothing : parts[2]
     icds[f] = Dict("library_path" => lib,
-                   "api_version" => get(icd, "api_version", get(d, "api_version", nothing)),
+                   "api_version" => api,
                    "library_sha256" => isnothing(lib) ? nothing : sha256sum(resolve_lib(lib)))
   end
   sys["icds"] = icds
@@ -166,13 +120,12 @@ function main()
     isdir(dir) || continue
     for f in sort(readdir(dir))
       endswith(f, ".json") || continue
-      d = json_read(joinpath(dir, f))
-      lay = get(d, "layer", nothing)
-      for l in (isnothing(lay) ? Any[] : (lay isa Dict ? [lay] : lay))
-        lib = get(l, "library_path", nothing)
-        layers[get(l, "name", f)] = Dict("kind" => basename(dir), "file" => f,
-                                         "library_path" => lib,
-                                         "library_sha256" => isnothing(lib) ? nothing : sha256sum(resolve_lib(lib)))
+      for (name, flds) in manifest_entries(joinpath(dir, f), LAYER_SELECTOR)
+        lib = flds["library_path"]
+        layers[name] = Dict("kind" => basename(dir), "file" => f,
+                            "library_path" => lib,
+                            "api_version" => flds["api_version"],
+                            "library_sha256" => isnothing(lib) ? nothing : sha256sum(resolve_lib(lib)))
       end
     end
   end
@@ -184,34 +137,54 @@ function main()
   bin_cmd = SPIRV_Tools_jll.spirv_val()
   bin_exec = getfield(bin_cmd, fieldnames(typeof(bin_cmd))[1]) # Vector{String}: exe + args
   bin_path = bin_exec[1]
-  ver_cmd = setenv(Cmd(vcat(bin_exec, ["--version"])), bin_cmd.env)
-  (ver, _vererr, vcode) = run_capture(ver_cmd)
+  (ver, _vererr, vcode) = run_jll(bin_cmd, ["--version"])
   ev["spirv_tools"] = Dict("spirv_val" => Dict("path" => bin_path, "sha256" => sha256sum(bin_path)),
                            "version_output" => ver)
   check("spirv-val runs", vcode == 0, ver)
 
   # --- external validation layer (built for this probe, see README) -------------
   vvl = Dict{String, Any}()
+  provenance = nothing
   lp = get(ENV, "VK_LAYER_PATH", nothing)
   if !isnothing(lp) && isdir(lp)
     for f in sort(readdir(lp))
       endswith(f, ".json") || continue
-      d = json_read(joinpath(lp, f))
-      lay = get(d, "layer", nothing)
-      for l in (isnothing(lay) ? Any[] : (lay isa Dict ? [lay] : lay))
-        lib = get(l, "library_path", nothing)
+      for (name, flds) in manifest_entries(joinpath(lp, f), LAYER_SELECTOR)
+        lib = flds["library_path"]
         full = isnothing(lib) ? nothing : resolve_lib(lib)
-        vvl[get(l, "name", f)] = Dict("manifest" => joinpath(lp, f), "library" => full,
-                                      "library_sha256" => isnothing(full) ? nothing : sha256sum(full))
+        vvl[name] = Dict("manifest" => joinpath(lp, f), "library" => full,
+                         "api_version" => flds["api_version"],
+                         "library_sha256" => isnothing(full) ? nothing : sha256sum(full))
       end
     end
+    prov_file = joinpath(lp, "PROVENANCE.txt")
+    isfile(prov_file) && (provenance = Dict("file" => prov_file, "contents" => chomp(read(prov_file, String))))
   end
   ev["validation_layer_external"] = vvl
+  ev["validation_layer_provenance"] = provenance
   check("KHRONOS validation layer discoverable through wrapper",
         "VK_LAYER_KHRONOS_validation" in instance_layers(),
         "instance layers: " * join(instance_layers(), ", "))
 
   ev["instance_extensions"] = instance_extensions()
+  check("VK_EXT_debug_utils available (required with validation)",
+        "VK_EXT_debug_utils" in instance_extensions(), "debug utils ext")
+
+  # --- severity regression + sync-validation instance -------------------------
+  # Requires the layer + messenger actually enabled; make_instance errors
+  # instead of silently downgrading, so reaching this line proves the gate.
+  inst, msg, layers_used = make_instance(; validation = true, sync_validation = true)
+  check("validation layer enabled when requested (no silent downgrade)",
+        layers_used == [ProbeCommon.LAYER_VALIDATION], "enabled=$(layers_used)")
+  check("synchronization-validation instance created (VkValidationFeaturesEXT pNext)",
+        true, "VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION requested; VVL behaviorally confirmed by the barrier checks in p20/p30 evidence")
+  sev = synthetic_severity_regression(inst)
+  ev["severity_regression"] = sev
+  ev["severity_bits"] = Dict("verbose" => ProbeCommon.SEV_VERBOSE, "info" => ProbeCommon.SEV_INFO,
+                             "warning" => ProbeCommon.SEV_WARNING, "error" => ProbeCommon.SEV_ERROR)
+  release(msg)
+  release(inst)
+  GC.gc()
 
   npass, nfail = count(x -> x[2], CHECKS), count(x -> !x[2], CHECKS)
   ev["summary"] = Dict("pass" => npass, "fail" => nfail)

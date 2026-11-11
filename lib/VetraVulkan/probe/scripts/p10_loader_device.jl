@@ -13,13 +13,15 @@
 # Self-checks: loader dlopens, >=1 device, selected device has a
 # graphics+compute queue family, format supported, layer present iff env set.
 using Vulkan
-import Vulkan: QUEUE_GRAPHICS_BIT, QUEUE_COMPUTE_BIT, FORMAT_R8G8B8A8_UNORM,
-               FORMAT_FEATURE_COLOR_ATTACHMENT_BIT, FORMAT_FEATURE_TRANSFER_SRC_BIT, FORMAT_FEATURE_TRANSFER_DST_BIT
+import Vulkan: QUEUE_GRAPHICS_BIT, QUEUE_COMPUTE_BIT, QUEUE_TRANSFER_BIT, FORMAT_R8G8B8A8_UNORM,
+               FORMAT_FEATURE_COLOR_ATTACHMENT_BIT, FORMAT_FEATURE_TRANSFER_SRC_BIT, FORMAT_FEATURE_TRANSFER_DST_BIT,
+               MEMORY_PROPERTY_DEVICE_LOCAL_BIT, MEMORY_PROPERTY_HOST_VISIBLE_BIT, MEMORY_PROPERTY_HOST_COHERENT_BIT
 using Libdl
 include(joinpath(@__DIR__, "probe_common.jl"))
 using .ProbeCommon: check, write_evidence, reset_checks, make_instance, physical_devices,
-                    device_props, pick_device, supported_features, queue_family, memory_index,
-                    instance_layers, instance_extensions, CHECKS
+                    device_props, pick_device, query_supported_features, queue_family, memory_index,
+                    instance_layers, instance_extensions, release, refcount_ok,
+                    validation_clean, validation_evidence, validation_errors, validation_warnings, CHECKS
 
 const PROBE_ROOT = dirname(@__DIR__)
 const EVIDENCE = joinpath(PROBE_ROOT, "evidence")
@@ -70,8 +72,8 @@ function main()
                         "all_extensions" => instance_extensions(),
                         "validation_layer_requested" => true,
                         "validation_layer_enabled" => ("VK_LAYER_KHRONOS_validation" in layers_used))
-  check("validation layer enabled when requested",
-        ("VK_LAYER_KHRONOS_validation" in layers_used) == ("VK_LAYER_KHRONOS_validation" in instance_layers()),
+  check("validation layer enabled when requested (make_instance refuses to downgrade)",
+        layers_used == ["VK_LAYER_KHRONOS_validation"],
         "enabled=$(layers_used)")
 
   # --- devices ------------------------------------------------------------------
@@ -91,21 +93,21 @@ function main()
       qfs[string(i - 1)] = Dict("flags" => Int(q.queue_flags),
                                 "count" => Int(q.queue_count),
                                 "timestamp_valid" => string(q.timestamp_valid_bits),
-                                "graphics" => (Int(q.queue_flags) & 0x1) != 0,
-                                "compute" => (Int(q.queue_flags) & 0x2) != 0,
-                                "transfer" => (Int(q.queue_flags) & 0x4) != 0)
+                                "graphics" => (Int(q.queue_flags) & Int(QUEUE_GRAPHICS_BIT)) != 0,
+                                "compute" => (Int(q.queue_flags) & Int(QUEUE_COMPUTE_BIT)) != 0,
+                                "transfer" => (Int(q.queue_flags) & Int(QUEUE_TRANSFER_BIT)) != 0)
     end
     d["queue_families"] = qfs
-    d["features"] = feature_table(supported_features(ph))
+    d["features"] = feature_table(query_supported_features(ph))
     # memory types
     mp = unwrap(Vulkan.get_physical_device_memory_properties(ph))
     mems = Dict{String, Any}()
     for i in 1:mp.memory_type_count
       mt = mp.memory_types[i]
       mems[string(i - 1)] = Dict("properties" => string(mt.property_flags),
-                                 "host_visible" => (Int(mt.property_flags) & 0x1) != 0,
-                                 "host_coherent" => (Int(mt.property_flags) & 0x2) != 0,
-                                 "device_local" => (Int(mt.property_flags) & 0x4) != 0)
+                                 "device_local" => (Int(mt.property_flags) & Int(MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) != 0,
+                                 "host_visible" => (Int(mt.property_flags) & Int(MEMORY_PROPERTY_HOST_VISIBLE_BIT)) != 0,
+                                 "host_coherent" => (Int(mt.property_flags) & Int(MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0)
     end
     d["memory_types"] = mems
     d["heaps"] = [Int(mp.memory_heaps[i].size) for i in 1:mp.memory_heap_count]
@@ -152,6 +154,16 @@ function main()
     check("selected device", false, "no candidate device found")
     ev["per_device_features"] = devices
   end
+
+  # --- deterministic cleanup (messenger stays alive through device cleanup) ----
+  release(msg)
+  GC.gc()
+  release(inst)
+  GC.gc()
+  check("refcount clean after release (no underflow)", refcount_ok(inst) && refcount_ok(msg), "")
+  ev["validation"] = validation_evidence()
+  check("no validation-layer ERROR/WARNING messages through cleanup + GC", validation_clean(),
+        "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings")
 
   npass, nfail = count(x -> x[2], CHECKS), count(x -> !x[2], CHECKS)
   ev["summary"] = Dict("pass" => npass, "fail" => nfail)

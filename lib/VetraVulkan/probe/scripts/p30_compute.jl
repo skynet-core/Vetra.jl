@@ -8,10 +8,15 @@
 # - SPIR-V validation of the exact emitted bytes: internal (SPIRV.jl,
 #   --target-env vulkan1.3) and external (spirv-val with an explicit
 #   --target-env, plus a recorded negative control at a lower environment)
-# - device creation with the minimal derived feature set (no wholesale
-#   upstream-harness feature requests)
-# - dispatch with runtime push constants, synchronization, byte-exact
-#   readback against an independently written reference
+# - device creation with the minimal feature set DERIVED from the compiled
+#   module's declared capabilities (verified against the safe feature query
+#   BEFORE device creation; no wholesale upstream-harness feature requests,
+#   no VariablePointers — the module does not declare that capability)
+# - a bounded GC stress of the safe feature query (owned Refs, no dangling
+#   pNext) that fails loudly on any drift
+# - dispatch with runtime push constants, explicit HOST<->SHADER memory
+#   barriers, synchronization validation enabled, byte-exact readback
+#   against an independently written reference
 # - a second dispatch with different input data over the same SPIR-V bytes
 #   (proves runtime, non-folded behavior) and a third with reduced n
 #   (sentinel check)
@@ -26,12 +31,16 @@ using Vulkan
 using Vulkan: Vk, VkCore, unwrap
 include(joinpath(@__DIR__, "probe_common.jl"))
 using .ProbeCommon: check, write_evidence, reset_checks, make_instance, pick_device, make_device,
-                    queue_family, bda_buffer, write_mem, read_mem, with_commands,
-                    supported_features, features_from_capabilities, validation_errors, validation_messages, CHECKS, run_capture
+                    queue_family, bda_buffer, write_mem, read_mem, with_commands, memory_barrier!,
+                    query_supported_features, features_from_capabilities, assert_features_supported,
+                    release, refcount_ok, validation_errors, validation_warnings,
+                    validation_messages, validation_clean, validation_evidence, run_capture, run_jll, CHECKS
 
 import Vulkan:
   SHADER_STAGE_COMPUTE_BIT, PIPELINE_BIND_POINT_COMPUTE,
   QUEUE_GRAPHICS_BIT, QUEUE_COMPUTE_BIT,
+  PIPELINE_STAGE_HOST_BIT, PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+  ACCESS_HOST_WRITE_BIT, ACCESS_HOST_READ_BIT, ACCESS_SHADER_READ_BIT, ACCESS_SHADER_WRITE_BIT,
   PushConstantRange, PipelineLayout, PipelineShaderStageCreateInfo, ComputePipelineCreateInfo
 
 const PROBE_ROOT = dirname(@__DIR__)
@@ -106,30 +115,44 @@ function float32_bytes(v::Vector{Float32})
   copy(reinterpret(UInt8, v))
 end
 
-"""Run a SPIRV-Tools binary over `code` written to a temp file; returns (stdout, stderr, code)."""
+"""Run a SPIRV-Tools binary over `code` written to a temp file; returns (stdout, stderr, code).
+The JLL artifact env is merged into the inherited environment (run_jll)."""
 function spirv_tool(tool, code, args::Vector{String})
-  bin = tool()
-  exec = getfield(bin, fieldnames(typeof(bin))[1])
+  jcmd = tool()
+  exec = getfield(jcmd, fieldnames(typeof(jcmd))[1])
   tmp = joinpath(tempdir(), "r040-$(abs(hash((exec, code))))$(length(code)).spv")
   open(tmp, "w") do io
     write(io, code)
   end
-  run_capture(setenv(Cmd(vcat(exec, args, [tmp])), bin.env))
+  run_jll(jcmd, vcat(args, [tmp]))
 end
 
 function main()
   reset_checks()
   ev = Dict{String, Any}()
 
-  inst, msg, layers_used = make_instance(; validation = true, api = v"1.3")
+  inst, msg, layers_used = make_instance(; validation = true, sync_validation = true, api = v"1.3")
+  check("validation layer actually enabled (no silent downgrade)", layers_used == ["VK_LAYER_KHRONOS_validation"], "enabled=$(layers_used)")
   ph, props = pick_device(inst; name_substring = "NVIDIA GeForce")
   ev["device"] = props.device_name
   ev["validation_layer"] = layers_used
+  ev["sync_validation_requested"] = true
   qi = queue_family(ph, QUEUE_GRAPHICS_BIT | QUEUE_COMPUTE_BIT)
+
+  # --- safe feature query + bounded GC stress (no retry, owned Refs) ---------
+  GC_STRESS = 50
+  sup = query_supported_features(ph; stress = GC_STRESS)
+  (base_bits, _n) = sup.gc_stress
+  ev["feature_query_gc_stress"] = Dict("iterations" => GC_STRESS + 1,
+                                       "stable" => true,
+                                       "bits" => Dict("shaderInt64" => base_bits[1], "variablePointers" => base_bits[2],
+                                                      "bufferDeviceAddress" => base_bits[3], "vulkanMemoryModel" => base_bits[4],
+                                                      "maintenance4" => base_bits[5]),
+                                       "note" => "re-queried after GC.gc() each iteration; drift would error loudly (dangling pNext)")
+  check("safe feature query stable under $(GC_STRESS)-iteration GC stress", true, "bits=$base_bits")
 
   # --- compile first (needs only the physical device) ---------------------------
   # (internal validation runs against vulkan1.3 by SPIRV.jl default)
-  sup = supported_features(ph)
   features = SPIRV.SupportedFeatures(ph, v"1.2", String[], sup.features2)
   source = @compute features = features assemble = true (compute_kernel)(::ProbePush::PushConstant, ::UInt32::Input{LocalInvocationIndex}, ::SPIRV.Vec3U::Input{WorkgroupId}, ::SPIRV.Vec3U::Input{WorkgroupSize}) options = SPIRV.ComputeExecutionOptions(local_size = (WORKGROUP, 1, 1))
   code = source.code
@@ -151,6 +174,8 @@ function main()
   capnames = [String(m.captures[1]) for m in (match(r"OpCapability\s+(\S+)", strip(l)) for l in dlines) if !isnothing(m)]
   exts = [String(m.captures[1]) for m in (match(r"OpExtension\s+\"(\S+)\"", strip(l)) for l in dlines) if !isnothing(m)]
   ev["spirv_declared"] = Dict("capabilities" => capnames, "extensions" => exts)
+  check("module does NOT declare VariablePointers (compiler availability != module requirement)",
+        !("VariablePointers" in capnames), "capabilities=$capnames")
 
   # external validation of the exact bytes with explicit target environments.
   # The emitted module's SPIR-V binary version (header word 1: major bits 23:16, minor bits 15:8).
@@ -165,20 +190,19 @@ function main()
   check("negative control: vulkan1.2 env rejected (module is SPIR-V $(spv_version))", c12 != 0, strip(e12))
 
   # --- device with the feature set DERIVED from the compiled module -------------
-  (f10, f11, f12) = features_from_capabilities(capnames)
-  # SPIRV.jl needs variable pointers for traced Julia code even when the module
-  # itself carries no VariablePointers capability.
-  push!(f11, :variable_pointers)
-  push!(f11, :variable_pointers_storage_buffer)   # VUID 01431: required with variablePointers
+  (f10, f11, f12, _f13caps) = features_from_capabilities(capnames)
   # The emitted module uses OpExecutionMode LocalSizeId, which requires the
-  # maintenance4 feature (VUID 06434); enable it when the device supports it.
+  # maintenance4 feature (VUID 06434). Required, not optional.
   f13 = Symbol[]
-  if sup.f13.maintenance4 != 0
-    push!(f13, :maintenance4)
-  end
+  push!(f13, :maintenance4)
+  # verify the known features against the SAFE query BEFORE device creation:
+  # an unsupported device fails loudly here, not inside vkCreateDevice.
+  assert_features_supported(sup; need10 = f10, need11 = f11, need12 = f12, need13 = f13)
+  check("all derived features supported by the device (verified before vkCreateDevice)", true,
+        "f10=$f10 f11=$f11 f12=$f12 f13=$f13")
   ev["device_features_derived"] = Dict("from_capabilities" => capnames,
                                        "f10" => collect(f10), "f11" => collect(f11), "f12" => collect(f12), "f13" => collect(f13))
-  dev = make_device(inst, ph; f10 = f10, f11 = f11, f12 = f12, f13 = f13, layers = layers_used, qi = qi)
+  dev = make_device(inst, ph; f10 = f10, f11 = f11, f12 = f12, f13 = f13, qi = qi)
 
   # --- buffers + pipeline ---------------------------------------------------------
   in_bytes = float32_bytes(make_input(5, N))
@@ -202,9 +226,13 @@ function main()
     pc_ptr = Base.unsafe_convert(Ptr{Cvoid}, pc_ref)
     GC.@preserve pc_ref shader pipeline layout begin
       with_commands(dev, qi, (cb) -> begin
+        # explicit device-side ordering: host-wrote the buffers, the shader reads them
+        memory_barrier!(cb, PIPELINE_STAGE_HOST_BIT, PIPELINE_STAGE_COMPUTE_SHADER_BIT, ACCESS_HOST_WRITE_BIT, ACCESS_SHADER_READ_BIT)
         Vulkan.cmd_bind_pipeline(cb, PIPELINE_BIND_POINT_COMPUTE, pipeline)
         Vulkan.cmd_push_constants(cb, layout, SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ProbePush), pc_ptr)
         Vulkan.cmd_dispatch(cb, groups, 1, 1)
+        # and the host reads the result after the shader wrote it
+        memory_barrier!(cb, PIPELINE_STAGE_COMPUTE_SHADER_BIT, PIPELINE_STAGE_HOST_BIT, ACCESS_SHADER_WRITE_BIT, ACCESS_HOST_READ_BIT)
         nothing
       end)
     end
@@ -245,23 +273,27 @@ function main()
   check("run3: runtime n=100 respected, elements beyond n untouched", m3 == 100 * 4 && sentinel_ok,
         "$m3/400 bytes + sentinel ok=$sentinel_ok")
 
-  # --- validation layer cleanliness ---------------------------------------------------
-  errs = validation_errors()
-  ev["validation"] = Dict("errors" => [m[3] for m in errs], "n_messages" => length(validation_messages()))
-  check("no validation-layer ERROR messages", isempty(errs), "errors=$(length(errs))")
+  # --- deterministic cleanup (messenger stays alive through destruction) -------------
+  release(pipeline)
+  release(shader)
+  release(layout)
+  release(out_res.memory)
+  release(out_res.buffer)
+  release(in_res.memory)
+  release(in_res.buffer)
+  release(dev)
+  GC.gc()
+  check("refcount clean after release (no underflow)", refcount_ok(dev) && refcount_ok(pipeline) && refcount_ok(inst), "")
 
-  # --- cleanup --------------------------------------------------------------------------
-  pipeline.destructor()
-  shader.destructor()
-  layout.destructor()
-  out_res.memory.destructor()
-  out_res.buffer.destructor()
-  in_res.memory.destructor()
-  in_res.buffer.destructor()
-  dev.destructor()
-  isnothing(msg) || msg.destructor()
-  inst.destructor()
-  ev["cleanup"] = "explicit .destructor() in reverse dependency order after queue_wait_idle"
+  # --- validation classification AFTER cleanup + GC -----------------------------------
+  ev["validation"] = validation_evidence()
+  check("no validation-layer ERROR/WARNING messages through cleanup + GC", validation_clean(),
+        "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings, $(length(validation_messages())) total")
+
+  release(msg)
+  release(inst)
+  GC.gc()
+  ev["cleanup"] = "Base.finalize in reverse dependency order; refcount underflow checked; validation classified after cleanup + GC"
 
   npass, nfail = count(x -> x[2], CHECKS), count(x -> !x[2], CHECKS)
   ev["summary"] = Dict("pass" => npass, "fail" => nfail)

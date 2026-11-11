@@ -1,0 +1,3 @@
+# The root .gitignore excludes Manifest.toml; this probe needs its pinned
+# Manifest committed for reproducible evidence (see README).
+!Manifest.toml

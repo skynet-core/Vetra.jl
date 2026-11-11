@@ -1,9 +1,15 @@
 {
   "summary": {
     "fail": 0,
-    "pass": 4
+    "pass": 5
   },
+  "sync_validation_requested": true,
   "checks": [
+    {
+      "name": "validation layer actually enabled (no silent downgrade)",
+      "ok": true,
+      "detail": "enabled=[\"VK_LAYER_KHRONOS_validation\"]"
+    },
     {
       "name": "upload/readback byte-exact vs hand-derived pattern",
       "ok": true,
@@ -15,14 +21,14 @@
       "detail": "first=UInt8[0xff, 0x00, 0xff, 0xff] last=UInt8[0xff, 0x00, 0xff, 0xff]"
     },
     {
-      "name": "no validation-layer ERROR messages",
-      "ok": true,
-      "detail": "errors=0"
-    },
-    {
-      "name": "destroyed device/image/buffer without error",
+      "name": "refcount clean after release (no underflow)",
       "ok": true,
       "detail": ""
+    },
+    {
+      "name": "no validation-layer ERROR/WARNING messages through cleanup + GC",
+      "ok": true,
+      "detail": "0 errors, 0 warnings, 69 total"
     }
   ],
   "device": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
@@ -49,9 +55,363 @@
   },
   "validation": {
     "errors": [],
-    "n_messages": 69
+    "n_messages": 69,
+    "info_verbose": [
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "linux_read_sorted_physical_devices:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Original order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] llvmpipe (LLVM 21.1.8, 256 bits)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] AMD Radeon Graphics (RADV RENOIR)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     Sorted order:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [0] NVIDIA GeForce RTX 3050 Ti Laptop GPU  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [1] AMD Radeon Graphics (RADV RENOIR)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           [2] llvmpipe (LLVM 21.1.8, 256 bits)  ",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Copying old device 0 into new device 0",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 1 into new device 1",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Copying old device 2 into new device 2",
+        "id": 1,
+        "severity": 1
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_virtio.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_gfxstream.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_intel.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_asahi.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_intel_hasvk.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Removing driver /usr/lib/x86_64-linux-gnu/libvulkan_nouveau.so due to not having any physical devices",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Inserted device layer \"VK_LAYER_KHRONOS_validation\" (/tmp/opencode/vvl/install/lib/libVkLayer_khronos_validation.so)",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "Failed to find vkGetDeviceProcAddr in layer \"/usr/lib/x86_64-linux-gnu/libVkLayer_MESA_device_select.so\"",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "vkCreateDevice layer callstack setup to:",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "   <Application>",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     ||",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "   <Loader>",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     ||",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "   VK_LAYER_KHRONOS_validation",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           Type: Explicit",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           Enabled By: By the Application",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           Manifest: /tmp/opencode/vvl/install/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "           Library:  /tmp/opencode/vvl/install/lib/libVkLayer_khronos_validation.so",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "     ||",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "   <Device>",
+        "id": 1,
+        "severity": 16
+      },
+      {
+        "message": "       Using \"NVIDIA GeForce RTX 3050 Ti Laptop GPU\" with driver: \"/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.615.71.09\"",
+        "id": 1,
+        "severity": 16
+      }
+    ],
+    "warnings": [],
+    "severity_bits": {
+      "error": 4096,
+      "warning": 256,
+      "verbose": 1,
+      "info": 16
+    }
   },
-  "cleanup": "explicit .destructor() in reverse dependency order after queue_wait_idle; no finalizer double-free at exit",
+  "cleanup": "Base.finalize in reverse dependency order; refcount underflow checked; validation classified after cleanup + GC",
   "validation_layer": [
     "VK_LAYER_KHRONOS_validation"
   ],
