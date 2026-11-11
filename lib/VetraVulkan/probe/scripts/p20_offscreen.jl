@@ -144,9 +144,13 @@ function main()
   check("sync validation ON: no-barrier WAW hazard flagged (WRITE_AFTER_WRITE)", waw_on >= 1, "waw=$waw_on")
   check("sync validation OFF (negative control): no WAW flagged", waw_off == 0, "waw=$waw_off")
 
-  # --- deterministic cleanup (reverse dependency order; buffer before memory where
-  #     practical; messenger stays alive through destruction so destruction-time
-  #     messages are still captured; runs on EVERY path incl. mid-probe errors) ----
+  # --- deterministic cleanup (runs on EVERY path incl. mid-probe errors) -------
+  # Capture lifetime, precisely: workload resources are released first (reverse
+  # dependency order, buffer before memory where practical) while the messenger
+  # is still alive, so destruction-time messages are captured; GC then runs
+  # (finalizers, still under the live messenger); the validation evidence is
+  # classified BEFORE the messenger and instance are released — after that the
+  # capture is closed. Nothing is released twice.
   finally
     if view !== nothing
       release(view)
@@ -158,21 +162,16 @@ function main()
       release(staging_mem)
     end
     dev !== nothing && release(dev)
+    GC.gc()
+    check("refcount clean after release (no underflow)", refcount_ok(dev) && refcount_ok(img) && refcount_ok(inst), "")
+    ev["validation"] = validation_evidence()
+    check("no validation-layer ERROR/WARNING messages through workload cleanup + GC", validation_clean(),
+          "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings, $(length(validation_messages())) total")
     msg !== nothing && release(msg)
     inst !== nothing && release(inst)
+    GC.gc()
   end
-  GC.gc()
-  check("refcount clean after release (no underflow)", refcount_ok(dev) && refcount_ok(img) && refcount_ok(inst), "")
-
-  # --- validation classification AFTER cleanup + GC ------------------------------
-  ev["validation"] = validation_evidence()
-  check("no validation-layer ERROR/WARNING messages through cleanup + GC", validation_clean(),
-        "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings, $(length(validation_messages())) total")
-
-  release(msg)
-  release(inst)
-  GC.gc()
-  ev["cleanup"] = "Base.finalize in reverse dependency order; refcount underflow checked; validation classified after cleanup + GC"
+  ev["cleanup"] = "Base.finalize in reverse dependency order; refcount underflow checked; GC + validation classification run while the messenger is still alive; messenger and instance released last, once"
 
   npass, nfail = count(x -> x[2], CHECKS), count(x -> !x[2], CHECKS)
   ev["summary"] = Dict("pass" => npass, "fail" => nfail)

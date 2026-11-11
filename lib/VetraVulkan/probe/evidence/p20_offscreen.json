@@ -40,7 +40,7 @@
       "detail": ""
     },
     {
-      "name": "no validation-layer ERROR/WARNING messages through cleanup + GC",
+      "name": "no validation-layer ERROR/WARNING messages through workload cleanup + GC",
       "ok": true,
       "detail": "0 errors, 0 warnings, 69 total"
     }
@@ -425,7 +425,7 @@
       "info": 16
     }
   },
-  "cleanup": "Base.finalize in reverse dependency order; refcount underflow checked; validation classified after cleanup + GC",
+  "cleanup": "Base.finalize in reverse dependency order; refcount underflow checked; GC + validation classification run while the messenger is still alive; messenger and instance released last, once",
   "validation_layer": [
     "VK_LAYER_KHRONOS_validation"
   ],

@@ -276,9 +276,13 @@ function main()
   check("run3: runtime n=100 respected, elements beyond n untouched", m3 == 100 * 4 && sentinel_ok,
         "$m3/400 bytes + sentinel ok=$sentinel_ok")
 
-  # --- deterministic cleanup (reverse dependency order; buffer before memory where
-  #     practical; messenger stays alive through destruction; runs on EVERY path
-  #     incl. mid-probe errors) -------------
+  # --- deterministic cleanup (runs on EVERY path incl. mid-probe errors) -------
+  # Capture lifetime, precisely: workload resources are released first (reverse
+  # dependency order, buffer before memory where practical) while the messenger
+  # is still alive, so destruction-time messages are captured; GC then runs
+  # (finalizers, still under the live messenger); the validation evidence is
+  # classified BEFORE the messenger and instance are released — after that the
+  # capture is closed. Nothing is released twice.
   finally
     pipeline !== nothing && release(pipeline)
     shader !== nothing && release(shader)
@@ -292,21 +296,17 @@ function main()
       release(in_res.memory)
     end
     dev !== nothing && release(dev)
+    GC.gc()
+    check("refcount clean after release (no underflow)", refcount_ok(dev) && refcount_ok(pipeline) && refcount_ok(inst), "")
+    ev["validation"] = validation_evidence()
+    check("no validation-layer ERROR/WARNING messages through workload cleanup + GC", validation_clean(),
+          "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings, $(length(validation_messages())) total")
     msg !== nothing && release(msg)
     inst !== nothing && release(inst)
+    GC.gc()
   end
-  GC.gc()
-  check("refcount clean after release (no underflow)", refcount_ok(dev) && refcount_ok(pipeline) && refcount_ok(inst), "")
+  ev["cleanup"] = "Base.finalize in reverse dependency order; refcount underflow checked; GC + validation classification run while the messenger is still alive; messenger and instance released last, once"
 
-  # --- validation classification AFTER cleanup + GC -----------------------------------
-  ev["validation"] = validation_evidence()
-  check("no validation-layer ERROR/WARNING messages through cleanup + GC", validation_clean(),
-        "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings, $(length(validation_messages())) total")
-
-  release(msg)
-  release(inst)
-  GC.gc()
-  ev["cleanup"] = "Base.finalize in reverse dependency order; refcount underflow checked; validation classified after cleanup + GC"
 
   npass, nfail = count(x -> x[2], CHECKS), count(x -> !x[2], CHECKS)
   ev["summary"] = Dict("pass" => npass, "fail" => nfail)

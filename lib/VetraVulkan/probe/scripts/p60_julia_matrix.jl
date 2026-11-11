@@ -18,7 +18,7 @@
 # Julia binaries are located through the juliaup installation
 # (\$JULIAUP_HOME, default ~/.julia/juliaup) — no host-specific paths.
 include(joinpath(@__DIR__, "probe_common.jl"))
-using .ProbeCommon: check, write_evidence, reset_checks, run_capture, tailshort, shorten, CHECKS
+using .ProbeCommon: check, write_evidence, reset_checks, run_capture, CHECKS
 using SPIRV
 
 const PROBE_ROOT = dirname(@__DIR__)
@@ -90,7 +90,7 @@ function main()
                             "develop" => get(r.parsed, "DEVELOP", ""),
                             "load" => get(r.parsed, "LOAD", ""),
                             "load_msg" => load_msg,
-                            "stderr_tail" => tailshort(r.stderr, 2000))
+                            "stderr_tail" => last(r.stderr, 2000))
   try
     rm(minwork; recursive = true, force = true)
   catch
@@ -98,7 +98,7 @@ function main()
   known_blocker = occursin("cached_return_type", load_msg) || occursin("cached_return_type", r.stderr)
   check("Julia 1.10.13: install ok, then pinned SPIRV source fails precompile with the known 1.11-only-Base-API diagnostic (the actual Julia-min blocker)",
         r.exit == 0 && get(r.parsed, "DEVELOP", "") == "ok" && get(r.parsed, "LOAD", "") == "failed" && known_blocker,
-        "exit=$(r.exit) develop=$(get(r.parsed, "DEVELOP", "")) load=$(get(r.parsed, "LOAD", "")); load_msg: $(tailshort(load_msg, 300))")
+        "exit=$(r.exit) develop=$(get(r.parsed, "DEVELOP", "")) load=$(get(r.parsed, "LOAD", "")); load_msg: $(first(load_msg, 300))")
 
   # --- Julia 1.10: foreign-manifest mechanics (labeled, separate from compat) ---
   fwork = mktempdir()
@@ -125,7 +125,7 @@ function main()
   ev["julia113"] = Dict("exit" => r.exit, "result" => get(r.parsed, "RESULT", "NO_OUTPUT"),
                         "detail" => get(r.parsed, "DETAIL", ""),
                         "versions" => get(r.parsed, "VERSIONS", ""),
-                        "stderr_tail" => tailshort(r.stderr, 2000))
+                        "stderr_tail" => last(r.stderr, 2000))
   try
     rm(lwork; recursive = true, force = true)
   catch

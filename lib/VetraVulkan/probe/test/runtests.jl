@@ -192,9 +192,10 @@ all_checks_pass(d) = d["summary"]["fail"] == 0 && d["summary"]["pass"] > 0 &&
 using Test
 include(joinpath(PROBE_ROOT, "scripts", "probe_common.jl"))
 using .ProbeCommon: SEV_VERBOSE, SEV_INFO, SEV_WARNING, SEV_ERROR, classify,
-    run_capture, run_jll, write_evidence, shorten, tailshort, manifest_source_dir,
+    run_capture, run_jll, write_evidence, manifest_source_dir,
     make_instance, physical_devices, pick_device, make_device, release, refcount,
-    refcount_ok, synthetic_severity_regression, plain_buffer, map_with, with_commands
+    refcount_ok, synthetic_severity_regression, plain_buffer, map_with, with_commands,
+    sync_hazard_control, validation_clean, validation_errors
 using Pkg
 
 @testset "R040 Vulkan probe" begin
@@ -257,27 +258,6 @@ end
   finally
     isfile(p) && rm(p)
   end
-end
-
-@testset "text helpers: char-safe shorten/tailshort" begin
-  @test shorten("abcdef", 3) == "abc"
-  @test shorten("ab", 3) == "ab"
-  @test shorten("", 5) == ""
-  @test tailshort("abcdef", 3) == "def"
-  @test tailshort("ab", 3) == "ab"
-  # multibyte content must not split codepoints or throw
-  u = "x\u2014y\U0001F600z"
-  @test shorten(u, length(u)) == u
-  @test tailshort(u, 1) == "z"
-  @test shorten(u, 2) == "x\u2014"
-end
-
-@testset "occursin argument order (this build: pattern FIRST)" begin
-  # pins the build's occursin convention — every probe/test call relies on it;
-  # a port to a Julia with the opposite order must invert every call site
-  @test occursin("world", "hello world")
-  @test !occursin("hello world", "world")
-  @test occursin('w', "hello world")
 end
 
 @testset "manifest_source_dir: exact uuid+tree-hash identity" begin
@@ -372,8 +352,40 @@ end
       release(dev2)
     end
     @test refcount_ok(dev2)
-    # synthetic severity regression (positive per severity + negative
-    # controls) through vkSubmitDebugUtilsMessageEXT
+    # --- capture isolation: an earlier workload error must survive BOTH sync
+    #     controls (the controls' own instances share the global capture), the
+    #     ON control must still flag its hazard, and a FAILED control must
+    #     restore the caller's capture (no loss on the exception path) ---
+    empty!(ProbeCommon._CAP[])   # this sub-block owns the capture window
+    push!(ProbeCommon._CAP[], (SEV_ERROR, 2, "seeded-earlier-workload-error"))
+    @test !validation_clean()   # the seed is a visible error before any control
+    waw_on = sync_hazard_control(; sync_validation = true)
+    waw_off = sync_hazard_control(; sync_validation = false)
+    @test waw_on >= 1
+    @test waw_off == 0
+    @test length(ProbeCommon._CAP[]) == 1
+    @test occursin("seeded-earlier-workload-error", ProbeCommon._CAP[][1][3])
+    @test !validation_clean()   # the seed survived both controls
+    @eval ProbeCommon function memory_index(ph, bits::Integer, props)
+      error("injected-fault")
+    end
+    try
+      @test_throws ErrorException sync_hazard_control(; sync_validation = false)
+      @test length(ProbeCommon._CAP[]) == 1
+      @test occursin("seeded-earlier-workload-error", ProbeCommon._CAP[][1][3])
+    finally
+      @eval ProbeCommon function memory_index(ph, bits::Integer, props)
+        mp = unwrap(Vulkan.get_physical_device_memory_properties(ph))
+        for i in 1:mp.memory_type_count
+          ((Int(bits) >> (i - 1)) & 1 == 1) || continue
+          if mp.memory_types[i].property_flags & props == props
+            return i - 1
+          end
+        end
+        error("No device memory type for bits=$(bits) props=$(props)")
+      end
+    end
+    # the synthetic severity regression must also preserve the caller's capture
     sev = synthetic_severity_regression(inst)
     @test all(getindex.(values(sev), "received"))
     @test sev["error"]["raw_severity"] == SEV_ERROR
@@ -381,6 +393,9 @@ end
     @test !sev["info"]["in_error_bucket"]
     @test !sev["info"]["in_warning_bucket"]
     @test !sev["verbose"]["in_error_bucket"]
+    @test length(ProbeCommon._CAP[]) == 1
+    @test occursin("seeded-earlier-workload-error", ProbeCommon._CAP[][1][3])
+    empty!(ProbeCommon._CAP[])
     release(msg)
     release(inst)
     GC.gc()

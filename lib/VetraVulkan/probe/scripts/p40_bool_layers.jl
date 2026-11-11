@@ -28,8 +28,7 @@ using Vulkan
 using Vulkan: unwrap
 include(joinpath(@__DIR__, "probe_common.jl"))
 using .ProbeCommon: check, write_evidence, reset_checks, make_instance, pick_device,
-                    query_supported_features, run_capture, run_jll, release, refcount_ok,
-                    tailshort, CHECKS
+                    query_supported_features, run_capture, run_jll, release, refcount_ok, CHECKS
 
 const PROBE_ROOT = dirname(@__DIR__)
 const EVIDENCE = joinpath(PROBE_ROOT, "evidence")
@@ -138,7 +137,7 @@ function main()
     r = run_child(spv_path, inh, osz, lay, exp)
     results[name] = r
     tail = r.stderr
-    length(tail) > 2000 && (tail = tailshort(tail, 2000))
+    length(tail) > 2000 && (tail = last(tail, 2000))
     ev[name] = Dict("out_size" => osz, "layer" => lay == 1, "expected" => exp,
                     "child_exit" => r.exit,
                     "layer_enabled" => get(r.parsed, "LAYER_ENABLED", ""),

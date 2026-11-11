@@ -232,8 +232,24 @@ R010 backends must adopt the same release discipline (and the
   extension, no name needed" explanation was wrong.
 - **"Stripped Julia build" host-quirk list**: most of those items are
   standard Julia API semantics, not host bugs, and the list has been
-  removed. Only genuinely host-specific facts remain in "Note for running
-  on this host" (registry snapshot; two verified parser defects).
+  removed. The second round's "verified parser defects" and "occursin
+  argument order" claims are **retracted**: those tests used invalid syntax
+  (e.g. bare `throw e`) or misread standard Julia — `occursin(pattern,
+  haystack)` is the stock order the probe already uses, string indexing is
+  byte-based by design, and stdlib `first(s, n)`/`last(s, n)` handle
+  truncation. The only host-specific fact is in "Note for running on this
+  host" (the registry snapshot).
+- **Capture isolation (third correction)**: the second round's
+  `sync_hazard_control` erased the caller's validation capture
+  (`empty!(_CAP[])`), so a seeded workload error vanished after the control
+  ran (false "clean"). Both capture-clearing helpers
+  (`sync_hazard_control`, `synthetic_severity_regression`) now save the
+  caller's capture and restore it in `finally`, even on failure; the
+  control's hazard count is taken from its own window and returned, so the
+  intentional WAW error stays in the control's evidence (the returned count,
+  `sync_validation_control` in p20), never in the workload status. A
+  seeded-capture regression in `test/runtests.jl` pins survival through
+  both controls and through a fault-injected control failure.
 
 ## Note for running on this host
 
@@ -241,27 +257,6 @@ R010 backends must adopt the same release discipline (and the
   name-based `Pkg.add` (or uuid+rev specs) fail. The probe pins SPIRV as a git
   source in the committed Manifest; p60's 1.10 cell resolves it through a
   `Pkg.develop` path dependency (bypasses the julia-compat resolver).
-
-Two parser defects in this Julia channel build (verified on 1.10.13 and
-1.11.9 with minimal reproductions; they shaped the probe's error handling):
-
-- `throw e` inside a `catch e` block is a **ParseError** (even with preceding
-  statements). Use a catch **without** a binding + `rethrow()`.
-- One-line `try f() catch <stmt> end` (no binding) is a **ParseError**
-  ("a variable name is expected after catch"). Use multi-line catch or a
-  binding.
-
-One string-handling difference: string **indexing is byte-based** while
-`length`/`first`/`last` are character-based — `u[3]` on
-`"x\u2014y\U0001F600z"` is byte 3 (mid-em-dash → `StringIndexError`), and
-`u[5]` returns `'y'`, not the 5th character. The probe's char-safe
-`shorten`/`tailshort` helpers therefore build via `collect`, and
-`test/runtests.jl` pins this with multibyte cases.
-
-And one semantic difference that inverts every call site if violated:
-`occursin` takes **(pattern, haystack)** in this build —
-`occursin("world", "hello world")` → true. All probe/test code is written
-to that order and `test/runtests.jl` pins it with a regression test.
 
 ## Platform scope — what was executed vs what is static
 

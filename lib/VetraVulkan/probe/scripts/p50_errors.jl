@@ -21,7 +21,7 @@
 # Each scenario runs in a child Julia process (scripts/p50_child.jl) so a
 # failure is captured as structured output, not a probe crash.
 include(joinpath(@__DIR__, "probe_common.jl"))
-using .ProbeCommon: check, write_evidence, reset_checks, run_capture, tailshort, CHECKS
+using .ProbeCommon: check, write_evidence, reset_checks, run_capture, CHECKS
 
 const PROBE_ROOT = dirname(@__DIR__)
 const EVIDENCE = joinpath(PROBE_ROOT, "evidence")
@@ -39,7 +39,7 @@ function run_child(mode, env::Vector{Pair{String,String}}, extra::Vector{String}
     !isnothing(m) && (parsed[m.captures[1]] = isnothing(m.captures[2]) ? "" : m.captures[2])
   end
   tail = err
-  length(tail) > 2000 && (tail = tailshort(tail, 2000))
+  length(tail) > 2000 && (tail = last(tail, 2000))
   (parsed = parsed, stderr = tail, stderr_full = err, exit = code)
 end
 

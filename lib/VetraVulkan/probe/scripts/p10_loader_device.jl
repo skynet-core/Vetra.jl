@@ -158,16 +158,19 @@ function main()
     ev["per_device_features"] = devices
   end
 
-  # --- deterministic cleanup (messenger stays alive through device cleanup) ----
+  # --- deterministic cleanup (runs on EVERY path) -------------------------------
+  # GC + validation classification happen while the messenger is still alive;
+  # messenger and instance are released last, once.
   finally
+    GC.gc()
+    check("refcount clean after release (no underflow)", refcount_ok(inst) && refcount_ok(msg), "")
+    ev["validation"] = validation_evidence()
+    check("no validation-layer ERROR/WARNING messages through cleanup + GC", validation_clean(),
+          "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings")
     msg !== nothing && release(msg)
     inst !== nothing && release(inst)
+    GC.gc()
   end
-  GC.gc()
-  check("refcount clean after release (no underflow)", refcount_ok(inst) && refcount_ok(msg), "")
-  ev["validation"] = validation_evidence()
-  check("no validation-layer ERROR/WARNING messages through cleanup + GC", validation_clean(),
-        "$(length(validation_errors())) errors, $(length(validation_warnings())) warnings")
 
   npass, nfail = count(x -> x[2], CHECKS), count(x -> !x[2], CHECKS)
   ev["summary"] = Dict("pass" => npass, "fail" => nfail)

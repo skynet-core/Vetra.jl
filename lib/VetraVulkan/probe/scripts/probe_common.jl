@@ -134,26 +134,34 @@ correctly (positive + negative controls). Requires an instance with the
 debug-utils extension and a live messenger. Records checks."""
 function synthetic_severity_regression(inst)
   res = Dict{String, Any}()
-  for (name, sev) in (("verbose", DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT),
-                      ("info", DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT),
-                      ("warning", DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT),
-                      ("error", DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT))
-    empty!(_CAP[])
-    data = Vulkan._DebugUtilsMessengerCallbackDataEXT(9001, "synthetic-sev-$name", String[], String[], String[]; message_id_name = "R040_SYN")
-    GC.@preserve data begin
-      Vulkan._submit_debug_utils_message_ext(inst, sev, DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT, data)
+  # the per-severity window is owned by this regression, but the caller's
+  # capture is preserved (restored in the finally, even on failure)
+  saved = copy(_CAP[])
+  empty!(_CAP[])
+  try
+    for (name, sev) in (("verbose", DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT),
+                        ("info", DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT),
+                        ("warning", DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT),
+                        ("error", DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT))
+      empty!(_CAP[])
+      data = Vulkan._DebugUtilsMessengerCallbackDataEXT(9001, "synthetic-sev-$name", String[], String[], String[]; message_id_name = "R040_SYN")
+      GC.@preserve data begin
+        Vulkan._submit_debug_utils_message_ext(inst, sev, DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT, data)
+      end
+      got = _CAP[]
+      received = length(got) == 1 && got[1][3] == "synthetic-sev-$name" && got[1][1] == Int(sev.val)
+      in_err = !isempty(validation_errors())
+      in_warn = !isempty(validation_warnings())
+      res[name] = Dict("received" => received, "raw_severity" => Int(sev.val), "in_error_bucket" => in_err, "in_warning_bucket" => in_warn)
+      empty!(_CAP[])
     end
-    got = _CAP[]
-    received = length(got) == 1 && got[1][3] == "synthetic-sev-$name" && got[1][1] == Int(sev.val)
-    in_err = !isempty(validation_errors())
-    in_warn = !isempty(validation_warnings())
-    res[name] = Dict("received" => received, "raw_severity" => Int(sev.val), "in_error_bucket" => in_err, "in_warning_bucket" => in_warn)
-    empty!(_CAP[])
+    check("synthetic regression: VERBOSE captured with raw value $SEV_VERBOSE", res["verbose"]["received"] && res["verbose"]["in_error_bucket"] === false && res["verbose"]["in_warning_bucket"] === false)
+    check("synthetic regression: INFO captured with raw value $SEV_INFO", res["info"]["received"] && res["info"]["in_error_bucket"] === false && res["info"]["in_warning_bucket"] === false)
+    check("synthetic regression: WARNING captured with raw value $SEV_WARNING", res["warning"]["received"] && res["warning"]["in_warning_bucket"] && res["warning"]["in_error_bucket"] === false)
+    check("synthetic regression: ERROR captured with raw value $SEV_ERROR", res["error"]["received"] && res["error"]["in_error_bucket"])
+  finally
+    _CAP[] = saved
   end
-  check("synthetic regression: VERBOSE captured with raw value $SEV_VERBOSE", res["verbose"]["received"] && res["verbose"]["in_error_bucket"] === false && res["verbose"]["in_warning_bucket"] === false)
-  check("synthetic regression: INFO captured with raw value $SEV_INFO", res["info"]["received"] && res["info"]["in_error_bucket"] === false && res["info"]["in_warning_bucket"] === false)
-  check("synthetic regression: WARNING captured with raw value $SEV_WARNING", res["warning"]["received"] && res["warning"]["in_warning_bucket"] && res["warning"]["in_error_bucket"] === false)
-  check("synthetic regression: ERROR captured with raw value $SEV_ERROR", res["error"]["received"] && res["error"]["in_error_bucket"])
   res
 end
 
@@ -180,19 +188,6 @@ function jesc(s::AbstractString)
   join(parts)
 end
 
-"""Char-safe prefix: the first `n` characters, or the whole string if shorter.
-Built via `collect` because this build's string indexing is BYTE-based while
-`length` is character-based — direct `s[1:n]` throws on multibyte content."""
-function shorten(s::AbstractString, n)
-  cs = collect(s)
-  length(cs) > n ? String(cs[1:n]) : s
-end
-
-"""Char-safe suffix: the last `n` characters, or the whole string if shorter."""
-function tailshort(s::AbstractString, n)
-  cs = collect(s)
-  length(cs) > n ? String(cs[length(cs) - n + 1 : end]) : s
-end
 
 function jval(x, ind)
   pad = " "^(2 * (ind + 1))
@@ -621,13 +616,16 @@ end
 """Bounded synchronization-validation control (positive + negative).
 Two `vkCmdFillBuffer` writes to the same range in ONE command buffer with no
 barrier between them — a genuine WRITE_AFTER_WRITE hazard. Runs on its own
-instance/device (so the probe's capture window is not polluted) and counts
-WRITE_AFTER_WRITE validation errors in an isolated capture window:
-sync validation ON must flag it, OFF (negative control) must not. This proves
-the feature is actually active, not merely requested. Returns the WAW count."""
+instance/device, but that instance shares the global `_CAP` with the
+caller's workload: the caller's capture is saved up front and restored in
+the finally (even on failure), so the control's intentional hazard errors
+never erase or contaminate the workload's validation status. The count is
+taken from the control's own window before the restore. Returns the number
+of WRITE_AFTER_WRITE errors seen."""
 function sync_hazard_control(; sync_validation)
-  inst = nothing; msg = nothing; dev = nothing; r = nothing
+  saved = copy(_CAP[])
   empty!(_CAP[])
+  inst = nothing; msg = nothing; dev = nothing; r = nothing; waw = 0
   try
     (inst, msg, _layers) = make_instance(; validation = true, sync_validation = sync_validation)
     ph, _p = pick_device(inst; name_substring = "NVIDIA GeForce")
@@ -639,21 +637,23 @@ function sync_hazard_control(; sync_validation)
       Vulkan.cmd_fill_buffer(cb, r.buffer, 0, 256, UInt32(2))
       nothing
     end)
-    # buffer before memory; messenger stays alive through device destruction
-    release(r.buffer)
-    release(r.memory)
-    release(dev)
   finally
-    dev !== nothing && release(dev)
+    # release exactly once, on every path: buffer before memory, then device,
+    # then the messenger (still alive through destruction so destruction-time
+    # messages are captured), then the instance; GC runs before the caller's
+    # capture is restored
     if r !== nothing
       release(r.buffer)
       release(r.memory)
     end
+    dev !== nothing && release(dev)
     msg !== nothing && release(msg)
     inst !== nothing && release(inst)
     GC.gc()
+    waw = count(m -> occursin("WRITE_AFTER_WRITE", m[3]), validation_errors())
+    _CAP[] = saved
   end
-  count(m -> occursin("WRITE_AFTER_WRITE", m[3]), validation_errors())
+  waw
 end
 
 # ---------------------------------------------------------------------------
