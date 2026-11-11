@@ -1,0 +1,64 @@
+{
+  "summary": {
+    "fail": 0,
+    "pass": 4
+  },
+  "checks": [
+    {
+      "name": "upload/readback byte-exact vs hand-derived pattern",
+      "ok": true,
+      "detail": "8192/8192 bytes exact"
+    },
+    {
+      "name": "clear/readback byte-exact vs hand-derived clear value",
+      "ok": true,
+      "detail": "first=UInt8[0xff, 0x00, 0xff, 0xff] last=UInt8[0xff, 0x00, 0xff, 0xff]"
+    },
+    {
+      "name": "no validation-layer ERROR messages",
+      "ok": true,
+      "detail": "errors=0"
+    },
+    {
+      "name": "destroyed device/image/buffer without error",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "device": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+  "clear_readback": {
+    "last_pixel": [
+      255,
+      0,
+      255,
+      255
+    ],
+    "expected": [
+      255,
+      0,
+      255,
+      255
+    ],
+    "all_exact": true,
+    "first_pixel": [
+      255,
+      0,
+      255,
+      255
+    ]
+  },
+  "validation": {
+    "errors": [],
+    "n_messages": 69
+  },
+  "cleanup": "explicit .destructor() in reverse dependency order after queue_wait_idle; no finalizer double-free at exit",
+  "validation_layer": [
+    "VK_LAYER_KHRONOS_validation"
+  ],
+  "upload_readback": {
+    "all_exact": true,
+    "bytes_compared": 8192,
+    "pixels": 2048,
+    "bytes_exact": 8192
+  }
+}

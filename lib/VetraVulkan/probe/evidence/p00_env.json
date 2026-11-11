@@ -1,0 +1,688 @@
+{
+  "summary": {
+    "fail": 0,
+    "pass": 7
+  },
+  "julia": {
+    "bindir": "/home/vasyl/.julia/juliaup/julia-1.11.9+0.x64.linux.gnu/bin",
+    "version": "1.11.9"
+  },
+  "manifest": {
+    "manifest_format": "2.0",
+    "julia_version": "1.11.9",
+    "project_hash": "dc0301790c2a87f3092c25f495f106f226405a8b"
+  },
+  "packages": {
+    "ResultTypes": {
+      "source": "registry",
+      "uuid": "08a2b407-ddc3-586a-afd6-c784ad1fffe2",
+      "git_tree_sha1": "d5343c5511ad148434a5d0f9f055d1ce0b6104ba",
+      "version": "4.0.2"
+    },
+    "Pkg": {
+      "source": "registry",
+      "uuid": "44cfe95a-1eb2-52ea-b672-e2afdf69b78f",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "Accessors": {
+      "source": "registry",
+      "uuid": "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697",
+      "git_tree_sha1": "8c0bc12397dabf5d2dfc4b5763ec463854cc44d3",
+      "version": "0.1.46"
+    },
+    "SPIRV_Tools_jll": {
+      "source": "registry",
+      "uuid": "6ac6d60f-d740-5983-97d7-a4482c0689f4",
+      "git_tree_sha1": "2d29ceba32f6fb7762b2210a413e2614486482e6",
+      "version": "2026.4.0+0"
+    },
+    "StructEquality": {
+      "source": "registry",
+      "uuid": "6ec83bb0-ed9f-11e9-3b4c-2b04cb4e219c",
+      "git_tree_sha1": "192a9f1de3cfef80ab1a4ba7b150bb0e11ceedcf",
+      "version": "2.1.0"
+    },
+    "JuliaSyntax": {
+      "source": "registry",
+      "uuid": "70703baa-626e-46a2-a12c-08ffd08c73b4",
+      "git_tree_sha1": "0d4b3dab95018bcf3925204475693d9f09dc45b8",
+      "version": "1.0.2"
+    },
+    "Graphs": {
+      "source": "registry",
+      "uuid": "86223c79-3864-5bf0-83f7-82e725a168b6",
+      "git_tree_sha1": "dbb2b976f605b220dfe139d6db9f3859680da09e",
+      "version": "1.15.0"
+    },
+    "ConstructionBase": {
+      "source": "registry",
+      "uuid": "187b0558-2788-49d3-abe0-74a17ed4e7c9",
+      "git_tree_sha1": "b1bc10667320dd5367aff450a992c951ea38fbbc",
+      "version": "1.6.1"
+    },
+    "OrderedCollections": {
+      "source": "registry",
+      "uuid": "bac558e1-5e72-5ebc-8fee-abe8a469f55d",
+      "git_tree_sha1": "b079a6affebde167dad8ffe0d670b53917fbcb68",
+      "version": "2.0.3"
+    },
+    "DataStructures": {
+      "source": "registry",
+      "uuid": "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8",
+      "git_tree_sha1": "b0bc6d2cad1fed8b7fd59a1551a991cb3d2809e6",
+      "version": "0.19.6"
+    },
+    "Compat": {
+      "source": "registry",
+      "uuid": "34da2185-b29b-5c13-b0c7-acf172513d20",
+      "git_tree_sha1": "9d8a54ce4b17aa5bdce0ea5c34bc5e7c340d16ad",
+      "version": "4.18.1"
+    },
+    "Base64": {
+      "source": "registry",
+      "uuid": "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "CEnum": {
+      "source": "registry",
+      "uuid": "fa961155-64e5-5f13-b03f-caf6b980ea82",
+      "git_tree_sha1": "389ad5c84de1ae7cf0e28e381131c98ea87d54fc",
+      "version": "0.5.0"
+    },
+    "Vulkan": {
+      "source": "registry",
+      "uuid": "9f14b124-c50e-4008-a7d4-969b3a6cd68a",
+      "git_tree_sha1": "7c427c83e9f9656748df09954db68a4c9867ff10",
+      "version": "0.6.30"
+    },
+    "CompilerSupportLibraries_jll": {
+      "source": "registry",
+      "uuid": "e66e0078-7015-5450-92f7-15fbd957f2ae",
+      "git_tree_sha1": "",
+      "version": "1.1.1+0"
+    },
+    "Dictionaries": {
+      "source": "registry",
+      "uuid": "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4",
+      "git_tree_sha1": "a55766a9c8f66cf19ffcdbdb1444e249bb4ace33",
+      "version": "0.4.6"
+    },
+    "MLStyle": {
+      "source": "registry",
+      "uuid": "d8e11817-5142-5d16-987a-aa16d5891078",
+      "git_tree_sha1": "bc38dff0548128765760c79eb7388a4b37fae2c8",
+      "version": "0.4.17"
+    },
+    "Markdown": {
+      "source": "registry",
+      "uuid": "d6f4376e-aef5-505a-96c1-9c027394607a",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "Tar": {
+      "source": "registry",
+      "uuid": "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e",
+      "git_tree_sha1": "",
+      "version": "1.10.0"
+    },
+    "CompileTraces": {
+      "source": "registry",
+      "uuid": "92d184ee-bd0d-43d0-b768-a20943f3d1e3",
+      "git_tree_sha1": "a65abe96b2b7e69217868b9a40d6f1828118e5c8",
+      "version": "1.2.3"
+    },
+    "UUIDs": {
+      "source": "registry",
+      "uuid": "cf7118a7-6976-5b1a-9a39-7adc72f591a4",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "SHA": {
+      "source": "registry",
+      "uuid": "ea8e919c-243c-51af-8825-aaa63cd721ce",
+      "git_tree_sha1": "",
+      "version": "0.7.0"
+    },
+    "StyledStrings": {
+      "source": "registry",
+      "uuid": "f489334b-da3d-4c2e-b8f0-e476e12c162b",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "LinearAlgebra": {
+      "source": "registry",
+      "uuid": "37e2e46d-f89d-539d-b4ee-838fcccc9c8e",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "BitMasks": {
+      "source": "registry",
+      "uuid": "a3e06817-fd65-4797-8291-16f435bc2529",
+      "git_tree_sha1": "4751ad2b3b58362f1584ff07ddb9d13aed53ef7a",
+      "version": "0.1.9"
+    },
+    "ArgTools": {
+      "source": "registry",
+      "uuid": "0dad84c5-d112-42e6-8d28-ef12dabb789f",
+      "git_tree_sha1": "",
+      "version": "1.1.2"
+    },
+    "ForwardMethods": {
+      "source": "registry",
+      "uuid": "5fe2550f-d27e-4649-9aea-fdf9a83a1aa9",
+      "git_tree_sha1": "86b52d5f2b7329cb21d7258f35419d594d7908ef",
+      "version": "1.7.1"
+    },
+    "JLLWrappers": {
+      "source": "registry",
+      "uuid": "692b3bcd-3c85-4b1f-b108-f13ce0eb3210",
+      "git_tree_sha1": "7204148362dafe5fe6a273f855b8ccbe4df8173e",
+      "version": "1.8.0"
+    },
+    "LibGit2": {
+      "source": "registry",
+      "uuid": "76f85450-5226-5b5a-8eaa-529ad045b433",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "ArnoldiMethod": {
+      "source": "registry",
+      "uuid": "ec485272-7323-5ecc-a04f-4719b315124d",
+      "git_tree_sha1": "d57bd3762d308bded22c3b82d033bff85f6195c6",
+      "version": "0.4.0"
+    },
+    "Artifacts": {
+      "source": "registry",
+      "uuid": "56f22d72-fd6d-98f1-02f0-08ddc0907c33",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "Dates": {
+      "source": "registry",
+      "uuid": "ade2ca70-3891-5945-98fb-dc099432e06a",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "MbedTLS_jll": {
+      "source": "registry",
+      "uuid": "c8ffd9c3-330d-5841-b78e-0817d7145fa1",
+      "git_tree_sha1": "",
+      "version": "2.28.6+0"
+    },
+    "SciMLPublic": {
+      "source": "registry",
+      "uuid": "431bcebd-1456-4ced-9d72-93c2757fff0b",
+      "git_tree_sha1": "74685afb51732a464fbce79a72708f7c4203ceb7",
+      "version": "1.3.0"
+    },
+    "NetworkOptions": {
+      "source": "registry",
+      "uuid": "ca575930-c2e3-43a9-ace4-1e988b2c1908",
+      "git_tree_sha1": "",
+      "version": "1.2.0"
+    },
+    "Printf": {
+      "source": "registry",
+      "uuid": "de0858da-6303-5e67-8744-51eddeeeb8d7",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "nghttp2_jll": {
+      "source": "registry",
+      "uuid": "8e850ede-7688-5339-a07c-302acd2aaf8d",
+      "git_tree_sha1": "",
+      "version": "1.59.0+0"
+    },
+    "Vulkan_Headers_jll": {
+      "source": "registry",
+      "uuid": "8d446b21-f3ad-5576-a034-752265b9b6f9",
+      "git_tree_sha1": "a2bfa46393bce7f450ee949273f2ba310d889693",
+      "version": "1.4.321+0"
+    },
+    "Test": {
+      "source": "registry",
+      "uuid": "8dfed614-e22c-5e08-85e1-65c5234f0b40",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "Random": {
+      "source": "registry",
+      "uuid": "9a3f8284-a2c9-5f02-9a11-845980a1fd5c",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "Libdl": {
+      "source": "registry",
+      "uuid": "8f399da3-3557-5675-b5ff-fb832c97cbdb",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "Inflate": {
+      "source": "registry",
+      "uuid": "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9",
+      "git_tree_sha1": "d1b1b796e47d94588b3757fe84fbf65a5ec4a80d",
+      "version": "0.1.5"
+    },
+    "SimpleTraits": {
+      "source": "registry",
+      "uuid": "699a6c99-e7fa-54fc-8d76-47d257e15c1d",
+      "git_tree_sha1": "7ddb0b49c109481b046972c0e4ab02b2127d6a75",
+      "version": "0.9.6"
+    },
+    "Serialization": {
+      "source": "registry",
+      "uuid": "9e88b42a-f829-5b0c-bbe9-9e923198166b",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "PrecompileTools": {
+      "source": "registry",
+      "uuid": "aea7be01-6a6a-4083-8856-8a6e6704d82a",
+      "git_tree_sha1": "5aa36f7049a63a1528fe8f7c3f2113413ffd4e1f",
+      "version": "1.2.1"
+    },
+    "SuiteSparse_jll": {
+      "source": "registry",
+      "uuid": "bea87d4a-7f5b-5778-9afe-8cc45184846c",
+      "git_tree_sha1": "",
+      "version": "7.7.0+0"
+    },
+    "MozillaCACerts_jll": {
+      "source": "registry",
+      "uuid": "14a3606d-f60d-562e-9121-12d972cd8159",
+      "git_tree_sha1": "",
+      "version": "2023.12.12"
+    },
+    "libblastrampoline_jll": {
+      "source": "registry",
+      "uuid": "8e850b90-86db-534c-a0d3-1478176c7d93",
+      "git_tree_sha1": "",
+      "version": "5.11.0+0"
+    },
+    "IfElse": {
+      "source": "registry",
+      "uuid": "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173",
+      "git_tree_sha1": "debdd00ffef04665ccbb3e150747a77560e8fad1",
+      "version": "0.1.1"
+    },
+    "Static": {
+      "source": "registry",
+      "uuid": "aedffcd0-7271-4cad-89d0-dc628f76c6d3",
+      "git_tree_sha1": "474a5283ad435618090122872eea6a8165ea6bcf",
+      "version": "1.4.6"
+    },
+    "DocStringExtensions": {
+      "source": "registry",
+      "uuid": "ffbed154-4ef7-542d-bbb7-c09d3a79fcae",
+      "git_tree_sha1": "7442a5dfe1ebb773c29cc2962a8980f47221d76c",
+      "version": "0.9.5"
+    },
+    "Preferences": {
+      "source": "registry",
+      "uuid": "21216c6a-2e73-6563-6e65-726566657250",
+      "git_tree_sha1": "aef1987d90dcc2e2cbd919ad10b2d25bcce4f418",
+      "version": "1.6.1"
+    },
+    "StaticArrays": {
+      "source": "registry",
+      "uuid": "90137ffa-7385-5640-81b9-e52037218182",
+      "git_tree_sha1": "8a8a52f887f38d44014e24ee46b8a7311c625f6d",
+      "version": "1.9.24"
+    },
+    "LibCURL_jll": {
+      "source": "registry",
+      "uuid": "deac9b47-8bc7-5906-a0fe-35ac56dc84c0",
+      "git_tree_sha1": "",
+      "version": "8.6.0+0"
+    },
+    "Logging": {
+      "source": "registry",
+      "uuid": "56ddb016-857b-54e1-b83d-db4d58db5568",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "TOML": {
+      "source": "registry",
+      "uuid": "fa267f1f-6049-4f14-aa54-33bafae1ed76",
+      "git_tree_sha1": "",
+      "version": "1.0.3"
+    },
+    "Reexport": {
+      "source": "registry",
+      "uuid": "189a3867-3050-52da-a836-e630ba90ab69",
+      "git_tree_sha1": "45e428421666073eab6f2da5c9d310d99bb12f9b",
+      "version": "1.2.2"
+    },
+    "CommonWorldInvalidations": {
+      "source": "registry",
+      "uuid": "f70d9fcc-98c5-4d4a-abd7-e4cdeebd8ca8",
+      "git_tree_sha1": "7c4ea0adfb7238bf4678aa36325863fab6163f6f",
+      "version": "1.2.2"
+    },
+    "Downloads": {
+      "source": "registry",
+      "uuid": "f43a241f-c20a-4ad4-852c-f6b1247861c6",
+      "git_tree_sha1": "",
+      "version": "1.6.0"
+    },
+    "Indexing": {
+      "source": "registry",
+      "uuid": "313cdc1a-70c2-5d6a-ae34-0150d3930a38",
+      "git_tree_sha1": "ce1566720fd6b19ff3411404d4b977acd4814f9f",
+      "version": "1.1.1"
+    },
+    "LibSSH2_jll": {
+      "source": "registry",
+      "uuid": "29816b5a-b9ab-546f-933c-edad1886dfa8",
+      "git_tree_sha1": "",
+      "version": "1.11.0+1"
+    },
+    "StaticArraysCore": {
+      "source": "registry",
+      "uuid": "1e83bf80-4336-4d27-bf5d-d5a4f845583c",
+      "git_tree_sha1": "bf7e2d0d9ed9ac2a652fd598c0f784910cc759f2",
+      "version": "1.4.5"
+    },
+    "Statistics": {
+      "source": "registry",
+      "uuid": "10745b16-79ce-11e8-11f9-7d13ad32a3b2",
+      "git_tree_sha1": "e2b53ce13a53367e96601081e33d34746b571bad",
+      "version": "1.11.5"
+    },
+    "OpenBLAS_jll": {
+      "source": "registry",
+      "uuid": "4536629a-c528-5b80-bd46-f80d51c5b363",
+      "git_tree_sha1": "",
+      "version": "0.3.27+1"
+    },
+    "Tricks": {
+      "source": "registry",
+      "uuid": "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775",
+      "git_tree_sha1": "311349fd1c93a31f783f977a71e8b062a57d4101",
+      "version": "0.1.13"
+    },
+    "Zlib_jll": {
+      "source": "registry",
+      "uuid": "83775a58-1f1d-513f-b197-d71354ab007a",
+      "git_tree_sha1": "",
+      "version": "1.2.13+1"
+    },
+    "LibGit2_jll": {
+      "source": "registry",
+      "uuid": "e37daf67-58a4-590a-8e99-b0245dd2ffc5",
+      "git_tree_sha1": "",
+      "version": "1.7.2+0"
+    },
+    "FileWatching": {
+      "source": "registry",
+      "uuid": "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "MappedArrays": {
+      "source": "registry",
+      "uuid": "dbb5928d-eab1-5f90-85c2-b9b0edb7c900",
+      "git_tree_sha1": "0ee4497a4e80dbd29c058fcee6493f5219556f40",
+      "version": "0.4.3"
+    },
+    "VulkanCore": {
+      "source": "registry",
+      "uuid": "16167f82-ea26-5cba-b1de-ed6fd5e30a11",
+      "git_tree_sha1": "12c41714a3b71816d4b46b57a24f807b944f0a31",
+      "version": "1.3.1"
+    },
+    "InverseFunctions": {
+      "source": "registry",
+      "uuid": "3587e190-3f89-42d0-90ee-14403ec27112",
+      "git_tree_sha1": "5cc6ad3e2bfc75a11eed92632ee341d37f4a4536",
+      "version": "0.1.18"
+    },
+    "SnoopPrecompile": {
+      "source": "registry",
+      "uuid": "66db9d55-30c0-4569-8b51-7e840670fc0c",
+      "git_tree_sha1": "e760a70afdcd461cf01a575947738d359234665c",
+      "version": "1.0.3"
+    },
+    "LibCURL": {
+      "source": "registry",
+      "uuid": "b27032c2-a3e7-50c8-80cd-2d36dbcbfd21",
+      "git_tree_sha1": "",
+      "version": "0.6.4"
+    },
+    "SwapStreams": {
+      "source": "registry",
+      "uuid": "0b152c4a-7e29-418b-9258-223db38db9d9",
+      "git_tree_sha1": "fc9851f90ab58ae183a3946c83c0345dfc7987a7",
+      "version": "0.2.1"
+    },
+    "SparseArrays": {
+      "source": "registry",
+      "uuid": "2f01184e-e22b-5df5-ae63-d93ebab69eaf",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "Unicode": {
+      "source": "registry",
+      "uuid": "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "CompositionsBase": {
+      "source": "registry",
+      "uuid": "a33af91c-f02d-484b-be07-31d278c5ca2b",
+      "git_tree_sha1": "802bb88cd69dfd1509f6670416bd4434015693ad",
+      "version": "0.1.2"
+    },
+    "MacroTools": {
+      "source": "registry",
+      "uuid": "1914dd2f-81c6-5fcd-8719-6d5c9610ff09",
+      "git_tree_sha1": "1e0228a030642014fe5cfe68c2c0a818f9e3f522",
+      "version": "0.5.16"
+    },
+    "AbstractTrees": {
+      "source": "registry",
+      "uuid": "1520ce14-60c1-5f80-bbc7-55ef81b5835c",
+      "git_tree_sha1": "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177",
+      "version": "0.4.5"
+    },
+    "InteractiveUtils": {
+      "source": "registry",
+      "uuid": "b77e0a4c-d291-57a0-90e8-8db25a27a240",
+      "git_tree_sha1": "",
+      "version": "1.11.0"
+    },
+    "MacroUtilities": {
+      "source": "registry",
+      "uuid": "274a0f0b-05f4-4024-87ff-de4a5b524b4f",
+      "git_tree_sha1": "43b0ce42b9d5b2da037fc54c0d7bcdc24a20fab5",
+      "version": "1.18.1"
+    },
+    "p7zip_jll": {
+      "source": "registry",
+      "uuid": "3f19e933-33d8-53b3-aaab-bd5110c3b7a0",
+      "git_tree_sha1": "",
+      "version": "17.4.0+2"
+    },
+    "SPIRV": {
+      "git_rev": "218b33b21e5b23d7c3c34bb07f6c114723a5e193",
+      "source": "git",
+      "uuid": "84138a67-b342-4d33-8200-33cfcca52eb2",
+      "git_url": "https://github.com/serenity4/SPIRV.jl.git",
+      "git_tree_sha1": "6732b754aa8666c2b169abda3f198e453b7f9753",
+      "version": "0.6.11"
+    }
+  },
+  "checks": [
+    {
+      "name": "package resolved: SPIRV",
+      "ok": true,
+      "detail": "0.6.11"
+    },
+    {
+      "name": "package resolved: Vulkan",
+      "ok": true,
+      "detail": "0.6.30"
+    },
+    {
+      "name": "package resolved: VulkanCore",
+      "ok": true,
+      "detail": "1.3.1"
+    },
+    {
+      "name": "package resolved: SPIRV_Tools_jll",
+      "ok": true,
+      "detail": "2026.4.0+0"
+    },
+    {
+      "name": "SPIRV pinned to reviewed revision",
+      "ok": true,
+      "detail": "rev=218b33b21e5b23d7c3c34bb07f6c114723a5e193"
+    },
+    {
+      "name": "spirv-val runs",
+      "ok": true,
+      "detail": "SPIRV-Tools v2026.4 v2026.4-0-gef96ed76\nTargets:\n  SPIR-V 1.0\n  SPIR-V 1.1\n  SPIR-V 1.2\n  SPIR-V 1.3\n  SPIR-V 1.4\n  SPIR-V 1.5\n  SPIR-V 1.6\n  SPIR-V 1.2 (under OpenCL 2.2 Full Profile semantics)\n  SPIR-V 1.0 (under Vulkan 1.0 semantics)\n  SPIR-V 1.3 (under Vulkan 1.1 semantics)\n  SPIR-V 1.4 (under Vulkan 1.1 semantics)\n  SPIR-V 1.5 (under Vulkan 1.2 semantics)\n  SPIR-V 1.6 (under Vulkan 1.3 semantics) SPIR-V 1.6 (under Vulkan 1.4 semantics)"
+    },
+    {
+      "name": "KHRONOS validation layer discoverable through wrapper",
+      "ok": true,
+      "detail": "instance layers: VK_LAYER_MESA_device_select, VK_LAYER_NV_optimus, VK_LAYER_NV_present, VK_LAYER_MESA_anti_lag, VK_LAYER_KHRONOS_validation"
+    }
+  ],
+  "validation_layer_external": {
+    "VK_LAYER_KHRONOS_validation": {
+      "library_sha256": "5c77f94500f1ee60d4305037a6efe74f76d6a3348f47bdb5fe6d9b1449557cc7",
+      "manifest": "/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json",
+      "library": "/tmp/opencode/vvl/install/lib/libVkLayer_khronos_validation.so"
+    }
+  },
+  "spirv_tools": {
+    "spirv_val": {
+      "sha256": "9c2da31d6b16f0fd01cdb739e03d22fad31039e825d8c6b69250611676155299",
+      "path": "/home/vasyl/.julia/artifacts/320990bcba9ae21f030fb0d9eccb7ad9bc223084/bin/spirv-val"
+    },
+    "version_output": "SPIRV-Tools v2026.4 v2026.4-0-gef96ed76\nTargets:\n  SPIR-V 1.0\n  SPIR-V 1.1\n  SPIR-V 1.2\n  SPIR-V 1.3\n  SPIR-V 1.4\n  SPIR-V 1.5\n  SPIR-V 1.6\n  SPIR-V 1.2 (under OpenCL 2.2 Full Profile semantics)\n  SPIR-V 1.0 (under Vulkan 1.0 semantics)\n  SPIR-V 1.3 (under Vulkan 1.1 semantics)\n  SPIR-V 1.4 (under Vulkan 1.1 semantics)\n  SPIR-V 1.5 (under Vulkan 1.2 semantics)\n  SPIR-V 1.6 (under Vulkan 1.3 semantics) SPIR-V 1.6 (under Vulkan 1.4 semantics)"
+  },
+  "instance_extensions": [
+    "VK_KHR_device_group_creation",
+    "VK_KHR_display",
+    "VK_KHR_external_fence_capabilities",
+    "VK_KHR_external_memory_capabilities",
+    "VK_KHR_external_semaphore_capabilities",
+    "VK_KHR_get_display_properties2",
+    "VK_KHR_get_physical_device_properties2",
+    "VK_KHR_get_surface_capabilities2",
+    "VK_KHR_surface",
+    "VK_KHR_surface_maintenance1",
+    "VK_KHR_surface_protected_capabilities",
+    "VK_KHR_wayland_surface",
+    "VK_KHR_xcb_surface",
+    "VK_KHR_xlib_surface",
+    "VK_EXT_acquire_drm_display",
+    "VK_EXT_acquire_xlib_display",
+    "VK_EXT_debug_report",
+    "VK_EXT_debug_utils",
+    "VK_EXT_direct_mode_display",
+    "VK_EXT_display_surface_counter",
+    "VK_EXT_headless_surface",
+    "VK_EXT_surface_maintenance1",
+    "VK_EXT_swapchain_colorspace",
+    "VK_NV_display_stereo",
+    "VK_KHR_portability_enumeration",
+    "VK_LUNARG_direct_driver_loading",
+    "VK_EXT_layer_settings"
+  ],
+  "system_vulkan": {
+    "loader": {
+      "sha256": "def4af45e9e5784cf65eaaaa289530a5c73546b01015da4c0920ef0a144fe189",
+      "library": "/usr/lib/x86_64-linux-gnu/libvulkan.so.1.4.341"
+    },
+    "validation_layer_system": false,
+    "layers": {
+      "VK_LAYER_INTEL_nullhw": {
+        "kind": "explicit_layer.d",
+        "library_sha256": "e44b67b1eae10409b54b6ac720c2e28b0f7c5da07d49d6ec2445911064d62a1a",
+        "library_path": "libVkLayer_INTEL_nullhw.so",
+        "file": "VkLayer_INTEL_nullhw.json"
+      },
+      "VK_LAYER_MESA_screenshot": {
+        "kind": "explicit_layer.d",
+        "library_sha256": "cf5c4713c796d8958f3c02b4fbb4c02ecce5a9777d5c85199723fc43d81a4103",
+        "library_path": "libVkLayer_MESA_screenshot.so",
+        "file": "VkLayer_MESA_screenshot.json"
+      },
+      "VK_LAYER_MESA_overlay": {
+        "kind": "explicit_layer.d",
+        "library_sha256": "82960803fcc6f265516280f9f93bb09771be189192a5a6043472704145848c71",
+        "library_path": "libVkLayer_MESA_overlay.so",
+        "file": "VkLayer_MESA_overlay.json"
+      },
+      "VK_LAYER_MESA_anti_lag": {
+        "kind": "implicit_layer.d",
+        "library_sha256": "fcf8b509fd008f80633ae5afe9c6b5219d5c70e3dab2cd5f3102e7d095d4090e",
+        "library_path": "libVkLayer_MESA_anti_lag.so",
+        "file": "VkLayer_MESA_anti_lag.json"
+      },
+      "VK_LAYER_MESA_device_select": {
+        "kind": "implicit_layer.d",
+        "library_sha256": "de1880d4c750f871d3491d2e8d77f1ca13f31eaa5ba0784bd4dfca0fa7dc9531",
+        "library_path": "libVkLayer_MESA_device_select.so",
+        "file": "VkLayer_MESA_device_select.json"
+      }
+    },
+    "icds": {
+      "nouveau_icd.json": {
+        "library_sha256": "b3e87d2ededaf1c4aa95d58cda62cb30116f2e7aa6904c9d173b73a7a60ebe61",
+        "library_path": "libvulkan_nouveau.so",
+        "api_version": "1.4.335"
+      },
+      "intel_icd.json": {
+        "library_sha256": "42cf53b56a34c4e67440bccf2cf30afea65a96c1df0a2d061eeccda6e26a79f9",
+        "library_path": "libvulkan_intel.so",
+        "api_version": "1.4.335"
+      },
+      "gfxstream_vk_icd.json": {
+        "library_sha256": "5c8ef7a414066f6c9689edb166774be0a99bd28b76f81f41805f3a4190f81af4",
+        "library_path": "libvulkan_gfxstream.so",
+        "api_version": "1.1.335"
+      },
+      "asahi_icd.json": {
+        "library_sha256": "324902f0b19f8e0770e07a48273ac6cce8d22fbbc473ff2b2dd1e720f541b2be",
+        "library_path": "libvulkan_asahi.so",
+        "api_version": "1.4.335"
+      },
+      "virtio_icd.json": {
+        "library_sha256": "1e735ad7e0accd18a65a5c701534ee7208497f2f127cbf64fb54e22cec2dc924",
+        "library_path": "libvulkan_virtio.so",
+        "api_version": "1.4.335"
+      },
+      "lvp_icd.json": {
+        "library_sha256": "d9a8bc5d4b3ec0e065562d362541c2a4cb3f3d6208ac715f7ff1dcf01289d164",
+        "library_path": "libvulkan_lvp.so",
+        "api_version": "1.4.335"
+      },
+      "nvidia_icd.json": {
+        "library_sha256": "d48eb3be2b08a4b51b8b9d6f4996509b36764cc90d479aea3642f98749b632d7",
+        "library_path": "libGLX_nvidia.so.0",
+        "api_version": "1.4.351"
+      },
+      "radeon_icd.json": {
+        "library_sha256": "5f30ae2f9e7fbcb381d75b39983126b65c06fb32d7f4cbb7e49e70a750996cac",
+        "library_path": "libvulkan_radeon.so",
+        "api_version": "1.4.335"
+      },
+      "intel_hasvk_icd.json": {
+        "library_sha256": "94c1a9265ab8fe6d760d943f9720a4bc868749bced16512415f235b0c4e7429a",
+        "library_path": "libvulkan_intel_hasvk.so",
+        "api_version": "1.3.335"
+      }
+    }
+  },
+  "os": {
+    "arch": "x86_64",
+    "kernel": "Linux",
+    "hostname": "flowx13"
+  }
+}

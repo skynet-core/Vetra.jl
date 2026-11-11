@@ -1,0 +1,147 @@
+{
+  "checks": [
+    {
+      "name": "kernel emits a Bool-returning function (the upstream trigger shape)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "external spirv-val --target-env vulkan1.3 passes on the bool module",
+      "ok": true,
+      "detail": "exitcode=0"
+    },
+    {
+      "name": "negative control: vulkan1.2 env rejected (module is SPIR-V 1.6)",
+      "ok": true,
+      "detail": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics).\nexitcode=1"
+    },
+    {
+      "name": "no layer crash on Bool-returning shader (all 3 layer runs completed, exit 0)",
+      "ok": true,
+      "detail": "completed=4/4"
+    },
+    {
+      "name": "true_layer_4byte: bool readback byte-exact vs independent expectation",
+      "ok": true,
+      "detail": "01000000"
+    },
+    {
+      "name": "false_layer_4byte: bool readback byte-exact vs independent expectation",
+      "ok": true,
+      "detail": "00000000"
+    },
+    {
+      "name": "true_layer_1byte_upstream_size: bool readback byte-exact vs independent expectation",
+      "ok": true,
+      "detail": "01"
+    },
+    {
+      "name": "true_nolayer_4byte_control: bool readback byte-exact vs independent expectation",
+      "ok": true,
+      "detail": "01000000"
+    },
+    {
+      "name": "true_layer_4byte: independent expectation true(1) met",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "false_layer_4byte: independent expectation false(0) met",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no validation ERROR messages in any layer experiment",
+      "ok": true,
+      "detail": "errs=0,0,0"
+    },
+    {
+      "name": "upstream sizeof(Bool)=1 byte sizing: store accepted, first byte correct",
+      "ok": true,
+      "detail": "01"
+    }
+  ],
+  "true_layer_4byte": {
+    "out_size": 4,
+    "validation_warnings": 0,
+    "layer": true,
+    "pipeline_created": true,
+    "layer_enabled": "yes",
+    "result": "MATCH",
+    "expected": 1,
+    "readback_hex": "01000000",
+    "validation_errors": 0,
+    "child_exit": 0,
+    "child_completed": true,
+    "stderr_tail": "┌ Warning: Device: enabled_layers is long deprecated, will be ignored\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/device.jl:122\nexitcode=0\n"
+  },
+  "spirv_val_vulkan1_3": {
+    "exit": 0,
+    "stderr": "exitcode=0\n"
+  },
+  "device": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+  "spirv": {
+    "sha256": "UInt8[0xe6, 0xcc, 0x5d, 0x3b, 0x21, 0x02, 0xd4, 0xa4, 0x84, 0xb9, 0x9d, 0xb9, 0x7d, 0xde, 0x81, 0x89, 0x88, 0x8d, 0x1f, 0xc9, 0x5e, 0xcb, 0x3c, 0xbe, 0xc6, 0x8d, 0xd1, 0xac, 0x4d, 0x39, 0xee, 0x1d]",
+    "bytes": 916
+  },
+  "false_layer_4byte": {
+    "out_size": 4,
+    "validation_warnings": 0,
+    "layer": true,
+    "pipeline_created": true,
+    "layer_enabled": "yes",
+    "result": "MATCH",
+    "expected": 0,
+    "readback_hex": "00000000",
+    "validation_errors": 0,
+    "child_exit": 0,
+    "child_completed": true,
+    "stderr_tail": "┌ Warning: Device: enabled_layers is long deprecated, will be ignored\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/device.jl:122\nexitcode=0\n"
+  },
+  "summary": {
+    "fail": 0,
+    "pass": 12
+  },
+  "spirv_shape": {
+    "opstore_bool_aligned": "2",
+    "binary_version": "1.6",
+    "bool_returning_function": true
+  },
+  "spirv_val_vulkan1_2_negative_control": {
+    "exit": 1,
+    "stderr": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics).\nexitcode=1\n"
+  },
+  "finding": {
+    "reproduced_crash": false,
+    "upstream_comment": "Validation layers seem to crash when `Bool` is returned (SPIRV.jl test/execution/execute.jl)",
+    "crashed_experiments": []
+  },
+  "true_layer_1byte_upstream_size": {
+    "out_size": 1,
+    "validation_warnings": 0,
+    "layer": true,
+    "pipeline_created": true,
+    "layer_enabled": "yes",
+    "result": "MATCH",
+    "expected": 1,
+    "readback_hex": "01",
+    "validation_errors": 0,
+    "child_exit": 0,
+    "child_completed": true,
+    "stderr_tail": "┌ Warning: Device: enabled_layers is long deprecated, will be ignored\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/device.jl:122\nexitcode=0\n"
+  },
+  "true_nolayer_4byte_control": {
+    "out_size": 4,
+    "validation_warnings": 0,
+    "layer": false,
+    "pipeline_created": true,
+    "layer_enabled": "no (requested)",
+    "result": "MATCH",
+    "expected": 1,
+    "readback_hex": "01000000",
+    "validation_errors": 0,
+    "child_exit": 0,
+    "child_completed": true,
+    "stderr_tail": "exitcode=0\n"
+  }
+}

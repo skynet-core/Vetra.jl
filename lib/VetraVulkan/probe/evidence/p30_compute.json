@@ -1,0 +1,133 @@
+{
+  "checks": [
+    {
+      "name": "shader compiled and internally validated",
+      "ok": true,
+      "detail": "1992 bytes"
+    },
+    {
+      "name": "SPIR-V size is a multiple of 4",
+      "ok": true,
+      "detail": "1992"
+    },
+    {
+      "name": "emission deterministic (2nd compile identical bytes)",
+      "ok": true,
+      "detail": "sha256=UInt8[0x64, 0xbc, 0x57, 0x51, 0xe4, 0x24, 0x6f, 0xe5, 0xf8, 0x7e, 0xa8, 0xa3, 0x6f, 0xa2, 0xc4, 0xe8, 0x2a, 0x0a, 0x16, 0xeb, 0x13, 0x60, 0x1c, 0x3d, 0x99, 0x30, 0xbe, 0x3b, 0x15, 0x7a, 0xae, 0x0c]"
+    },
+    {
+      "name": "external spirv-val --target-env vulkan1.3 passes (minimal env for SPIR-V 1.6)",
+      "ok": true,
+      "detail": "exitcode=0"
+    },
+    {
+      "name": "negative control: vulkan1.2 env rejected (module is SPIR-V 1.6)",
+      "ok": true,
+      "detail": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics).\nexitcode=1"
+    },
+    {
+      "name": "run1: device result byte-exact vs independent reference",
+      "ok": true,
+      "detail": "512/512 bytes exact"
+    },
+    {
+      "name": "run2: different runtime data, same shader bytes, byte-exact",
+      "ok": true,
+      "detail": "512/512 bytes exact"
+    },
+    {
+      "name": "run2 differs from run1 (runtime inputs drove the computation)",
+      "ok": true,
+      "detail": "n_differing_bytes=264"
+    },
+    {
+      "name": "run3: runtime n=100 respected, elements beyond n untouched",
+      "ok": true,
+      "detail": "400/400 bytes + sentinel ok=true"
+    },
+    {
+      "name": "no validation-layer ERROR messages",
+      "ok": true,
+      "detail": "errors=0"
+    }
+  ],
+  "run1": {
+    "first_mismatch": null,
+    "iters": 5,
+    "bytes_exact": 512,
+    "n": 128
+  },
+  "spirv_val_vulkan1_3": {
+    "exit": 0,
+    "stderr": "exitcode=0\n"
+  },
+  "cleanup": "explicit .destructor() in reverse dependency order after queue_wait_idle",
+  "pipeline": "compute pipeline created from the emitted SPIR-V",
+  "device": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+  "run2": {
+    "n_differing_bytes_vs_run1": 264,
+    "first_mismatch": null,
+    "iters": 8,
+    "bytes_exact": 512,
+    "n": 128
+  },
+  "spirv": {
+    "internal_validation": "SPIRV.jl validate, --target-env vulkan1.3",
+    "sha256": "UInt8[0x64, 0xbc, 0x57, 0x51, 0xe4, 0x24, 0x6f, 0xe5, 0xf8, 0x7e, 0xa8, 0xa3, 0x6f, 0xa2, 0xc4, 0xe8, 0x2a, 0x0a, 0x16, 0xeb, 0x13, 0x60, 0x1c, 0x3d, 0x99, 0x30, 0xbe, 0x3b, 0x15, 0x7a, 0xae, 0x0c]",
+    "bytes": 1992,
+    "binary_version": "1.6"
+  },
+  "spirv_declared": {
+    "capabilities": [
+      "VulkanMemoryModel",
+      "Int64",
+      "PhysicalStorageBufferAddresses"
+    ],
+    "extensions": [
+      "SPV_KHR_physical_storage_buffer"
+    ]
+  },
+  "device_features_derived": {
+    "f12": [
+      "buffer_device_address",
+      "vulkan_memory_model"
+    ],
+    "f13": [
+      "maintenance4"
+    ],
+    "from_capabilities": [
+      "VulkanMemoryModel",
+      "Int64",
+      "PhysicalStorageBufferAddresses"
+    ],
+    "f11": [
+      "variable_pointers",
+      "variable_pointers_storage_buffer"
+    ],
+    "f10": [
+      "shader_int_64"
+    ]
+  },
+  "validation_layer": [
+    "VK_LAYER_KHRONOS_validation"
+  ],
+  "summary": {
+    "fail": 0,
+    "pass": 10
+  },
+  "validation": {
+    "errors": [],
+    "n_messages": 69
+  },
+  "spirv_val_vulkan1_2_negative_control": {
+    "exit": 1,
+    "stderr": "error: line 0: Invalid SPIR-V binary version 1.6 for target environment SPIR-V 1.5 (under Vulkan 1.2 semantics).\nexitcode=1\n"
+  },
+  "run3": {
+    "sentinel_rest_unchanged": true,
+    "first_mismatch": null,
+    "iters": 6,
+    "bytes_exact": 400,
+    "n": 100
+  }
+}

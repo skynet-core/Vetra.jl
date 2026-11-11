@@ -1,0 +1,87 @@
+{
+  "bogus_icd_file": "/tmp/r040-nonexistent-icd.json",
+  "summary": {
+    "fail": 0,
+    "pass": 7
+  },
+  "checks": [
+    {
+      "name": "no-device: meaningful error (loader fails instance creation with INCOMPATIBLE_DRIVER)",
+      "ok": true,
+      "detail": "VulkanError(\"failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58548 =# @dispatch nothing vkCreateInstance(create_info, allocator, pInstance)\", ERROR_INCOMPATIBLE_DRIVER)"
+    },
+    {
+      "name": "bogus device extension: meaningful Vulkan error (EXTENSION_NOT_PRESENT)",
+      "ok": true,
+      "detail": "VulkanError(\"failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58718 =# @dispatch instance(physical_device) vkCreateDevice(physical_device, create_info, allocator, pDevice)\", ERROR_EXTENSION_NOT_PRESENT)"
+    },
+    {
+      "name": "unsupported format: meaningful error naming the format/usage",
+      "ok": true,
+      "detail": "ErrorException(\"Format FORMAT_R4G4_UNORM_PACK8 with 2D/optimal/ImageUsageFlag(IMAGE_USAGE_TRANSFER_SRC_BIT | IMAGE_USAGE_TRANSFER_DST_BIT | IMAGE_USAGE_COLOR_ATTACHMENT_BIT) is not supported on this device: ERROR_FORMAT_NOT_SUPPORTED: failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58693 =# @dispatch instance(physical_device) vkGetPhysicalDeviceImageFormatProperties(physical_device, format, type, tiling, usage, flags, pImageFormatProperties)\")"
+    },
+    {
+      "name": "precompile without device, pref=false: succeeds, device workload skipped",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "precompile without device, pref=auto (default): succeeds, device failure caught",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "precompile without device, pref=true: fails with a clear no-driver message",
+      "ok": true,
+      "detail": "The following 1 direct dependency failed to precompile:\\n\\nVulkan \\n\\nFailed to precompile Vulkan [9f14b124-c50e-4008-a7d4-969b3a6cd68a] to \"/home/vasyl/.julia/compiled/v1.11/Vulkan/jl_5BFPBr\".\\n┌ Error: General (Loader Message): loader_get_json: Failed to open JSON file /tmp/r040-nonexistent-icd.json\\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\\n┌ Error: General (Loader Message): vkCreateInstance: Found no drivers!\\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\\n┌ Error: The precompilation of device functions failed unexpectedly. We encourage you to file an issue on https://github.com/JuliaGPU/Vulkan.jl including this logged message.\\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/precompile.jl:23\\nERROR: LoadError: ERROR_INCOMPATIBLE_DRIVER: failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58548 =# @dispatch nothing vkCreateInstance(create_info, allocator, pInstance)\\nStacktrace:\\n  [1] unwrap(r::ResultTypes.Result{Vulkan.Instance, Vulkan.VulkanError})\\n    @ ResultTypes ~/.julia/packages/ResultTypes/vS4cT/src/ResultTypes.jl:69\\n  [2] Vulkan.Instance(enabled_layer_names::Vector{Any}, enabled_extension_names::Vector{Any}; allocator::Ptr{Nothing}, next::Vulkan.DebugUtilsMessengerCreateInfoEXT, flags::Int64, application_info::Vulkan.ApplicationInfo)\\n    @ Vulkan ~/.julia/packages/Vulkan/12azN/generated/linux.jl:82152\\n  [3] Instance\\n    @ ~/.julia/packages/Vulkan/12azN/generated/linux.jl:82152 [inlined]\\n  [4] precompile_workload()\\n    @ Vulkan ~/.julia/packages/Vulkan/12azN/src/precompile_workload.jl:44\\n  [5] macro expansion\\n    @ ~/.julia/packages/Vulkan/12azN/src/precompile.jl:17 [inlined]\\n  [6] macro expansion\\n    @ ~/.julia/packages/PrecompileTools/L8A3n/src/workloads.jl:78 [inlined]\\n  [7] top-level scope\\n    @ ~/.julia/packages/Vulkan/12azN/src/precompile.jl:102\\n  [8] include(mod::Module, _path::String)\\n    @ Base ./Base.jl:562\\n  [9] include(x::String)\\n    @ Vulkan ~/.julia/packages/Vulkan/12azN/src/Vulkan.jl:6\\n [10] top-level scope\\n    @ ~/.julia/packages/Vulkan/12azN/src/Vulkan.jl:81\\n [11] include\\n    @ ./Base.jl:562 [inlined]\\n [12] include_package_for_output(pkg::Base.PkgId, input::String, depot_path::Vector{String}, dl_load_path::Vector{String}, load_path::Vector{String}, concrete_deps::Vector{Pair{Base.PkgId, UInt128}}, source::Nothing)\\n    @ Base ./loading.jl:2924\\n [13] top-level scope\\n    @ stdin:6\\nin expression starting at /home/vasyl/.julia/packages/Vulkan/12azN/src/precompile.jl:1\\nin expression starting at /home/vasyl/.julia/packages/Vulkan/12azN/src/Vulkan.jl:1\\nin expression starting at stdin:"
+    },
+    {
+      "name": "install/precompile does not silently require a device (auto and false succeed)",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "precompile_false": {
+    "workload_ran": false,
+    "precompile_msg": "",
+    "exit": 0,
+    "stderr_tail": "Precompiling Vulkan...\n  19786.6 ms  ✓ Vulkan\n  1 dependency successfully precompiled in 20 seconds. 46 already precompiled.\n  1 dependency precompiled but a different version is currently loaded. Restart julia to access the new version. Otherwise, loading dependents of this package may trigger further precompilation to work with the unexpected version.\nexitcode=0\n",
+    "precompile_ok": "yes"
+  },
+  "precompile_semantics": "Vulkan.jl 0.6.30 @compile_workload gates the device workload on preference PRECOMPILE_DEVICE_FUNCTIONS (default auto), set through the project's LocalPreferences.toml via Vulkan.set_preferences! (this Pkg has no set_preference; this Preferences version has no env-var override). auto: workload runs, its failure is caught+logged, precompile succeeds; false: workload skipped; true: failure rethrown, precompile fails.",
+  "bad_format": {
+    "error_msg": "ErrorException(\"Format FORMAT_R4G4_UNORM_PACK8 with 2D/optimal/ImageUsageFlag(IMAGE_USAGE_TRANSFER_SRC_BIT | IMAGE_USAGE_TRANSFER_DST_BIT | IMAGE_USAGE_COLOR_ATTACHMENT_BIT) is not supported on this device: ERROR_FORMAT_NOT_SUPPORTED: failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58693 =# @dispatch instance(physical_device) vkGetPhysicalDeviceImageFormatProperties(physical_device, format, type, tiling, usage, flags, pImageFormatProperties)\")",
+    "exit": 0,
+    "stderr_tail": "exitcode=0\n",
+    "error_caught": "yes"
+  },
+  "precompile_auto": {
+    "workload_ran": true,
+    "precompile_msg": "",
+    "exit": 0,
+    "stderr_tail": "Precompiling Vulkan...\nInfo Given Vulkan was explicitly requested, output will be shown live [0K\n[0K┌ Error: General (Loader Message): loader_get_json: Failed to open JSON file /tmp/r040-nonexistent-icd.json\n[0K└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\n[0K┌ Error: General (Loader Message): vkCreateInstance: Found no drivers!\n[0K└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\n  20506.3 ms  ✓ Vulkan\n  1 dependency successfully precompiled in 21 seconds. 46 already precompiled.\n  1 dependency had output during precompilation:\n┌ Vulkan\n│  [Output was shown above]\n└  \nPrecompiling Vulkan...\nInfo Given Vulkan was explicitly requested, output will be shown live [0K\n[0K┌ Error: General (Loader Message): loader_get_json: Failed to open JSON file /tmp/r040-nonexistent-icd.json\n[0K└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\n[0K┌ Error: General (Loader Message): vkCreateInstance: Found no drivers!\n[0K└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\n  20770.4 ms  ✓ Vulkan\n  1 dependency successfully precompiled in 21 seconds. 46 already precompiled.\n  1 dependency precompiled but a different version is currently loaded. Restart julia to access the new version. Otherwise, loading dependents of this package may trigger further precompilation to work with the unexpected version.\n  1 dependency had output during precompilation:\n┌ Vulkan\n│  [Output was shown above]\n└  \nexitcode=0\n",
+    "precompile_ok": "yes"
+  },
+  "bogus_ext": {
+    "error_msg": "VulkanError(\"failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58718 =# @dispatch instance(physical_device) vkCreateDevice(physical_device, create_info, allocator, pDevice)\", ERROR_EXTENSION_NOT_PRESENT)",
+    "exit": 0,
+    "error_type": "VulkanError",
+    "error_caught": "yes",
+    "stderr_tail": "exitcode=0\n"
+  },
+  "no_device": {
+    "error_msg": "VulkanError(\"failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58548 =# @dispatch nothing vkCreateInstance(create_info, allocator, pInstance)\", ERROR_INCOMPATIBLE_DRIVER)",
+    "exit": 0,
+    "note": "VK_DRIVER_FILES pointed at nothing, so the loader had no ICD; vkCreateInstance failed with a meaningful VulkanError instead of a silent success or segfault",
+    "error_type": "VulkanError",
+    "error_caught": "yes",
+    "stderr_tail": "exitcode=0\n"
+  },
+  "precompile_true": {
+    "workload_ran": false,
+    "precompile_msg": "The following 1 direct dependency failed to precompile:\\n\\nVulkan \\n\\nFailed to precompile Vulkan [9f14b124-c50e-4008-a7d4-969b3a6cd68a] to \"/home/vasyl/.julia/compiled/v1.11/Vulkan/jl_5BFPBr\".\\n┌ Error: General (Loader Message): loader_get_json: Failed to open JSON file /tmp/r040-nonexistent-icd.json\\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\\n┌ Error: General (Loader Message): vkCreateInstance: Found no drivers!\\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/validation.jl:46\\n┌ Error: The precompilation of device functions failed unexpectedly. We encourage you to file an issue on https://github.com/JuliaGPU/Vulkan.jl including this logged message.\\n└ @ Vulkan ~/.julia/packages/Vulkan/12azN/src/precompile.jl:23\\nERROR: LoadError: ERROR_INCOMPATIBLE_DRIVER: failed to execute #= /home/vasyl/.julia/packages/Vulkan/12azN/generated/linux.jl:58548 =# @dispatch nothing vkCreateInstance(create_info, allocator, pInstance)\\nStacktrace:\\n  [1] unwrap(r::ResultTypes.Result{Vulkan.Instance, Vulkan.VulkanError})\\n    @ ResultTypes ~/.julia/packages/ResultTypes/vS4cT/src/ResultTypes.jl:69\\n  [2] Vulkan.Instance(enabled_layer_names::Vector{Any}, enabled_extension_names::Vector{Any}; allocator::Ptr{Nothing}, next::Vulkan.DebugUtilsMessengerCreateInfoEXT, flags::Int64, application_info::Vulkan.ApplicationInfo)\\n    @ Vulkan ~/.julia/packages/Vulkan/12azN/generated/linux.jl:82152\\n  [3] Instance\\n    @ ~/.julia/packages/Vulkan/12azN/generated/linux.jl:82152 [inlined]\\n  [4] precompile_workload()\\n    @ Vulkan ~/.julia/packages/Vulkan/12azN/src/precompile_workload.jl:44\\n  [5] macro expansion\\n    @ ~/.julia/packages/Vulkan/12azN/src/precompile.jl:17 [inlined]\\n  [6] macro expansion\\n    @ ~/.julia/packages/PrecompileTools/L8A3n/src/workloads.jl:78 [inlined]\\n  [7] top-level scope\\n    @ ~/.julia/packages/Vulkan/12azN/src/precompile.jl:102\\n  [8] include(mod::Module, _path::String)\\n    @ Base ./Base.jl:562\\n  [9] include(x::String)\\n    @ Vulkan ~/.julia/packages/Vulkan/12azN/src/Vulkan.jl:6\\n [10] top-level scope\\n    @ ~/.julia/packages/Vulkan/12azN/src/Vulkan.jl:81\\n [11] include\\n    @ ./Base.jl:562 [inlined]\\n [12] include_package_for_output(pkg::Base.PkgId, input::String, depot_path::Vector{String}, dl_load_path::Vector{String}, load_path::Vector{String}, concrete_deps::Vector{Pair{Base.PkgId, UInt128}}, source::Nothing)\\n    @ Base ./loading.jl:2924\\n [13] top-level scope\\n    @ stdin:6\\nin expression starting at /home/vasyl/.julia/packages/Vulkan/12azN/src/precompile.jl:1\\nin expression starting at /home/vasyl/.julia/packages/Vulkan/12azN/src/Vulkan.jl:1\\nin expression starting at stdin:",
+    "exit": 0,
+    "stderr_tail": "enerated/linux.jl:58548 =# @dispatch nothing vkCreateInstance(create_info, allocator, pInstance)\n[0KStacktrace:\n[0K  [1] unwrap(r::ResultTypes.Result{Vulkan.Instance, Vulkan.VulkanError})\n[0K    @ ResultTypes ~/.julia/packages/ResultTypes/vS4cT/src/ResultTypes.jl:69\n[0K  [2] Vulkan.Instance(enabled_layer_names::Vector{Any}, enabled_extension_names::Vector{Any}; allocator::Ptr{Nothing}, next::Vulkan.DebugUtilsMessengerCreateInfoEXT, flags::Int64, application_info::Vulkan.ApplicationInfo)\n[0K    @ Vulkan ~/.julia/packages/Vulkan/12azN/generated/linux.jl:82152\n[0K  [3] Instance\n[0K    @ ~/.julia/packages/Vulkan/12azN/generated/linux.jl:82152 [inlined]\n[0K  [4] precompile_workload()\n[0K    @ Vulkan ~/.julia/packages/Vulkan/12azN/src/precompile_workload.jl:44\n[0K  [5] macro expansion\n[0K    @ ~/.julia/packages/Vulkan/12azN/src/precompile.jl:17 [inlined]\n[0K  [6] macro expansion\n[0K    @ ~/.julia/packages/PrecompileTools/L8A3n/src/workloads.jl:78 [inlined]\n[0K  [7] top-level scope\n[0K    @ ~/.julia/packages/Vulkan/12azN/src/precompile.jl:102\n[0K  [8] include(mod::Module, _path::String)\n[0K    @ Base ./Base.jl:562\n[0K  [9] include(x::String)\n[0K    @ Vulkan ~/.julia/packages/Vulkan/12azN/src/Vulkan.jl:6\n[0K [10] top-level scope\n[0K    @ ~/.julia/packages/Vulkan/12azN/src/Vulkan.jl:81\n[0K [11] include\n[0K    @ ./Base.jl:562 [inlined]\n[0K [12] include_package_for_output(pkg::Base.PkgId, input::String, depot_path::Vector{String}, dl_load_path::Vector{String}, load_path::Vector{String}, concrete_deps::Vector{Pair{Base.PkgId, UInt128}}, source::Nothing)\n[0K    @ Base ./loading.jl:2924\n[0K [13] top-level scope\n[0K    @ stdin:6\n[0Kin expression starting at /home/vasyl/.julia/packages/Vulkan/12azN/src/precompile.jl:1\n[0Kin expression starting at /home/vasyl/.julia/packages/Vulkan/12azN/src/Vulkan.jl:1\n[0Kin expression starting at stdin:6\n           ✗ Vulkan\n  0 dependencies successfully precompiled in 19 seconds. 46 already precompiled.\n\nexitcode=0\n",
+    "precompile_ok": "no"
+  }
+}

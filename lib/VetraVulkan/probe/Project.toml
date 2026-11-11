@@ -1,0 +1,19 @@
+name = "VetraVulkanProbe"
+uuid = "c35fa8e6-f6cb-4e93-93ac-4491ba31ba5c"
+authors = ["Vetra Canvas R040 spike"]
+version = "0.1.0"
+
+[deps]
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
+SPIRV = "84138a67-b342-4d33-8200-33cfcca52eb2"
+SPIRV_Tools_jll = "6ac6d60f-d740-5983-97d7-a4482c0689f4"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Vulkan = "9f14b124-c50e-4008-a7d4-969b3a6cd68a"
+
+[compat]
+SHA = "0.7.0"
+SPIRV = "0.6.11"
+SPIRV_Tools_jll = "2026.4.0"
+Test = "1.11.0"
+Vulkan = "0.6.4"
+julia = "1.11"
