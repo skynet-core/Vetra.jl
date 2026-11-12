@@ -463,7 +463,27 @@ end
                     end
                     @test maxd <= 8
                 else
-                    @test img.data == ref
+                    expected = copy(ref)
+                    if kind === :bmp
+                        # The 32-bit mask fixtures are upstream oracles
+                        # of the old direct-store semantics; apply the
+                        # documented straight -> premul boundary to the
+                        # pinned raw before comparing (no-op on the
+                        # 24-bit fixtures and on rgb-zero alpha pixels)
+                        # — same correction as the BMP fixture testset
+                        # above.
+                        for i in 1:(wh[1] * wh[2])
+                            a = ref[4 * (i - 1) + 4]
+                            if a < 255
+                                for k in 0:2
+                                    c = Int(ref[4 * (i - 1) + 1 + k])
+                                    expected[4 * (i - 1) + 1 + k] =
+                                        UInt8((c * Int(a) + 127) ÷ 255)
+                                end
+                            end
+                        end
+                    end
+                    @test img.data == expected
                 end
                 @test decodeImageDimensions(bytes) == wh
             end
