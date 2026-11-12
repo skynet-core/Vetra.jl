@@ -15,6 +15,10 @@ implementation. M003/M004 are complete; R040's bounded Linux/NVIDIA probe is
 approved and integrated, with other-platform execution still unverified (D037).
 The user-requested E001 feature examples are independently approved and integrated
 (tasks/EXAMPLES_PLAN.md, D038). R010 contract work is next.
+Latest addition (2026-11-12): user requests native GPU projects and a WebGL
+browser showcase. WebGL2 is a separate provider alongside Canvas2D (R053–R055);
+R010 is active and includes those contracts. V001 separately verifies existing
+Jupyter/PyMuPDF behavior in isolated tooling environments. No 3D scope is added.
 New backend
 implementation follows reviewed R010 contracts and explicit task ownership.
 Use separate worktrees for parallel writers. The coordinator reviews and

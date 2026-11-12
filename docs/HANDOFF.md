@@ -42,11 +42,47 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: freeze R010 using the approved
+Next: review the active R010 contract draft using the approved
 bounded Vulkan constraints. M003/M004 and the Windows allocation-gate follow-up
 are approved with passing four-platform CI (evidence below). Other-platform GPU
 runtime acceptance remains open; R040 does not establish a production backend.
 R099 remains the final task.
+
+### New request: close verification gaps and build GPU/WebGL showcases
+
+2026-11-12: user asks how to help resolve Jupyter/PyMuPDF verification gaps and
+requests GPU-enabled projects and a browser WebGL showcase. Coordinator treats
+this as runnable Vetra projects: native Vulkan plus a distinct **WebGL2**
+provider, not Canvas2D relabeled as GPU. `docs/CANVAS_DESIGN.md` and R053–R055
+in `tasks/CANVAS_ROADMAP.md` define the added scope. Shared E001 scenes become
+interactive atlas/dashboard/image-effects projects with provider/timing display,
+pan/zoom, resize, pause and export. Local execution precedes R099 publication.
+Hardware, software and unknown WebGL execution must be reported distinctly;
+the browser GLSL ES shader-authoring/lowering route requires a reviewed decision
+against Julia algorithm ownership before kernel implementation.
+
+The amended roadmap independently checks **46 matching specs / 110 edges**,
+acyclic with every task leading to R099. Native GPU remains Vulkan.jl; no 3D.
+
+- **R010 assigned:** Qwen3.8 in `/tmp/opencode/vetra-r010`, branch
+  `canvas/frontend-contract`, base `b631410`; owns `docs/CANVAS_CONTRACT.md`
+  and isolated supporting sketches/checks under `tasks/r010/`. Coordinator owns
+  shared design/status integration. Draft must cover the new WebGL2 provider
+  alongside CPU/Vulkan/Canvas2D/PDF; no production dummy backends.
+- **V001 verification assigned:** Qwen3.8 in `/tmp/opencode/vetra-v001/`,
+  main repository read-only. Isolated Python environment for PyMuPDF/Jupyter,
+  isolated Julia IJulia/PNG environment; execute a real notebook kernel, verify
+  its image MIME output and attempt actual JupyterLab browser display. Run the
+  previously skipped `VETRA_MUPDF_PY` JPEG interoperability leg and independently
+  render asymmetric PDFs with PyMuPDF. Return exact commands, versions, outputs
+  and any concrete frontend blocker. No global installs or root dependencies.
+
+User assistance can add notebook frontend preference (JupyterLab versus VS Code)
+and actual browser/OS/GPU testing; no credentials or manual dependency setup
+are currently required. E001 push `b631410` passed **all 10 CI jobs** at
+[run 43288151394](https://github.com/skynet-core/Vetra.jl/actions/runs/43288151394):
+Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
+This CPU CI evidence does not establish GPU/WebGL runtime support.
 
 ### Latest user request: review and executable feature programs (2026-11-12)
 
@@ -95,7 +131,8 @@ Final required checks (identical integration source, isolated worktrees):
 
 Main now contains exactly the reviewed implementation. Coordinator additionally
 updated compatibility, decision, recording-contract and status documentation;
-`git diff --check` passes. Remote CI for this integration is pending the push.
+`git diff --check` passes. Integration was pushed as `b631410`; all ten remote
+CI jobs passed (run and artifacts above).
 Live Jupyter execution was not performed; PNG MIME behavior is tested. PyMuPDF
 interoperability was skipped because that module is unavailable. Existing
 dash-cap/scaled-gradient renderer differences are documented. Future GPU,

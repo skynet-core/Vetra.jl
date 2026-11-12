@@ -4,7 +4,7 @@
 
 **R000 done (approved 2026-11-10):** [architecture](docs/CANVAS_DESIGN.md) and
 [detailed parallel development plan](tasks/CANVAS_ROADMAP.md).
-First-tier targets are CPU, Vulkan.jl GPU, browser Canvas2D, existing image
+First-tier targets are CPU, Vulkan.jl GPU, browser Canvas2D/WebGL2, existing image
 formats, Jupyter and PDF; SVG remains supported. The new plan distinguishes
 render backends, codecs and display adapters, with a final interactive tutorial
 published through GitHub Pages CI.
@@ -18,6 +18,14 @@ and task plan**, confirming all ten corrections and the 98-edge dependency graph
 Source review and final independent media consistency review passed with no
 blocking findings. These APIs are not implemented; runtime acceptance belongs
 to the downstream probe tasks.
+
+2026-11-12 addition: user requests native GPU projects and WebGL browser
+showcases, and asks how to resolve Jupyter/PyMuPDF verification gaps. R053–R055
+add a distinct WebGL2 provider and interactive Vulkan/browser projects; the
+expanded board has **46 matching specs / 110 edges**, is acyclic and retains
+R099 as the final task. The historical 43-task approval above predates this
+amendment. R010 is now active; existing display/PyMuPDF verification runs
+separately in isolated tools environments (V001), without core dependencies.
 
 SOLID and zero-core-change extension are explicit requirements, verified by
 R013's external-package conformance gate. R014 verifies future GUI/plotting-core
@@ -82,7 +90,9 @@ test logs for independent validation before approval/push.
 | --- | --- | --- | --- |
 | M004 (done) | Qwen3.8, `/tmp/opencode/vetra-m004`, `modernization/correctness` | Crop bounds, cmap-12 validation, dash ownership, HarfBuzz lifecycle | Approved 52a40b9: both full gates, 113 independent probes/version and targeted benchmark comparison pass |
 | R040 (bounded probe approved) | Qwen3.8, `/tmp/opencode/vetra-r040`, `canvas/vulkan-probe` | Isolated `lib/VetraVulkan/probe/` environment, scripts and evidence | db47824 independently validated, integrated through 440276d; non-Linux/device acceptance remains open (D037) |
-| E001 (done) | Qwen3.8, `/tmp/opencode/vetra-feature-gallery`, `examples/feature-gallery` | Six executable feature programs, gallery tests, reproduced connected library bugs | 873939f independently approved and integrated through 254be96; both full gates, 79 gallery tests/version, real CLI and external rendered checks pass (D038) |
+| E001 (done) | Qwen3.8, `/tmp/opencode/vetra-feature-gallery`, `examples/feature-gallery` | Six executable feature programs, gallery tests, reproduced connected library bugs | 873939f approved, integrated through 254be96, pushed b631410; both full gates, 79 gallery tests/version, external render checks and all 10 CI jobs pass (D038) |
+| R010 | Qwen3.8, `/tmp/opencode/vetra-r010`, `canvas/frontend-contract` | Proposed `docs/CANVAS_CONTRACT.md`, isolated contract sketches/checks in `tasks/r010/` | Precise CPU/Vulkan/Canvas2D/WebGL2/PDF extension/lifecycle contracts; coordinator reviews before backend implementation |
+| V001 | Qwen3.8 verification, `/tmp/opencode/vetra-v001/` | Scratch Python/Julia environments, real IJulia notebook and PyMuPDF checks; repository read-only | Executed kernel/frontend and external-reader evidence, or a concrete environment blocker |
 | Windows CI follow-up (done) | Qwen3.8, `/tmp/opencode/vetra-windows-allocation`, `modernization/windows-allocation` | Constructor allocation-parity gate in `test/api_native_tests.jl` | 6eff5cd independently approved, integrated as e879026: both full gates, 304/304 probes per Julia and all 10 CI jobs pass |
 
 M004 push `a69027a`: [run 43002436891](https://github.com/skynet-core/Vetra.jl/actions/runs/43002436891)
@@ -94,8 +104,8 @@ Follow-up `c31626a` passed all **10 jobs** in
 [run 43019390200](https://github.com/skynet-core/Vetra.jl/actions/runs/43019390200),
 including both Windows Julia lanes and four platform benchmark artifacts.
 
-R040 supplies approved bounded constraints for R010, which is now ready for
-contract work. Other-platform GPU acceptance remains open; downstream backend
+R040 supplies approved bounded constraints for R010, which is now in progress.
+Other-platform GPU acceptance remains open; downstream backend
 tasks retain their dependency gates. R099 stays last.
 
 2026-11-12: user requested a review, improvements, and Qwen implementation of

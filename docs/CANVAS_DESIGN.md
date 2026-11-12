@@ -5,6 +5,9 @@ Independent architectural/task-plan review: **approved** after corrections 1–1
 (2026-11-10, 43 tasks). Source review and final media-amendment review are complete.
 R010's executable interface freeze remains pending; approval is not provider/runtime evidence.
 The interfaces below are design contracts, not claims that new backends exist.
+User amendment (2026-11-12): native Vulkan projects and an interactive **WebGL2**
+browser showcase are required. WebGL2 is an additional provider, distinct from
+Canvas2D; R053–R055 below the shared R010 gate own its implementation/evidence.
 Implementation and review gates are in [the development plan](../tasks/CANVAS_ROADMAP.md).
 Independently checked source findings and unresolved toolchain constraints are
 in [the research record](CANVAS_RESEARCH.md); source inspection is not runtime proof.
@@ -27,6 +30,7 @@ First-tier destinations:
 | Julia arrays | Pixel storage independent of execution | Import, draw into mutable Matrix/Vector storage, export into host arrays and StaticArrays |
 | Native GPU | **Vulkan.jl** | Offscreen rendering first; optional window/swapchain presentation later in this milestone |
 | Browser | Browser Canvas 2D APIs | Main-thread canvas; capability-tested OffscreenCanvas/worker path |
+| Browser GPU | WebGL2 provider | Actual GPU draw calls, capability/context-loss handling and interactive local showcase; hardware execution reported separately from software WebGL |
 | Image files | A codec encodes a raster result | PNG, JPEG, WebP, BMP, QOI, PPM; preserve GIF decoding |
 | Animation / video | Streaming temporal media pipeline | Decode, edit, encode, record and concatenate GIF/WebP animations and MP4 video frames |
 | SVG | Vector document plus embedded raster assets | Adapt the existing writer and reader; explicit vector limitations |
@@ -606,6 +610,36 @@ JSON quoting and HTML embedding are distinct boundaries: protect script raw-text
 against `</script>` termination and escape HTML labels/attributes in their own
 contexts. Preserve canonical numeric values across Julia/JS parsing. Affine paint
 and blend-name mappings need semantic tests, not just a matching browser API name.
+
+### Browser WebGL2 (user amendment, 2026-11-12)
+
+Reuse the versioned browser command/asset transport and shared Julia geometry;
+provide a separately selected WebGL2 renderer (`canvas.getContext("webgl2")`).
+Canvas2D rendering, SVG display and uploading a completed CPU frame are not
+evidence of WebGL rendering of the scene. Keep 2D coverage, paint, alpha, clip,
+layer and effect semantics aligned with the common contract. Native GPU remains
+Vulkan.jl; WebGL2 does not replace that backend or introduce 3D scope.
+
+R053 must establish the browser shader/toolchain boundary explicitly: WebGL2
+uses GLSL ES shader interfaces, not Vulkan SPIR-V modules. Retain Julia-owned
+shared algorithms/geometry; review the shader-authoring/lowering decision before
+implementing kernels rather than assuming a Julia-to-browser compiler exists.
+Framebuffer orientation, premultiplied alpha, color conversion, device-pixel
+ratio, readback and asynchronous disposal have explicit conformance cases.
+Rebuild resources after context restoration; bound all allocations and preserve
+painter order. Unsupported features fail explicitly or use a selected, visible
+fallback policy.
+
+Ship runnable Vulkan and WebGL2 example projects using the E001 atlas/dashboard/
+image scenes. Browser controls change the scene, resize it and report the actual
+provider and measured timing. Native Vulkan runs locally; the browser showcase
+executes WebGL2 locally. Local serving precedes R099 publication. Debug renderer
+strings are optional and may be privacy-redacted: record browser/OS/context
+attributes, available diagnostics and software/unknown execution honestly.
+Headless software WebGL establishes API correctness, not physical-GPU evidence.
+
+References: [WebGL2 context](https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext),
+[renderer diagnostics and privacy limits](https://developer.mozilla.org/en-US/docs/Web/API/WEBGL_debug_renderer_info).
 
 ### PDF and SVG
 

@@ -11,6 +11,12 @@ acyclic, every task leading to R099. Source review and final independent media
 consistency review are complete, with no blocking findings;
 R040/R064 supply later runtime evidence and R010 freezes executable contracts.
 
+User amendment (2026-11-12): add a real WebGL2 provider and runnable native-GPU /
+browser showcases (R053–R055). The earlier 43-task/98-edge result is historical;
+the expanded graph independently checks as **46 matching specs / 110 edges**,
+acyclic with every task leading to R099. R010 includes this scope;
+R099 publication remains last. Canvas2D and WebGL2 are distinct targets.
+
 ## Ownership, execution and approval
 
 - **Coordinator/reviewer:** the primary agent owns architecture, shared exports,
@@ -56,7 +62,7 @@ not authorize a blanket rename/rewrite of tested raster kernels.
 | F — frontend/contracts | Commands, Canvas, shared state/layout | `src/canvas/`, `src/recordings.jl`, `src/formats/{fonts,paragraph,shaping}.jl`, `src/fontformats/`, their tests; separate typography owner |
 | C — CPU | Kernel adapter and full-2D gaps | `src/backends/cpu.jl`, selected existing raster/path/effect files, `test/cpu_backend/` |
 | G — Vulkan | Native device rendering through Vulkan.jl | `lib/VetraVulkan/` (or the reviewed extension boundary), its shaders/tests |
-| W — browser | Canvas2D protocol/runtime/worker | `lib/VetraBrowser/`, `browser/`, browser tests |
+| W — browser | Shared browser protocol, Canvas2D and WebGL2 runtimes | `lib/VetraBrowser/`, `browser/`, browser tests; separate renderer ownership |
 | O — outputs | Host array targets, pixel/codec interop and PDF/SVG | Proposed `src/arrays.jl`, `test/arrays/`, `src/backends/{pdf,svg}.jl`, raster codec/IO/color-matrix files and SVG/PDF writers; excludes font/layout/shaping files |
 | T — temporal media | Frame decoding, editing, encoding and concatenation | Proposed `lib/VetraMedia/`, `test/media/`; shared pixel contracts remain coordinator-owned |
 | N — notebooks | MIME/display and optional IJulia updates | Proposed `src/display.jl`, notebook extension/adapter, `test/notebook_display_tests.jl`, `test/notebooks/` |
@@ -93,7 +99,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | --- | --- | --- | --- | --- |
 | R000 | Architecture, research and reviewed task plan | Coordinator | — | done |
 | R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | bounded probe approved (db47824; other-platform execution open, D037) |
-| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | ready (bounded R040 constraints approved; no cross-platform GPU claim) |
+| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | in_progress (Qwen3.8 contract draft; coordinator review required, includes WebGL2 amendment) |
 | R011 | Independent conformance corpus and capability inventory | Q | R010 | planned |
 | R012 | Shared text/layout correctness and font contract | F | R010, M004 | planned |
 | R013 | Zero-core-change external extension conformance | Q | R021, R022, R060, R065, R066 | planned |
@@ -115,6 +121,9 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | R050 | Versioned browser protocol and asset transport | W | R020, R011 | planned |
 | R051 | Browser Canvas2D replay and static HTML view | W | R050, R021 | planned |
 | R052 | Browser full-profile gaps, workers and browser matrix | W | R051, R034, R012 | planned |
+| R053 | WebGL2 execution/shader/resource foundation | W | R050, R021, R011 | planned |
+| R054 | WebGL2 full-2D coverage, paints and composition | W | R053, R031, R033, R034, R012 | planned |
+| R055 | Interactive Vulkan/WebGL2 showcase projects | D + G + W | R045, R054, R052 | planned |
 | R060 | Codec/color-matrix/snapshot integration | O | R022 | planned |
 | R061 | PDF page backend and document lifecycle | O | R021, R011 | planned |
 | R062 | PDF completeness, text accessibility and fallback | O | R061, R034, R012, R060 | planned |
@@ -129,7 +138,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | R071 | Optional live notebook updates and disposal | N | R070, R052 | planned |
 | R080 | Backend/platform CI and artifact infrastructure | Q | R010 | planned |
 | R081 | Reproducible backend benchmark/profiling harness | Q | R011, R030 | planned |
-| R082 | End-to-end performance and allocation review | Q | R045, R052, R060, R062, R071, R081, R023, R069, R014 | planned |
+| R082 | End-to-end performance and allocation review | Q | R045, R052, R060, R062, R071, R081, R023, R069, R014, R055 | planned |
 | R086 | Package/document cleanup and migration consolidation | Coordinator | R082, R063, M004 | planned |
 | R090 | Independent integrated release validation | Q + coordinator | R086, R080, R011 | planned |
 | R098 | Illustrated, executable README and use cases | D | R090 | planned |
@@ -251,6 +260,13 @@ independent evidence are in `docs/HANDOFF.md`. Other OS execution remains open.
 
 **Owner/paths:** coordinator + F; design/decision docs and proposed public API.
 
+Assigned 2026-11-12 to Qwen3.8 in `/tmp/opencode/vetra-r010`, branch
+`canvas/frontend-contract`, base `b631410`. Writer owns a proposed
+`docs/CANVAS_CONTRACT.md` and supporting contract-check examples under
+`tasks/r010/`; coordinator integrates changes to shared design/decision/status
+files. This freezes a reviewed contract, not placeholder production backends.
+Include the user's WebGL2 provider and Vulkan/browser showcase amendment.
+
 - Freeze constructors, drawing signatures, Canvas state, logical/physical size,
   path/paint coordinate spaces, transforms, clear/clip/layer semantics, pixel
   boundaries and compositing equations from the architecture document.
@@ -279,6 +295,9 @@ independent evidence are in `docs/HANDOFF.md`. Other OS execution remains open.
 - **Acceptance:** examples for CPU, Vulkan, browser and PDF invoke the same
   drawing function; no target-specific fields in that function. Each feature
   has a semantic rule, planned owner and conformance identifier.
+- Include separately selectable Canvas2D and WebGL2 providers in those sketches;
+  freeze context-loss/resource-rebuild and explicit readback behavior. Record the
+  WebGL shader/toolchain decision needed by R053 without inventing compiler support.
 - SVG, codec/image-file and Jupyter semantics are assigned explicitly to
   R063/R060/R070; their contracts derive from the shared drawing/pixel profiles
   and their distinct export/display boundaries, covering every first-tier row.
@@ -716,6 +735,62 @@ new command/schema fields require coordinator integration.
   rows for that browser/runtime mode; a remaining required gap blocks release.
 - **Checks:** worker/main parity, repeated resize/DPR, fonts-ready behavior,
   CORS/tainted-canvas readback errors, combined effects scenes and frame timing.
+
+### R053 — WebGL2 execution and resource foundation
+
+**Owner/paths:** W; separate WebGL2 runtime under `browser/` and its provider,
+sharing R050's schema. Assign a separate worktree from the Canvas2D writer.
+
+- Establish real WebGL2 context creation, shader compilation/linking, vertex/
+  index buffers, textures, framebuffers, synchronization/readback and disposal.
+- Review the GLSL ES authoring/lowering boundary against the Julia algorithm
+  policy; record compiler/source provenance and concrete limits before kernels.
+  Do not treat Vulkan SPIR-V as browser shader input or assume a translator.
+- Pin coordinate orientation, premultiplied-alpha/color boundaries, DPR/resize,
+  context loss/restoration and resource-generation invalidation semantics.
+- **Acceptance:** actual draw calls plus asymmetric readback match independently
+  derived results; repeated resize/restore/close preserves lifecycle invariants.
+  Report whether execution is hardware, software or unverified. Unsupported
+  WebGL2 fails with an actionable error; no silent Canvas2D substitution.
+- **Checks:** shader failures, incomplete framebuffer, alpha/orientation tests,
+  `WEBGL_lose_context` where available and browser/OS/driver evidence. Optional
+  renderer-info extensions are not required for normal execution.
+
+### R054 — WebGL2 full-2D execution
+
+**Owner/paths:** W; WebGL2 path/paint/composition modules and browser conformance.
+
+- Reuse Julia geometry and canonical command semantics. Implement actual WebGL2
+  coverage, painted strokes, gradients/patterns, image regions, compositing,
+  clips/layers, effects and glyph-outline execution through the reviewed route.
+- Preserve painter order, alpha once per group, bounded temporary resources and
+  explicit pixel transfers. Declare capabilities precisely as coverage grows.
+- **Acceptance:** the required 2D corpus passes with independently justified
+  edge tolerances; unsupported operations follow the explicit failure/fallback
+  contract. A CPU-rendered image uploaded to a texture is not native scene execution.
+- **Checks:** compare shared cases with CPU/Canvas2D, exercise restoration and
+  asset lifetime, report browser execution and GPU timing only when measurable.
+
+### R055 — Runnable Vulkan and WebGL2 showcase projects
+
+**Owner/paths:** D + G + W; independently runnable example project directories,
+shared E001 scenes and local browser showcase. Provider fixes stay with owners.
+
+- Native Vulkan atlas/dashboard: host-owned animation and redraw, explicit
+  snapshot/export, device/capability display and CPU comparison.
+- Browser WebGL2 atlas/dashboard/image-effects lab: live parameters, pan/zoom,
+  resize/DPR, animation pause and export; accessible labels and keyboard controls.
+  Display selected provider, capability limits and measured frame time.
+- Reuse shared scene definitions through the reviewed API. Show Canvas2D as a
+  separate comparison option, never as a hidden substitute for WebGL2.
+- **Acceptance:** documented local commands produce interactive, visually
+  inspected output; controls genuinely change the rendered scene; screenshots
+  and semantic checks establish parity for advertised features. Include a
+  hardware-accelerated run where available; software-only evidence stays labeled.
+- **Checks:** actual Vulkan validation, browser interaction/readback, disposal,
+  source preservation and offline/local-serving setup without hidden installs.
+  Fix exposed library defects with regressions. R098 uses the resulting
+  artifacts; only R099 publishes the final GitHub Pages tutorial.
 
 ### R060 — Raster snapshots, codecs and Julia image interop
 

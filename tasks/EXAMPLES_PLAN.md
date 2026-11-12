@@ -58,6 +58,14 @@ first. Keep provenance and existing reference fixtures intact. Required gate:
 
 ## Backend extensions of these programs
 
+User addition (2026-11-12): runnable **Vulkan GPU projects** and **WebGL browser
+showcases**. Use WebGL2 as the browser GPU target, separately from Canvas2D.
+R053/R054 implement and validate it; R055 delivers interactive atlas/dashboard
+and image-effects example projects using the shared scenes. Include renderer
+selection/status, live controls, pan/zoom, resize/DPR, pause and export. Native
+Vulkan stays local; browser execution uses WebGL2. Report hardware/software/
+unknown execution honestly. Local showcases precede final R099 publication.
+
 These are implementation obligations attached to existing roadmap tasks, not
 dummy examples pretending unavailable providers exist. Port the same scenes and
 checks to the reviewed Canvas API once its dependencies land:
