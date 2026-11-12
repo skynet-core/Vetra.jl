@@ -66,6 +66,12 @@ selection/status, live controls, pan/zoom, resize/DPR, pause and export. Native
 Vulkan stays local; browser execution uses WebGL2. Report hardware/software/
 unknown execution honestly. Local showcases precede final R099 publication.
 
+Initial user acceptance target: **Chromium on Linux, NVIDIA RTX 3090**, with
+**VS Code notebooks** for notebook examples. Device-specific acceptance needs an
+actual target run; the current coordinator host's RTX 3050 Ti Laptop evidence is
+separate. Browser GPU acceleration and renderer selection must be observed,
+not inferred from the installed GPU. Keep CPU cross-platform support intact.
+
 These are implementation obligations attached to existing roadmap tasks, not
 dummy examples pretending unavailable providers exist. Port the same scenes and
 checks to the reviewed Canvas API once its dependencies land:

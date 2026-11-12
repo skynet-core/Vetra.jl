@@ -15,6 +15,21 @@ Scope note: `pixie.nim` re-exports `bumpy`, `chroma`, `vmath` wholesale;
 those third-party APIs are reference material, not a parity obligation beyond
 what the pixie modules themselves use (see docs/NUMERICAL_CONTRACT.md).
 
+## Notebook and external-reader verification (V001)
+
+Real IJulia execution on Julia 1.13.3 independently verified PNG MIME bytes,
+source preservation and external Pillow pixel decoding (2026-11-12).
+The portable [image-lab notebook](../examples/gallery/image_lab.ipynb) passes
+11 assertions and nine independent external pixel checks with a real IJulia
+kernel; its code cells also pass on Julia 1.10.13. Setup instructions are in the
+[gallery README](../examples/gallery/README.md#vs-code--jupyter-notebooks).
+JupyterLab/Chromium display evidence is available; **VS Code notebook UI remains
+unverified**. The PyMuPDF 2.1-enabled JPEG interoperability suite independently
+passed **61/61**, including its formerly skipped external-reader assertions.
+Asymmetric PDF image orientation also passed; one partial-alpha gallery sample
+differs by one channel unit from Poppler/Chromium. Exact evidence and limitations
+are recorded in [Handoff](HANDOFF.md#v001-independent-verification-2026-11-12).
+
 ## Foundation (T002) and geometry (T003)
 
 ### Julia-native additions (M003)

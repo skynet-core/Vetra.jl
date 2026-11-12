@@ -72,17 +72,100 @@ acyclic with every task leading to R099. Native GPU remains Vulkan.jl; no 3D.
 - **V001 verification assigned:** Qwen3.8 in `/tmp/opencode/vetra-v001/`,
   main repository read-only. Isolated Python environment for PyMuPDF/Jupyter,
   isolated Julia IJulia/PNG environment; execute a real notebook kernel, verify
-  its image MIME output and attempt actual JupyterLab browser display. Run the
+  its image MIME output and target actual VS Code notebook display. JupyterLab
+  execution is supplemental evidence rather than VS Code proof. Run the
   previously skipped `VETRA_MUPDF_PY` JPEG interoperability leg and independently
   render asymmetric PDFs with PyMuPDF. Return exact commands, versions, outputs
   and any concrete frontend blocker. No global installs or root dependencies.
 
-User assistance can add notebook frontend preference (JupyterLab versus VS Code)
-and actual browser/OS/GPU testing; no credentials or manual dependency setup
-are currently required. E001 push `b631410` passed **all 10 CI jobs** at
+User confirmed the acceptance target: **VS Code notebooks; Chromium on Linux;
+NVIDIA RTX 3090**. Both writers received this direction. Current agent-host
+`nvidia-smi --query-gpu=name,driver_version --format=csv,noheader` reports
+**RTX 3050 Ti Laptop GPU, driver 615.71.09**; those results cannot establish
+RTX 3090 execution. `/snap/bin/code` is available, but actual VS Code UI/kernel
+validation remains V001's task; preserve the user's existing profile/settings.
+Provide a ready notebook and exact kernel-selection steps if the target UI
+requires a user-run check. GPU/backend acceptance on the RTX 3090 will require
+an actual run there; browser hardware acceleration must also be checked.
+
+E001 push `b631410` passed **all 10 CI jobs** at
 [run 43288151394](https://github.com/skynet-core/Vetra.jl/actions/runs/43288151394):
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
+
+#### V001 independent verification (2026-11-12)
+
+Coordinator independently executed the existing notebook through a real IJulia
+kernel using nbclient 0.11.0 / Julia 1.13.3. Added five failing-on-error Julia
+assertions for PNG MIME byte identity, source preservation and three specified
+premultiplied pixels. Pillow 13.0.0 decoded all three output PNGs: **14/14**
+hand-derived pixel assertions passed (two 4×4 outputs and one 340×110 composite).
+Executed evidence: `/tmp/opencode/v001-coord-notebook/executed.ipynb`, kernel
+`vetrav001-1.13`, discovered with
+`JUPYTER_DATA_DIR=/tmp/opencode/vetra-v001/jupyter-data`. Writer's JupyterLab
+Chromium screenshot was visually reviewed; this is not VS Code frontend proof.
+
+Previously skipped external JPEG leg now independently passes **61/61**:
+
+```sh
+VETRA_MUPDF_PY=/tmp/opencode/vetra-v001/pyvenv/bin/python \
+  julia --startup-file=no --project=/tmp/opencode/vetra-v001/julia_env \
+  -e 'using Test, Vetra; include("test/jpeg_encode_tests.jl")'
+```
+
+Log: `/tmp/opencode/v001-coord-jpeg.log`; Python 3.14.4, PyMuPDF 2.1.
+Coordinator also rendered the E001 strict/fallback/rotated PDFs at 96 dpi with
+PyMuPDF: **7/7** independent color/orientation samples each, plus **4/4** opaque
+gallery-placement samples. The rotated sample expectations were already correct:
+red `(24,8)`, green `(24,16)`, blue `(16,8)`, yellow `(16,16)`, magenta `(8,8)`,
+cyan `(8,16)`. The writer's alleged stale handbook table did not exist; that
+conclusion was rejected. Gallery partial-alpha sample `(11,25)` is `(226,226,226)`
+versus Poppler/Chromium `(227,227,227)`. This difference is recorded; its rounding
+cause has not been independently source-traced and no tolerance was changed.
+
+VS Code UI execution remains **unverified**. The writer's inferred account/
+tunnel requirement was rejected: the actual `bin/code-tunnel serve-web` entry
+point starts a loopback server with a generated connection token without an
+account. A bounded coordinator HTTP probe reached its server-download response;
+it did not execute a notebook UI. Scratch data is in
+`/tmp/opencode/v001-coord-code/`; processes were terminated after the probes.
+The user's VS Code profile/settings were not modified. Portable notebook and
+minimal VS Code setup instructions are assigned to Qwen in separate worktree
+`/tmp/opencode/vetra-v001-notebook`, branch `examples/vscode-notebook`;
+writer candidates `3baa0c3` / `52d4945` were reviewed and integrated through
+`1c88768`. The notebook uses `pkgdir(Vetra)` and public `take!` byte extraction,
+requires no font fixtures, and is committed without outputs. Its README uses an
+isolated ignored environment and officially documented VS Code kernel-selection
+steps, including an optional local-server token URL.
+
+Coordinator rebuilt a minimal Vetra/IJulia/PNGFiles environment from the setup
+instructions (only the scratch environment/data paths differ) and executed the
+integrated notebook via nbclient: **11 notebook assertions**, **two PNG outputs**
+and **9/9 independent Pillow pixels** pass; source bytes remain unchanged.
+Exact rerun:
+
+```sh
+JUPYTER_DATA_DIR=/tmp/opencode/v001-coord-portable/jupyter-data \
+  /tmp/opencode/vetra-v001/pyvenv/bin/python \
+  /tmp/opencode/v001-coord-portable/verify.py
+```
+
+Evidence: `/tmp/opencode/v001-coord-portable/executed.ipynb`; Julia 1.13.3.
+Separately, all notebook code cells and **11 assertions** passed with
+`julia +1.10 --startup-file=no --project=/tmp/opencode/v001-coord-portable/env110`
+using only Vetra/PNGFiles; that check is cell compatibility, not an IJulia 1.10
+frontend run. No VS Code UI or RTX 3090 execution is claimed.
+
+The required `julia --startup-file=no --project=. scripts/check.jl` initially
+stopped before testing in main: its pre-existing ignored Manifest lacks the
+direct LinearAlgebra dependency. Log: `/tmp/opencode/v001-coord-gate.log`.
+The local Manifest was preserved; the same command **passed** in clean detached
+worktree `/tmp/opencode/vetra-v001-coord-gate` at `1c88768`, with pinned reference
+inputs shared read-only: **96.07% (7805/8124)** source coverage and gallery
+**79/79**. Log: `/tmp/opencode/v001-coord-clean-gate.log`.
+V001's portable delivery and kernel/external-reader evidence are approved;
+`git diff --check` passes. No runtime library changes were needed.
+R010 continues independently; VS Code user-side display acceptance stays open.
 
 ### Latest user request: review and executable feature programs (2026-11-12)
 
@@ -133,11 +216,12 @@ Main now contains exactly the reviewed implementation. Coordinator additionally
 updated compatibility, decision, recording-contract and status documentation;
 `git diff --check` passes. Integration was pushed as `b631410`; all ten remote
 CI jobs passed (run and artifacts above).
-Live Jupyter execution was not performed; PNG MIME behavior is tested. PyMuPDF
-interoperability was skipped because that module is unavailable. Existing
+At E001 approval, live Jupyter execution was not performed and PyMuPDF
+interoperability was skipped; V001's later independent checks above close those
+kernel/reader gaps, with VS Code UI still unverified. Existing
 dash-cap/scaled-gradient renderer differences are documented. Future GPU,
 browser Canvas2D and media extensions retain their roadmap dependencies; R099
-publication remains last. R010 is the next ready contract task.
+publication remains last. R010 contract work is active.
 
 #### E001 review history: first candidate (2026-11-12)
 
