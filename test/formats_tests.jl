@@ -68,15 +68,43 @@ end
 
 @testset "T008 file formats" begin
 
-    @testset "BMP (5 pinned upstream fixtures, exact pixels)" begin
+    @testset "BMP (5 pinned upstream fixtures, corrected masked boundary)" begin
+        # The 32-bit mask fixtures are upstream oracles of the old
+        # direct-store masked semantics (file bytes stored as premul,
+        # invalid for a = 0 / partial alpha). The pinned raw files stay
+        # untouched (checksums above); the corrected expectation is
+        # derived from them by the documented straight -> premul boundary
+        # ((c * a + 127) div 255), applied to exactly the pixels with
+        # stored a < 255. Divergence counts per fixture (hand-counted
+        # from the pinned raw, independent of the decoder):
+        BMP_SPLIT_COUNTS = Dict(
+            "bmp_knight_32_master_bmp" => 36,
+            "bmp_test4x2_bmp" => 4,
+            "bmp_test16x16_bmp" => 256,
+            "bmp_knight_24_master_bmp" => 0,
+            "bmp_rgb_24_master_bmp" => 0)
         for (tag, rel, _) in
             [(t, r, k) for (t, r, k) in FORMAT_FIXTURES if k === :bmp]
             @testset "BMP $tag" begin
                 ref, wh = VetraRef.read_raw(tag)
                 @test VetraRef.verify_checksum(tag)
+                expected = copy(ref)
+                n = 0
+                for i in 1:(wh[1] * wh[2])
+                    a = ref[4 * (i - 1) + 4]
+                    if a < 255
+                        n += 1
+                        for k in 0:2
+                            c = Int(ref[4 * (i - 1) + 1 + k])
+                            expected[4 * (i - 1) + 1 + k] =
+                                UInt8((c * Int(a) + 127) ÷ 255)
+                        end
+                    end
+                end
+                @test n == BMP_SPLIT_COUNTS[tag]
                 img = decodeBMP(read(joinpath(UPSTREAM_FF, rel)))
                 @test (width(img), height(img)) == wh
-                @test VetraRef.compare_pixels(img.data, ref, wh).count == 0
+                @test VetraRef.compare_pixels(img.data, expected, wh).count == 0
                 @test decodeBMPDimensions(read(joinpath(UPSTREAM_FF, rel))) == wh
                 # decodeDIB on the DIB portion (no 14-byte file header)
                 data = read(joinpath(UPSTREAM_FF, rel))
@@ -550,15 +578,17 @@ end
             @test decodePNG(encodePNG(st)).data == s
         end
 
-        @testset "BMP round trip (valid V5 header, exact)" begin
-            # E001 fix: upstream's encodeBmp wrote a 136-byte DIB under a
-            # biSize=124 claim, so any biSize-honoring reader (including
-            # decodeBMP) read pixels 12 bytes early and upstream's own
-            # encode->decode assertions stayed disabled (test_bmp.nim).
-            # Vetra now writes a real 124-byte BITMAPV5HEADER (file offset
-            # 138) and the 32-bit masked pixels as stored (premultiplied,
-            # matching decodeDIB's direct-premul masked read), so the round
-            # trip is exact for opaque and semi-transparent images.
+        @testset "BMP round trip (valid V5 header, straight boundary, exact)" begin
+            # E001 fix + review: upstream's encodeBmp wrote a 136-byte DIB
+            # under a biSize=124 claim, so any biSize-honoring reader
+            # (including decodeBMP) read pixels 12 bytes early and
+            # upstream's own encode->decode assertions stayed disabled
+            # (test_bmp.nim). Vetra writes a real 124-byte BITMAPV5HEADER
+            # (file offset 138). The 32-bit file boundary is straight RGBA
+            # (BMP/WIC 32bppBGRA, Pillow): encode applies toStraightAlpha,
+            # decode's masked path applies rgbx(rgba(...)), and the pair
+            # round-trips exactly on valid premultiplied storage (c <= a),
+            # including a=0 cells.
             bmp = encodeBMP(img)
             b = Vector{UInt8}(bmp)
             le16(i) = Int(b[i]) | (Int(b[i + 1]) << 8)
@@ -569,17 +599,106 @@ end
             @test length(b) == 14 + 124 + 4 * width(img) * height(img)
             @test decodeBMP(Vector{UInt8}(bmp)).data == d
             @test decodeDIB(Vector{UInt8}(bmp)[15:end]).data == d
-            # semi-transparent premultiplied cells (incl. an a=0 cell)
-            # survive the round trip byte-exactly: the encoder writes the
-            # stored premultiplied bytes and decodeDIB's masked path stores
-            # them directly.
-            st = newImage(2, 2)
+            # external boundary: stored premul (128,0,0,128) is straight
+            # (255,0,0,128) in the file, byte order R,G,B,A per the masks
+            # (2x1, single bottom-up row: file pixels are image (1,1) then
+            # (2,1); the pixel array starts at file byte 139)
+            st = newImage(2, 1)
             s = st.data
-            s[1:4] = [50, 50, 50, 0x80]
-            s[5:8] = [0, 0, 0, 0x80]
-            s[9:12] = [127, 64, 32, 0xbf]
-            s[13:16] = [0, 0, 0, 0x00]
-            @test decodeBMP(Vector{UInt8}(encodeBMP(st))).data == s
+            s[1:4] = [128, 0, 0, 128]
+            s[5:8] = [0, 0, 0, 0]
+            fb = Vector{UInt8}(encodeBMP(st))
+            @test fb[139:142] == [UInt8(255), UInt8(0), UInt8(0), UInt8(128)]
+            @test fb[143:146] == [UInt8(0), UInt8(0), UInt8(0), UInt8(0)]
+            @test decodeBMP(fb).data == s
+            # valid premultiplied cells (incl. an a=0 cell) survive the
+            # round trip byte-exactly (toPremul(toStraight(x)) == x)
+            s2 = zeros(UInt8, 16)
+            s2[1:4] = [50, 50, 50, 0x80]
+            s2[5:8] = [0, 0, 0, 0x80]
+            s2[9:12] = [127, 64, 32, 0xbf]
+            s2[13:16] = [0, 0, 0, 0x00]
+            @test decodeBMP(
+                Vector{UInt8}(encodeBMP(Image(2, 2, copy(s2))))).data == s2
+        end
+
+        @testset "BMP handcrafted V5 decode (independent of the encoder)" begin
+            # 1x3 bottom-up file, straight RGBA bytes (R,G,B,A per the
+            # masks): file row 0 = image (1,3), row 1 = (1,2), row 2 = (1,1).
+            out = Vector{UInt8}()
+            addle32(v) = append!(out, [UInt8(v & 0xff),
+                UInt8((v >> 8) & 0xff), UInt8((v >> 16) & 0xff),
+                UInt8((v >> 24) & 0xff)])
+            addle16(v) = append!(out, [UInt8(v & 0xff),
+                UInt8((v >> 8) & 0xff)])
+            append!(out, [0x42, 0x4d])
+            addle32(14 + 124 + 12) # file size (3 pixels, no row padding)
+            addle32(0) # reserved
+            addle32(138) # pixel offset
+            addle32(124) # biSize
+            addle32(1) # width
+            addle32(3) # height
+            addle16(1) # planes
+            addle16(32) # bits
+            addle32(3) # BI_BITFIELDS
+            addle32(12) # raw bitmap size
+            addle32(2835) # resolution x
+            addle32(2835) # resolution y
+            addle32(0) # palette size
+            addle32(0) # important colors
+            addle32(0x000000ff) # red mask
+            addle32(0x0000ff00) # green mask
+            addle32(0x00ff0000) # blue mask
+            addle32(0xff000000) # alpha mask
+            addle32(0x73524742) # LCS_sRGB
+            append!(out, zeros(UInt8, 64)) # V4/V5 fields
+            append!(out, [77, 88, 99, 255]) # (1,3): opaque
+            append!(out, [255, 255, 255, 0]) # (1,2): zero alpha, white straight
+            append!(out, [100, 150, 200, 128]) # (1,1): partial alpha
+            @test length(out) == 14 + 124 + 12
+            im = decodeBMP(out)
+            @test (width(im), height(im)) == (1, 3)
+            # straight -> premul by hand ((c * a + 127) div 255):
+            # (100,150,200,128) -> (50,75,100,128); (255,255,255,0) -> (0,0,0,0);
+            # (77,88,99,255) unchanged.
+            @test im.data[1:4] == [UInt8(50), UInt8(75), UInt8(100), UInt8(128)]
+            @test im.data[5:8] == [UInt8(0), UInt8(0), UInt8(0), UInt8(0)]
+            @test im.data[9:12] == [UInt8(77), UInt8(88), UInt8(99), UInt8(255)]
+        end
+
+        @testset "BMP external reader interop (Pillow, guarded like poppler)" begin
+            # Host probe: the first of these with an importable PIL
+            # (on this host the distro Pillow 12.x is a cpython-314
+            # module, reached via python3.14).
+            pilpy = nothing
+            for py in ("python3", "python3.14")
+                w = Sys.which(py)
+                isnothing(w) && continue
+                if success(`$w -c "import PIL"`)
+                    pilpy = w
+                    break
+                end
+            end
+            if pilpy !== nothing
+                mktempdir() do dir
+                    st = newImage(2, 1)
+                    s = st.data
+                    s[1:4] = [128, 0, 0, 128] # stored premul of straight (255,0,0,128)
+                    s[5:8] = [0, 0, 0, 0]
+                    f = joinpath(dir, "boundary.bmp")
+                    open(f, "w") do io
+                        write(io, encodeBMP(st))
+                    end
+                    out = read(`$pilpy -c "from PIL import Image; im = Image.open('$f'); print(im.mode); print([im.getpixel((x, y)) for y in range(im.height) for x in range(im.width)])"`, String)
+                    # Pillow decodes 32-bit BMP alpha as straight RGBA:
+                    @test occursin("RGBA", out)
+                    @test occursin("(255, 0, 0, 128)", out)
+                    @test occursin("(0, 0, 0, 0)", out)
+                end
+            else
+                println("python3/Pillow not present; BMP external-reader " *
+                    "interop not checked")
+            end
         end
 
         @testset "QOI round trip (opaque image)" begin

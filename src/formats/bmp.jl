@@ -6,9 +6,10 @@
 # Pinned behavior notes:
 # - decodeDib supports BITMAPINFOHEADER (40), BITMAPV2HEADER (108) and
 #   BITMAPV3HEADER (124); 1/4/8/24/32 bits; BI_RGB (0) and BI_BITFIELDS (3).
-# - 32-bit pixels use the R/G/B/A bit masks; when alphaMask != 0 the alpha
-#   is stored (premultiplied pass), otherwise the pixel is opaque and goes
-#   through straight->premultiplied like the other bit depths.
+# - 32-bit pixels use the R/G/B/A bit masks; when alphaMask != 0 the
+#   masked bytes are straight RGBA (the BMP file boundary) and are
+#   converted to premultiplied storage, otherwise the pixel is opaque
+#   and goes through straight->premultiplied like the other bit depths.
 # - Rows are padded to 4-byte boundaries relative to the pixel-data start.
 # - Bottom-up rows by default; top-down (negative height) is handled by the
 #   same storage plus a final flipVertical.
@@ -16,12 +17,22 @@
 #   upstream's own decodeBmp of an encodeBmp file reads pixels 12 bytes
 #   early; upstream disabled its encode->decode round-trip assertions for
 #   this reason (test_bmp.nim, commented blocks). Vetra fixes the encoder
-#   instead (2026-11-12, E001): it writes a valid 124-byte BITMAPV5HEADER
-#   and the 32-bit masked pixels as stored (premultiplied), matching
-#   decodeDIB's direct-premul masked read, so decodeBMP(encodeBMP(img))
-#   round-trips exactly. The decoder is unchanged (its masked-pixel
-#   semantics are pinned by the 32-bit mask fixtures, and its
-#   lpBitmapInfo compensation still mirrors upstream).
+#   (2026-11-12, E001) with a valid 124-byte BITMAPV5HEADER.
+# - Divergence from upstream at the 32-bit file boundary (recorded
+#   2026-11-12, E001 review): upstream stores the stored premultiplied
+#   bytes in the file and stores the masked bytes directly on read. That
+#   is invalid for external readers: the BMP 32-bit BGRA format carries
+#   straight RGB plus an alpha mask (WIC's primary V5 output format is
+#   GUID_WICPixelFormat32bppBGRA; Pillow decodes 32-bit BMP alpha as
+#   straight RGBA). Vetra instead writes toStraightAlpha on encode and
+#   rgbx(rgba(...)) on the masked decode, so files interoperate. The pair
+#   still round-trips exactly: for valid premultiplied storage (c <= a),
+#   toPremul(toStraight(c, a)) == c (round error < 1/2 channel, cancelled
+#   by the (c' * a + 127) div 255). The pinned 32-bit mask fixtures
+#   (knight.32, test4x2, test16x16) are upstream oracles of the old
+#   direct-store semantics; test/formats_tests.jl derives the corrected
+#   expectation from the untouched pinned raw (only pixels with stored
+#   a < 255 differ) and pins the divergence count explicitly.
 
 const BMP_SIGNATURE = "BM"
 
@@ -248,12 +259,15 @@ function decodeDIB(data::Vector{UInt8}; lpBitmapInfo::Bool = false)
                     a = bmpMaskShift(UInt32(color), UInt32(alphaMask))
                     off += 4
                     i = 4 * ((height - y - 1) * width + x)
-                    # Stored directly premultiplied (upstream rgbx pass;
-                    # pinned by the 32-bit mask fixtures — see file note).
-                    d[i + 1] = r
-                    d[i + 2] = g
-                    d[i + 3] = b
-                    d[i + 4] = a
+                    # File boundary (BMP/WIC 32bppBGRA, Pillow): the masked
+                    # bytes are straight RGBA; convert to premultiplied
+                    # storage (a = 0 -> transparent, rgb dropped — see
+                    # the file note on the upstream divergence).
+                    p = rgbx(rgba(r, g, b, a))
+                    d[i + 1] = p.r
+                    d[i + 2] = p.g
+                    d[i + 3] = p.b
+                    d[i + 4] = p.a
                 else
                     r = bmpMaskShift(UInt32(color), UInt32(redMask))
                     g = bmpMaskShift(UInt32(color), UInt32(greenMask))
@@ -305,8 +319,9 @@ end
 """
 Upstream `encodeDib`, corrected: a valid 124-byte BITMAPV5 header (biSize
 equals the actual size — upstream wrote 136 bytes under the 124 claim),
-32-bit BI_BITFIELDS pixels with the standard masks, premultiplied colors
-(as stored — see the file-header note), rows bottom-up.
+32-bit BI_BITFIELDS pixels with the standard masks, straight RGBA at the
+file boundary (toStraightAlpha — see the file-header note), rows
+bottom-up.
 """
 function encodeDIB(image::Image)
     out = Vector{UInt8}()
@@ -335,17 +350,17 @@ function encodeDIB(image::Image)
     d = image.data
     # Rows are written bottom-up: file row y is image row h - y - 1
     # (upstream `image[x, image.height - y - 1]`).
-    # Pixels are written as stored (premultiplied RGBA, LE uint32
-    # 0xAABBGGRR matching the masks above): decodeDIB's 32-bit masked
-    # path stores the masked bytes directly as premultiplied, so the
-    # encode/decode pair round-trips exactly. (Upstream wrote the
-    # premul->straight conversion here, so its own reader corrupted
-    # semi-transparent pixels on read-back; E001 fix.)
+    # File boundary (BMP/WIC 32bppBGRA, Pillow): the file carries straight
+    # RGBA, so stored premultiplied bytes go through toStraightAlpha
+    # before writing (a = 0 -> all-zero pixel); decodeDIB's masked path
+    # applies the inverse, and the pair round-trips exactly on valid
+    # premultiplied storage (see the file note on the upstream divergence).
     for y in 0:(image.height - 1)
         for x in 0:(image.width - 1)
             i = 4 * ((image.height - 1 - y) * image.width + x)
-            append!(out, [UInt8(d[i + 1]), UInt8(d[i + 2]),
-                UInt8(d[i + 3]), UInt8(d[i + 4])])
+            p = toStraightAlpha(ColorRGBX(d[i + 1], d[i + 2],
+                d[i + 3], d[i + 4]))
+            append!(out, [p.r, p.g, p.b, p.a])
         end
     end
 
