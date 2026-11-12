@@ -70,7 +70,9 @@ function atlas_scene(ctx)
     stroke_segment!(ctx, 40f0, 245f0, 200f0, 245f0)
     set_line_dash!(ctx, Float32[])
 
-    # joins: three V polylines, width 8, 90-degree apices at y=270
+    # joins: three V polylines, width 8; the apices are 2*atan(30/40)
+    # = 73.74 degrees (arms from (x0,310)/(x0+60,310) up to the vertex
+    # (x0+30,270)), not 90
     v1 = new_path()
     move_to!(v1, 240f0, 310f0)
     line_to!(v1, 270f0, 270f0)
@@ -195,16 +197,30 @@ function run(outdir::String)
     check(px(121, 226) == INK, "round: body of the stroke")
     check(px(207, 226) == BG, "round: outside the end cap (distance 6)")
     # square-capped dashed stroke at y=245, dashes [12,6] from x=40:
-    # on [36,52], off [52,58], on [58,70], ...
+    # on [36,52] (the start cap extends the first dash by 4), off
+    # [52,58], on [58,70], ... The CPU keeps the full interior gap:
+    # the interior dash-end cap is not extended (documented deviation,
+    # docs/RECORDING.md section 6.1 / T025), while a standard
+    # renderer's square caps extend every dash end by 4 and bridge
+    # the 6 px gap, so this row appears nearly solid in the SVG/PDF
+    # exports of the scene.
     check(px(38, 246) == INK, "square: cap extension past the start")
     check(px(56, 246) == BG, "dashes: interior of the first gap")
     check(px(62, 246) == INK, "dashes: second dash body")
-    # joins at 90-degree apices (vertex at y=270, width 8):
-    # miter tip reaches y=264.34 (4/sin45); round reaches 266 (r=4);
-    # bevel cuts at y=267.17
-    check(px(271, 266) == INK, "miter: tip region is ink (derived 264.34)")
-    check(px(361, 266) == BG, "round: above the r=4 arc is background")
-    check(px(451, 266) == BG, "bevel: above the 267.17 cut is background")
+    # joins at the 73.74-degree apices (vertex y=270, width 8,
+    # sin(theta/2) = 0.6, cos(theta/2) = 0.8): the miter tip extent
+    # (w/2)/sin(theta/2) = 4/0.6 = 6.6667 above the vertex reaches
+    # y=263.33 (extent/radius ratio 1.667 < miterLimit 4, so the
+    # miter is kept); the round arc apex is y=266.0 (r=4); the bevel
+    # cut (w/2)*sin(theta/2) = 2.4 above the vertex is y=267.6. The CPU
+    # rasterizer's topmost inked rows sit one to two rows inside the
+    # spec geometry (measured: miter [265,266), round [267,268),
+    # bevel [268,269) — existing rasterizer behavior, not asserted),
+    # so the samples below use row [265,266), where the join type
+    # still decides ink vs background.
+    check(px(271, 266) == INK, "miter: tip region is ink (tip at 263.33)")
+    check(px(361, 266) == BG, "round: above the arc apex (266.0) is background")
+    check(px(451, 266) == BG, "bevel: above the 267.6 cut is background")
     check(px(253, 299) == INK, "joins: arm body (miter V)")
     check(px(343, 299) == INK, "joins: arm body (round V)")
     check(px(433, 299) == INK, "joins: arm body (bevel V)")
