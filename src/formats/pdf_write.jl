@@ -36,6 +36,10 @@
 #   /Group /S /Transparency (isolated, group-unit); the group opacity is
 #   the /ca of the ExtGState in effect when the form is drawn.
 # - Images (drawImage) -> DeviceRGB image XObject + DeviceGray SMask
+#   under a cm that composes the 8.9.4 implicit sample flip (sample
+#   origin upper-left, rows top-down): picture space is y-down under
+#   the root CTM, so the unit square must be flipped before the
+#   imageMat mapping, or the image renders vertically flipped.
 #   (premul -> straight at the boundary); v1 emits uncompressed raw
 #   streams — this frozen build has no stdlib Compression, and adding
 #   CodecZlib would be a dependency outside D030 (recorded; FlateDecode
@@ -642,10 +646,16 @@ transparent group; the page content carries a comment marking it
 (identifiable raster, D030 §6)."""
 function _pdfRaster(file, img, W, H, s, sW, sH)
     rgb, gray = _pdfImageBytes(img)
-    # Do maps the image onto the unit square, so the CTM scales it to the
-    # full page (s*W x s*H pt) and flips y (picture space is y-down).
-    content = "q\n" * _pdfNum(s * W) * " 0 0 " * _pdfNum(-s * H) *
-        " 0 " * _pdfNum(s * H) * " cm\n/Im1 Do\nQ\n"
+    # ISO 32000-1 8.9.4: the sample origin is the upper-left, rows scan
+    # top-down, and the implicit image->unit-square matrix is
+    # [1/w 0 0 -1/h 0 1] (sample top -> unit y = 1). This page carries
+    # no picture-space root CTM (plain y-up user space), so the image
+    # matrix is the classic positive-height form: unit y = 1 (sample
+    # top) lands at the page top (0, sH). A negative height here would
+    # double-flip the image (external Poppler reproduction, 2026-11-12
+    # review).
+    content = "q\n" * _pdfNum(s * W) * " 0 0 " * _pdfNum(s * H) *
+        " 0 0 cm\n/Im1 Do\nQ\n"
     out = IOBuffer()
     println(out, "%PDF-1.4")
     offsets = Dict{Int,Int}()
@@ -912,12 +922,18 @@ function writePdf(file::String, picture::Picture; dpi::Float32 =
             print(top, "S\n")
             print(top, "Q\n")
         else # DrawImageOp
-            # Do maps the image onto the unit square in user space, so the
-            # CTM is imageMat (image pixel space -> picture space) composed
-            # with the pixel-size scale.
+            # Do maps the image onto the unit square in user space. Per
+            # ISO 32000-1 8.9.4 the sample origin is the upper-left,
+            # rows scan top-down, and the implicit image->unit-square
+            # matrix is [1/w 0 0 -1/h 0 1] (sample top -> unit y = 1,
+            # a y-up square). imageMat assumes pixel space y-down from
+            # the top, so the emitted cm composes the unit-square
+            # y-flip first: without it every image renders vertically
+            # flipped (external Poppler reproduction, 2026-11-12 review).
             im = op.image
             m = op.imageMat * scale(Vec2(Float32(im.width),
-                Float32(im.height)))
+                Float32(im.height))) * translate(Vec2(0f0, 1f0)) *
+                scale(Vec2(1f0, -1f0))
             print(top, "q\n")
             if m != mat3()
                 print(top, _pdfCm(m) * " cm\n")
