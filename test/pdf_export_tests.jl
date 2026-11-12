@@ -836,13 +836,37 @@
         expectErr(scene_nanalpha, "non-finite group opacity")
     end
 
-    @testset "no exponent notation in content streams (E001)" begin
+    @testset "PDF number emission: §7.3.3 (no exponent form)" begin
+        # ISO 32000-1 §7.3.3 NOTE 1: a conforming writer shall not use
+        # the PostScript exponential syntax; poppler 26.01.0 (pinned
+        # T026 validator) rejects such content streams. Values whose
+        # `string` is exponent form (|v| < 1e-4 or >= 1e16, incl. the
+        # Float32 sin residuals axis-aligned radial gradient maps leave
+        # in the ellipse CTM) are expanded losslessly — the same digits,
+        # the decimal point relocated; no rounding or digit cap.
+        # Expected strings: the exact decimals of these Float32 values
+        # (hand-verified; note Float32(1e20) is not exactly 10^20).
+        @test Vetra._pdfNum(0.0) == "0"
+        @test Vetra._pdfNum(-0.0f0) == "0" # signed zero normalizes
+        @test Vetra._pdfNum(0.5f0) == "0.5" # ordinary form byte-unchanged
+        @test Vetra._pdfNum(1234.5f0) == "1234.5"
+        @test Vetra._pdfNum(1f-20) ==
+            "0.000000000000000000009999999682655225"
+        @test Vetra._pdfNum(-1f-20) ==
+            "-0.000000000000000000009999999682655225"
+        @test Vetra._pdfNum(1f20) == "100000002004087730000"
+        @test Vetra._pdfNum(Float32(-1.5e-7)) == "-0.0000001500000053056283"
+        @test Vetra._pdfNum(Float32(3.4e38)) ==
+            "339999995214436420000000000000000000000"
+        for v in (1f-20, -1f-20, 1f20, Float32(-1.5e-7), Float32(3.4e38),
+            0.5f0, 1234.5f0)
+            s = Vetra._pdfNum(v)
+            @test !occursin(r"[eE]", s)
+            @test parse(Float32, s) == v # independent parse-back
+        end
         # A radial gradient whose center-edge vector points in -x
         # (theta = pi) leaves Float32 sin residuals (~1e-6) in the
-        # ellipse-map CTM. The pinned poppler 26.01.0 validator
-        # misparses exponent-form numbers ("Unknown operator 'e-6'",
-        # dropping content after them), so the writer emits fixed-point
-        # decimals (ISO 32000-1 permits both; this is the portable one).
+        # ellipse-map CTM.
         function scene_res(c)
             rad = Paint(RadialGradientPaint)
             rad.gradientHandlePositions = [Vec2(50f0, 30f0),

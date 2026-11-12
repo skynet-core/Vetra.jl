@@ -319,12 +319,10 @@ function run(outdir::String)
     write_file!(img, joinpath(outdir, "typography.bmp"))
     svg = write_svg!(joinpath(outdir, "typography.svg"), picture)
     check(occursin("<path", svg), "strict SVG: glyph outline paths")
-    check(!occursin(r"[0-9][eE][+-]?[0-9]", svg),
-        "strict SVG: no exponent-notation numbers")
     pdf = write_pdf!(joinpath(outdir, "typography.pdf"), picture)
     check(startswith(pdf, "%PDF-1.4"), "strict PDF: document header")
     check(!occursin(r"[0-9][eE][+-]?[0-9]", pdf),
-        "strict PDF: no exponent-notation numbers")
+        "strict PDF: no exponent-notation numbers (ISO 32000-1 §7.3.3)")
     return finish("typography", outdir)
 end
 

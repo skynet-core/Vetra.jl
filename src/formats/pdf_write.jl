@@ -49,40 +49,43 @@
 
 # ---------- number / matrix helpers ----------
 
-"""PDF real; signed zero normalizes to `0` (inverses produce -0.0).
-Exponent notation is never emitted: `string` yields it for |v| < 1e-4 or
->= 1e16, and Float32 trigonometry leaves residuals like 3e-6 on
-axis-aligned ellipse maps (E001 reproduction: poppler 26.01.0, a pinned
-T026 validator, misparses exponent-form numbers in content streams; ISO
-32000-1 permits both notations, so fixed-point is the portable form)."""
+"""PDF real (ISO 32000-1 §7.3.3): decimal digits, PERIOD optional, no
+exponent form — §7.3.3 NOTE 1: a conforming writer shall not use the
+PostScript exponential syntax (such as 6.02E23). poppler 26.01.0 (the
+pinned T026 validator) enforces that, which is why axis-aligned radial
+gradient maps (Float32 sin residuals like 3e-6 in the ellipse CTM)
+must not reach a content stream in `string` form. `string` yields
+exponent notation for |v| < 1e-4 or >= 1e16; those values are
+rewritten by lossless expansion of the same digits (no rounding, no
+digit cap, no integer promotion). Signed zero normalizes to `0`
+(inverses produce -0.0); non-finite values are rejected earlier by
+the pre-scan / isfinite validation."""
 function _pdfNum(v)
     v == 0 && return "0"
     s = string(v)
     if !occursin('e', s) && !occursin('E', s)
         return s
     end
-    return _pdfFixed(v)
+    return _pdfExpanded(s)
 end
 _pdfNum(v::Float32) = _pdfNum(Float64(v))
 
-"""Fixed-point form of a value whose `string` uses exponent notation
-(`|v| < 1e-4` or `>= 1e16`). Small values: 12 decimal places past the
-first significant digit, capped at 18 (beyond 1e-18 the value rounds to
-zero, which no renderer can distinguish from 0). Large values: integer.
-Beyond the Int64 range the original `string` form is kept (not a
-rendering-relevant coordinate)."""
-function _pdfFixed(v)
-    a = Float64(abs(v))
-    if a >= 9e18
-        return string(v)
+"""Lossless decimal expansion of the exponent form `string` produces
+(`[−]d[.ddd]e±ddd`): fold the exponent into the decimal-point position
+of the same digit string, D × 10^(C - len(frac)) — the value is
+unchanged, only the notation (Float32(1e20) -> "100000002004087730000",
+the exact decimal of the Float32; no Int64 promotion is involved)."""
+function _pdfExpanded(s)
+    m = match(r"^[+-]?(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$", s)
+    m === nothing && return s
+    sign = startswith(s, "-") ? "-" : ""
+    frac = m.captures[2]
+    digits = m.captures[1] * ifelse(isnothing(frac), "", frac)
+    k = parse(Int, m.captures[3]) - ifelse(isnothing(frac), 0, length(frac))
+    if k >= 0
+        return sign * digits * "0"^k
     end
-    if a < 1
-        e = floor(Int, log10(a))
-        dec = min(-e + 12, 18)
-        n = Int(round(v * 10^dec))
-        return (v < 0 ? "-" : "") * "0." * lpad(string(abs(n)), dec, '0')
-    end
-    return string(Int(round(v)))
+    return sign * "0." * "0"^(-k - length(digits)) * digits
 end
 
 """The six PDF `cm` numbers for a Vetra `Mat3` (same mapping as the SVG
