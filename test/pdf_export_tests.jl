@@ -520,9 +520,124 @@
         @test ms !== -1
         st2 = ms + length(marker2)
         @test bytes[st2:(st2 + 3)] == [255, 0, 128, 255]
-        # The Do maps the unit square through imageMat o scale(w, h):
-        # here identity o scale(2,2) -> "2.0 0.0 0.0 2.0 0.0 0.0 cm".
-        @test occursin("2.0 0 0 2.0 0 0 cm\n/Im1 Do", doc)
+        # 8.9.4: the implicit image->unit-square matrix is
+        # [1/w 0 0 -1/h 0 1] (sample top -> unit y = 1); the emitted cm
+        # composes the unit-square y-flip with imageMat o scale(w, h) —
+        # here identity o scale(2,2) o flip:
+        # [2 0 0 2 0 0] * [1 0 0 -1 0 1] = [2 0 0 -2 0 2].
+        @test occursin("2.0 0 0 -2.0 0 2.0 cm\n/Im1 Do", doc)
+    end
+
+    @testset "image orientation: external renderer (poppler + Pillow)" begin
+        # Vertically asymmetric 16x24 stamp (six 8x8 blocks): top row
+        # red/green, middle blue/yellow, bottom magenta/cyan — any
+        # vertical flip swaps the rows and the samples below catch it.
+        # ISO 32000-1 8.9.4 fixes the sample order (origin upper-left,
+        # rows top-down, implicit matrix [1/w 0 0 -1/h 0 1]); this leg
+        # checks the emitted CTMs against a real external renderer
+        # instead of trusting the payload bytes.
+        stamp = newImage(16, 24)
+        blocks = (rgb(255, 0, 0), rgb(0, 255, 0), rgb(0, 0, 255),
+            rgb(255, 255, 0), rgb(255, 0, 255), rgb(0, 255, 255))
+        for y in 1:24, x in 1:16
+            setColor(stamp, x, y, blocks[2 * ((y - 1) ÷ 8) +
+                ((x - 1) ÷ 8) + 1])
+        end
+        function scene_1x1(c)
+            drawImage(c, stamp, 4f0, 4f0)
+            return nothing
+        end
+        function scene_2x(c)
+            drawImage(c, stamp, 4f0, 4f0, 32f0, 48f0)
+            return nothing
+        end
+        function scene_alpha(c)
+            c.fillStyle = rgb(200, 30, 40)
+            fillRect(c, 0f0, 0f0, 20f0, 20f0)
+            clearRect(c, 0f0, 0f0, 10f0, 10f0)
+            return nothing
+        end
+        poppler = Sys.which("pdftoppm")
+        pilpy = nothing
+        for py in ("python3", "/usr/bin/python3")
+            w = Sys.which(py)
+            isnothing(w) && continue
+            if success(pipeline(`$w -c "import PIL"`,
+                    stdout = devnull, stderr = devnull))
+                pilpy = w
+                break
+            end
+        end
+        if poppler === nothing || pilpy === nothing
+            println("pdftoppm/Pillow not present; image orientation " *
+                "render check skipped")
+        else
+            # Pillow sampler: one generated script per document — the
+            # sample points are baked in as numeric literals (no path or
+            # quote interpolation into the Python source).
+            function render_pixels(tag::String, pdf::String, dpi::Int,
+                    pts::Vector{String})
+                base = pdf * "-pg"
+                cmd = `$(poppler) -singlefile -png -r $(dpi) $(pdf) $(base)`
+                if !success(pipeline(cmd; stdout = devnull, stderr = stderr))
+                    throw(ErrorException("pdftoppm failed on " * pdf))
+                end
+                pysrc = joinpath(dir, "orient-" * tag * ".py")
+                open(pysrc, "w") do f
+                    write(f,
+                        "import sys\n" *
+                        "from PIL import Image\n" *
+                        "im = Image.open(sys.argv[1]).convert(\"RGB\")\n")
+                    for p in pts
+                        write(f, "print(\"%d %d %d\" % im.getpixel((" * p *
+                            ")))\n")
+                    end
+                end
+                out = read(`$(pilpy) $(pysrc) $(base).png`, String)
+                pix = Vector{Tuple{Int,Int,Int}}()
+                for ln in split(strip(out), "\n")
+                    t = split(ln)
+                    push!(pix, (parse(Int, t[1]), parse(Int, t[2]),
+                        parse(Int, t[3])))
+                end
+                return pix
+            end
+            # 96 dpi: page 32*72/96 = 24 pt -> 32x32 px; the stamp is
+            # pixel 1:1 at canvas (4,4). Same scene, strict vs fallback.
+            pic1 = record(32, 32, scene_1x1)
+            p1 = joinpath(dir, "orient-1x1.pdf")
+            writePdf(p1, pic1; dpi = 96f0)
+            p2 = joinpath(dir, "orient-fb.pdf")
+            writePdf(p2, pic1; dpi = 96f0, rasterFallback = true)
+            for (name, f) in [("strict", p1), ("fallback", p2)]
+                got = render_pixels(name * "-s", f, 96,
+                    ["8,8", "16,8", "8,16", "16,16", "8,24", "16,24",
+                        "2,2"])
+                @test got == [(255, 0, 0), (0, 255, 0), (0, 0, 255),
+                    (255, 255, 0), (255, 0, 255), (0, 255, 255),
+                    (255, 255, 255)]
+            end
+            # strict under a transform: the stamp drawn 2x on a 64x64
+            # picture (canvas (4,4), dst 32x48); block centers land at
+            # canvas (10,10)/(26,10)/(10,26)/(26,26)/(10,44)/(26,44).
+            p3 = joinpath(dir, "orient-2x.pdf")
+            writePdf(p3, record(64, 64, scene_2x); dpi = 96f0)
+            @test render_pixels("2x", p3, 96,
+                ["10,10", "26,10", "10,26", "26,26", "10,44", "26,44"]) ==
+                [(255, 0, 0), (0, 255, 0), (0, 0, 255),
+                    (255, 255, 0), (255, 0, 255), (0, 255, 255)]
+            # fallback alpha alignment: red page with a cleared 10x10
+            # top-left hole; the SMask must travel with the corrected
+            # image CTM — the hole renders as the white page, the rest
+            # as the red (20x20 picture -> 20x20 px at 96 dpi).
+            p4 = joinpath(dir, "orient-alpha.pdf")
+            writePdf(p4, record(20, 20, scene_alpha); dpi = 96f0,
+                rasterFallback = true)
+            @test render_pixels("alpha", p4, 96,
+                ["2,2", "15,2", "2,15", "15,15"]) ==
+                [(255, 255, 255), (200, 30, 40), (200, 30, 40),
+                    (200, 30, 40)]
+        end
     end
 
     @testset "rasterFallback: one embedded image, replay-exact bytes" begin
