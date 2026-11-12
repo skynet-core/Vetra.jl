@@ -7,6 +7,18 @@ All examples run with `julia --project=. examples/<name>.jl [input] [output]`
 and default to the pinned upstream fixtures in
 `.reference/upstream/tests/fileformats/`, writing under `artifacts/examples/`.
 
+## Feature gallery (`gallery/`)
+
+Six feature programs on the current public API, with self-checks, a batch
+runner and a coverage matrix — see [gallery/README.md](gallery/README.md):
+
+    julia --project=. examples/gallery/run_gallery.jl [outdir]
+    julia --project=. examples/gallery/run_gallery.jl [outdir] --core-only
+
+Core-only runs need nothing extra; the optional checks (PNG/JPEG/WebP/
+ColorTypes/HarfBuzz) run when the providers are present, e.g. after the
+documented setup of `examples/gallery/optional_env`.
+
 ## Core (no extra packages)
 
 - `square.jl`, `line.jl`, `heart.jl` — mirrors of the pinned upstream programs
@@ -16,9 +28,9 @@ and default to the pinned upstream fixtures in
   and re-encode it (round trip).
 - `showcase.jl` — a guided tour of the API: canvas, context state, paths,
   transforms, clip + layers, gradients and blend-mode paints, image
-  operations, format I/O, and text (native Roboto). Sections 1-7 and 9
-  need no packages; section 8 (PNG/JPEG/SVG parts) needs the opt-in
-  packages below.
+  operations, format I/O, and text (native Roboto). Runs core-only by
+  default (BMP output); section 8's PNG/JPEG/SVG parts run only when
+  their opt-in packages are available (named and skipped otherwise).
 
 ## Opt-in formats (D014)
 

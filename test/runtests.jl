@@ -108,3 +108,7 @@ include("shaping_tests.jl")
 # trust boundary, array interface, LinearAlgebra/Base extensions,
 # fromColors view/transpose widening, weakdeps metadata).
 include("api_native_tests.jl")
+
+# E001: feature gallery examples (import safety, end-to-end runs in the
+# optional environment, core-only subprocess legs, batch runner CLI).
+include("gallery_examples_tests.jl")

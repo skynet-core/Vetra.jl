@@ -1,14 +1,16 @@
 # showcase.jl -- a guided tour of the Vetra.jl API (T008).
 #
-#   julia --project=. examples/showcase.jl [out.png]
+#   julia --project=. examples/showcase.jl [out.png|out.bmp]
 #
 # Sections 1-7 and 9 are the dependency-free core (9 = T009 text, native
-# OpenType subset). Section 8 (and the default output) use the opt-in
-# packages from D014:
+# OpenType subset). Section 8's default output and bmp/qoi/ppm are native;
+# its PNG/JPEG/SVG parts use the opt-in packages from D014 only when they
+# are available (skipped, named, otherwise):
 #   Pkg.add("PNGFiles")   # PNG read/write
 #   Pkg.add("JpegTurbo")  # JPEG decode
 #   Pkg.add("XML")        # SVG parse
-# Without arguments the final canvas is written to artifacts/examples/.
+# Without arguments the final canvas is written to artifacts/examples/
+# (showcase.png with PNGFiles, showcase.bmp without).
 using Vetra
 
 W, H = 320, 240
@@ -123,24 +125,45 @@ spread(faded, 1f0) # grow the alpha mask, in place
 println("7. subImage/resize/rotate90/flip/blur/shadow/draw/drawTiled/applyOpacity/spread")
 
 # --- 8. File formats and base64 ----------------------------------------------------------
+# The default output and bmp/qoi/ppm are the native codecs (no packages);
+# the opt-in formats (D014) run only when their provider is available.
 outDir = joinpath(@__DIR__, "..", "artifacts", "examples")
 isdir(outDir) || mkpath(outDir)
+havePng = Base.locate_package(Vetra._PNGFILES_PKGID) !== nothing
+haveJpeg = Base.locate_package(Vetra._JPEGTURBO_PKGID) !== nothing
+haveXml = Base.locate_package(Vetra._XML_PKGID) !== nothing
 # Writable formats (native codecs): extension drives the encoder.
-writeFile(img, joinpath(outDir, "showcase.png"))
 writeFile(img, joinpath(outDir, "showcase.bmp"))
 writeFile(img, joinpath(outDir, "showcase.qoi"))
 writeFile(img, joinpath(outDir, "showcase.ppm"))
+havePng && writeFile(img, joinpath(outDir, "showcase.png"))
 # Read-only formats (no upstream encoder): decode the pinned fixtures.
 ff = joinpath(@__DIR__, "..", ".reference", "upstream", "tests", "fileformats")
-jpg = readImage(joinpath(ff, "jpeg", "masters", "mandrill.jpg"))
 gif = decodeGIF(read(joinpath(ff, "gif", "3x5.gif")))
-svgImg = newImage(parseSvg(read(joinpath(ff, "svg", "line01.svg"), String)))
-# base64 round trip (data URL out, image in).
+notes = ["gif $(length(gif.frames)) frame(s)"]
+if haveJpeg
+    jpg = readImage(joinpath(ff, "jpeg", "masters", "mandrill.jpg"))
+    push!(notes, "jpeg $(width(jpg))x$(height(jpg))")
+else
+    push!(notes, "jpeg: opt-in JpegTurbo absent (skipped)")
+end
+if haveXml
+    svgImg = newImage(parseSvg(read(joinpath(ff, "svg", "line01.svg"), String)))
+    push!(notes, "svg $(width(svgImg))x$(height(svgImg))")
+else
+    push!(notes, "svg: opt-in XML absent (skipped)")
+end
+# base64 round trip (data URL out, image in; PNG decode is opt-in).
 b64 = encodeBase64(img)
-roundTrip = decodeBase64(b64)
-println("8. formats: wrote png/bmp/qoi/ppm; read jpeg $(width(jpg))x$(height(jpg)), " *
-    "gif $(length(gif.frames)) frame(s), svg $(width(svgImg))x$(height(svgImg)); " *
-    "base64 len $(length(b64)) round-trips: ", roundTrip.data == img.data)
+if havePng
+    roundTrip = decodeBase64(b64)
+    push!(notes, "base64 len $(length(b64)) round-trips: ",
+        string(roundTrip.data == img.data))
+else
+    push!(notes, "base64 len $(length(b64)) (PNG decode: opt-in absent)")
+end
+println("8. formats: wrote bmp/qoi/ppm", havePng ? "/png" : "", "; read ",
+    join(notes, ", "))
 
 # --- 9. Text (T009) --------------------------------------------------------------
 # ctx.font takes a font path (readTypeface; cached per path); fillText and
@@ -160,7 +183,8 @@ f.size = 12f0
 println("9. text: fill+stroke drawn; measureText width=$(m.width), " *
     "layoutBounds=", layoutBounds(f, "kerned text"))
 
-outPath = isempty(ARGS) ? joinpath(outDir, "showcase.png") : ARGS[1]
+outPath = isempty(ARGS) ? joinpath(outDir,
+    "showcase." * (havePng ? "png" : "bmp")) : ARGS[1]
 isdir(dirname(outPath)) || mkpath(dirname(outPath))
 writeFile(img, outPath)
 println("canvas -> ", outPath)
