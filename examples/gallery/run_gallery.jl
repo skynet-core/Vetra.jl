@@ -93,6 +93,37 @@ function core_only_run(name::String, outdir::String, depot::String)
     return success(c)
 end
 
+"""Core-only environment preflight: in the identical isolated
+environment core_only_run uses, none of the six optional providers may
+be locatable (same assertion as test/codec_loading_tests.jl). A
+polluted root Manifest/depot fails this before any re-run, so an
+optional run is never labeled core-only. The check is a generated
+script (no paths, no -e quoting) run under the identical env.
+Returns (ok, output)."""
+function core_env_preflight(depot::String)
+    root = VetraGallery.ROOT
+    loadpath = Sys.iswindows() ? "@;@stdlib" : "@:@stdlib"
+    depots = join([depot, DEPOT_PATH...], Sys.iswindows() ? ';' : ':')
+    script = joinpath(depot, "core_env_preflight.jl")
+    open(script, "w") do f
+        write(f,
+            "using Vetra\n" *
+            "ids = (Vetra._PNGFILES_PKGID, Vetra._JPEGTURBO_PKGID,\n" *
+            "    Vetra._XML_PKGID, Vetra._COLORTYPES_PKGID,\n" *
+            "    Vetra._WEBP_PKGID, Vetra._HB_PKGID)\n" *
+            "bad = [string(id.name) for id in ids if\n" *
+            "    Base.locate_package(id) !== nothing]\n" *
+            "isempty(bad) || error(\"core-only environment not core-only: \" *\n" *
+            "    \"optional provider locatable: \" * join(bad, \", \"))\n" *
+            "println(\"core-only preflight: all 6 providers absent\")\n")
+    end
+    cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(root) $(script)`
+    out = IOBuffer()
+    ok = success(pipeline(addenv(cmd, "JULIA_DEPOT_PATH" => depots,
+        "JULIA_LOAD_PATH" => loadpath); stdout = out, stderr = out))
+    return (ok, String(out.data[1:out.size]))
+end
+
 function main()
     # args are fully parsed before any output directory is resolved or
     # created (default_outdir is a pure path helper; run_all ensures).
@@ -112,6 +143,8 @@ function main()
         println()
         println("core-only subprocess re-runs (optional providers absent):")
         mktempdir() do depot
+            (preflight_ok, preflight_msg) = core_env_preflight(depot)
+            preflight_ok || throw(ErrorException(preflight_msg))
             ok = true
             for name in PROGRAMS
                 passed = core_only_run(name, outdir, depot)

@@ -27,9 +27,10 @@ julia --project=. examples/gallery/<name>.jl [outdir]
 # all six + the coverage summary (current environment)
 julia --project=. examples/gallery/run_gallery.jl [outdir]
 
-# all six, plus a core-only subprocess re-run of each (proves the
-# optional branches raise their named install hints, nothing is
-# silently skipped-as-passed)
+# all six, plus a core-only subprocess re-run of each (a preflight
+# first proves all six optional providers are absent from the
+# isolated environment; then each program's core-only branch — named
+# install hints, no silent skip-as-pass — is checked end to end)
 julia --project=. examples/gallery/run_gallery.jl [outdir] --core-only
 ```
 
@@ -52,6 +53,22 @@ julia --project=examples/gallery/optional_env examples/gallery/run_gallery.jl
 No program ever calls `Pkg.add` at runtime; when a provider is absent the
 affected checks assert the named install-hint error instead of skipping.
 
+## Notebook display (T016)
+
+`image_lab` exercises the current notebook contract: a bare `Image` in a
+cell is served by `show(MIME"image/png", img)` (PNGFiles present), with
+a text/plain fallback in core. Minimal runnable call, from the
+repository root, in the optional environment from above:
+
+```julia
+include("examples/gallery/image_lab.jl")  # import-safe: no rendering
+img = test_image()                        # 4x4 Image, valid premultiplied
+img                                       # a notebook cell displays the PNG
+```
+
+This documents the display path only — no live-adapter or
+interactivity claim; `run()` returns the check report, never the image.
+
 ## Coverage matrix
 
 Feature → program, renderer, optional dependency, and what is checked.
@@ -62,7 +79,7 @@ Feature → program, renderer, optional dependency, and what is checked.
 | Paths, fill rules (even-odd/non-zero) | drawing_atlas | CPU, SVG, PDF | – | hand-derived interior pixels, byte replay |
 | Caps (butt/round/square), joins (miter/round/bevel), dashes | drawing_atlas | CPU, SVG, PDF | – | hand-derived stroke extents |
 | Transforms (translate/rotate) | drawing_atlas | CPU, SVG, PDF | – | hand-derived corner pixels |
-| Linear + radial gradients | drawing_atlas | CPU, SVG, PDF | – | hand-lerped stops, no exponent numbers |
+| Linear + radial gradients | drawing_atlas | CPU, SVG, PDF | – | hand-lerped stops; no exponent numbers in the PDF (ISO 32000-1 §7.3.3) |
 | Clips, group opacity, isolated layers | drawing_atlas | CPU, SVG, PDF | – | hand-derived composites |
 | Recorded replay 1x (byte-exact) / 2x (pinned raster semantics) | drawing_atlas | CPU | – | op count, byte identity, derived samples |
 | Plot mapping (large-offset Float64 data, Float32 narrowing) | plot_dashboard | CPU, SVG, PDF | – | forward/inverse mapping, spacing facts |

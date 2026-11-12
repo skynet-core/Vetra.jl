@@ -70,13 +70,15 @@ end
 
     @testset "BMP (5 pinned upstream fixtures, corrected masked boundary)" begin
         # The 32-bit mask fixtures are upstream oracles of the old
-        # direct-store masked semantics (file bytes stored as premul,
-        # invalid for a = 0 / partial alpha). The pinned raw files stay
-        # untouched (checksums above); the corrected expectation is
-        # derived from them by the documented straight -> premul boundary
-        # ((c * a + 127) div 255), applied to exactly the pixels with
-        # stored a < 255. Divergence counts per fixture (hand-counted
-        # from the pinned raw, independent of the decoder):
+        # direct-store decode: the file bytes are straight (upstream's
+        # encoder already applied the straight pass), but upstream's
+        # masked decoder stored them directly as premul — invalid for
+        # a = 0 / partial alpha. The pinned raw files stay untouched
+        # (checksums above); the corrected expectation is derived from
+        # them by the documented straight -> premul boundary, applied to
+        # exactly the pixels with stored a < 255. Divergence counts per
+        # fixture (hand-counted from the pinned raw, independent of the
+        # decoder):
         BMP_SPLIT_COUNTS = Dict(
             "bmp_knight_32_master_bmp" => 36,
             "bmp_test4x2_bmp" => 4,
@@ -687,14 +689,15 @@ end
         end
 
         @testset "BMP external reader interop (Pillow, guarded like poppler)" begin
-            # Host probe: the first of these with an importable PIL
-            # (on this host the distro Pillow 12.x is a cpython-314
-            # module, reached via python3.14).
+            # First interpreter that imports PIL, probed quietly (a
+            # missing PIL is not a traceback to surface): PATH
+            # python3, then the distro /usr/bin/python3.
             pilpy = nothing
-            for py in ("python3", "python3.14")
+            for py in ("python3", "/usr/bin/python3")
                 w = Sys.which(py)
                 isnothing(w) && continue
-                if success(`$w -c "import PIL"`)
+                if success(pipeline(`$w -c "import PIL"`,
+                        stdout = devnull, stderr = devnull))
                     pilpy = w
                     break
                 end
@@ -709,14 +712,17 @@ end
                     open(f, "w") do io
                         write(io, encodeBMP(st))
                     end
-                    out = read(`$pilpy -c "from PIL import Image; im = Image.open('$f'); print(im.mode); print([im.getpixel((x, y)) for y in range(im.height) for x in range(im.width)])"`, String)
+                    # The file path is a separate argv (sys.argv[1]),
+                    # never interpolated into the Python source
+                    # (backslashes / apostrophes in paths).
+                    out = read(`$pilpy -c "from PIL import Image; import sys; im = Image.open(sys.argv[1]); print(im.mode); print([im.getpixel((x, y)) for y in range(im.height) for x in range(im.width)])" $(f)`, String)
                     # Pillow decodes 32-bit BMP alpha as straight RGBA:
                     @test occursin("RGBA", out)
                     @test occursin("(255, 0, 0, 128)", out)
                     @test occursin("(0, 0, 0, 0)", out)
                 end
             else
-                println("python3/Pillow not present; BMP external-reader " *
+                println("no Python with Pillow found; BMP external-reader " *
                     "interop not checked")
             end
         end

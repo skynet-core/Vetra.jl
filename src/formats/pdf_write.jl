@@ -55,11 +55,12 @@ PostScript exponential syntax (such as 6.02E23). poppler 26.01.0 (the
 pinned T026 validator) enforces that, which is why axis-aligned radial
 gradient maps (Float32 sin residuals like 3e-6 in the ellipse CTM)
 must not reach a content stream in `string` form. `string` yields
-exponent notation for |v| < 1e-4 or >= 1e16; those values are
-rewritten by lossless expansion of the same digits (no rounding, no
-digit cap, no integer promotion). Signed zero normalizes to `0`
-(inverses produce -0.0); non-finite values are rejected earlier by
-the pre-scan / isfinite validation."""
+exponent notation whenever its shortest round-trip digits need the
+scientific form (e.g. |v| >= 1e6 or |v| < 1e-4); those values are
+rewritten by decimal expansion of the same digits (no rounding, no
+digit cap, no integer promotion — see _pdfExpanded). Signed zero
+normalizes to `0` (inverses produce -0.0); non-finite values are
+rejected earlier by the pre-scan / isfinite validation."""
 function _pdfNum(v)
     v == 0 && return "0"
     s = string(v)
@@ -72,20 +73,31 @@ _pdfNum(v::Float32) = _pdfNum(Float64(v))
 
 """Lossless decimal expansion of the exponent form `string` produces
 (`[−]d[.ddd]e±ddd`): fold the exponent into the decimal-point position
-of the same digit string, D × 10^(C - len(frac)) — the value is
-unchanged, only the notation (Float32(1e20) -> "100000002004087730000",
-the exact decimal of the Float32; no Int64 promotion is involved)."""
+of the same digit string. Let D be the full digit string (int part +
+fraction, length n) and p the shift of the decimal point from the end
+of D (p = exponent − fraction length; the value is D × 10^p). Three
+cases: p >= 0 puts the point after all digits (append zeros),
+0 > p with −p < n puts it inside the digit string (split), p <= −n
+puts it before (leading zeros). The result is a decimal that
+round-trips to the original value, not the exact decimal expansion of
+the binary float: `string` gives the shortest round-trip digits, so
+Float32(1e20) — exactly 100000002004087734272 in binary — expands to
+the shorter 100000002004087730000, which parses back to the same
+Float32 (verified by the round-trip tests)."""
 function _pdfExpanded(s)
     m = match(r"^[+-]?(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$", s)
     m === nothing && return s
     sign = startswith(s, "-") ? "-" : ""
-    frac = m.captures[2]
-    digits = m.captures[1] * ifelse(isnothing(frac), "", frac)
-    k = parse(Int, m.captures[3]) - ifelse(isnothing(frac), 0, length(frac))
-    if k >= 0
-        return sign * digits * "0"^k
+    frac = something(m.captures[2], "")
+    digits = m.captures[1] * frac
+    p = parse(Int, m.captures[3]) - length(frac)
+    n = length(digits)
+    if p >= 0
+        return sign * digits * "0"^p
+    elseif -p < n
+        return sign * digits[1:n + p] * "." * digits[n + p + 1:n]
     end
-    return sign * "0." * "0"^(-k - length(digits)) * digits
+    return sign * "0." * "0"^(-p - n) * digits
 end
 
 """The six PDF `cm` numbers for a Vetra `Mat3` (same mapping as the SVG

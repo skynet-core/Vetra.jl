@@ -16,10 +16,11 @@ const GALLERY_PROGRAMS = [
     "drawing_atlas", "plot_dashboard", "typography", "image_lab",
     "recording_reuse", "export_policies"]
 
-"""Include one gallery program into a fresh module (the frozen build
-does not export `include`/`@__DIR__` from `import Base`, so `include`
-gets a one-line shim that delegates to `Base.include(@__MODULE__, ...)`;
-`@__DIR__` and `@__FILE__` are parser-level and work as-is)."""
+"""Include one gallery program into a fresh module. Ordinary Julia
+module semantics: a bare `Module(...)` does not inherit Base imports,
+so the `include` call at the top of every program would not resolve;
+the one-line shim binds it to `Base.include(@__MODULE__, ...)`.
+`@__DIR__` and `@__FILE__` are parser-level and work as-is."""
 function import_program(name::String, path::String)
     mod = Module(Symbol("gallery_" * name))
     Core.eval(mod, :(import Base))
@@ -47,9 +48,12 @@ end
     end
 
     @testset "entry guard: real CLI / include / -e invocations" begin
-        # The guard is Base.PROGRAM_FILE (entry path; "" for -e, REPL and
-        # included code). Each mode is verified with a real process
-        # invocation (not an in-process emulation).
+        # The guard is Base.PROGRAM_FILE (entry path; "" for -e, REPL
+        # and included code). Each mode is verified with a real process
+        # invocation (not an in-process emulation). Paths reach the
+        # child as command-line arguments or repr-quoted literals —
+        # never interpolated raw into generated Julia source, where
+        # backslashes would become escapes on Windows.
         prog = joinpath(gallery, "plot_dashboard.jl")
         mktempdir() do dir
             # CLI: the program is the entry script -> main runs
@@ -57,24 +61,26 @@ end
             cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(root) $(prog) $(out1)`
             @test success(pipeline(cmd; stdout = stderr, stderr = stderr))
             @test isfile(joinpath(out1, "plot_dashboard.bmp"))
-            # include from a driver script: not the entry -> no render at
-            # include time; the explicit run() still works
+            # include from a driver script: not the entry -> no render
+            # at include time; the explicit run() still works
             drv = joinpath(dir, "driver.jl")
             out2 = joinpath(dir, "include")
             open(drv, "w") do f
-                println(f, "include(\"", prog, "\")")
-                println(f,
-                    "if VetraGallery.is_entry(\"", prog, "\")")
+                println(f, "include(", repr(prog), ")")
+                println(f, "if VetraGallery.is_entry(", repr(prog), ")")
                 println(f, "    error(\"entry guard false positive\")")
                 println(f, "end")
-                println(f, "run(\"", out2, "\")")
+                println(f, "run(", repr(out2), ")")
             end
             cmd2 = `$(Base.julia_cmd()) --startup-file=no --project=$(root) $(drv)`
             @test success(pipeline(cmd2; stdout = stderr, stderr = stderr))
             @test isfile(joinpath(out2, "plot_dashboard.bmp"))
-            # -e with an existing .jl path in ARGS: that path is an
-            # argument, not the entry (PROGRAM_FILE == "")
-            cmd3 = `$(Base.julia_cmd()) --startup-file=no --project=$(root) -e "include(\"$(gallery)/gallery.jl\"); @assert Base.PROGRAM_FILE == \"\"; @assert !VetraGallery.is_entry(ARGS[1])" $(prog)`
+            # -e with existing .jl paths in ARGS: arguments, not the
+            # entry (PROGRAM_FILE == ""); the paths are passed via
+            # ARGS, not embedded in the -e source
+            cmd3 = `$(Base.julia_cmd()) --startup-file=no --project=$(root)
+                -e "include(ARGS[1]); @assert Base.PROGRAM_FILE == \"\"; @assert !VetraGallery.is_entry(ARGS[2])"
+                $(joinpath(gallery, "gallery.jl")) $(prog)`
             @test success(pipeline(cmd3; stdout = stderr, stderr = stderr))
         end
     end
@@ -117,6 +123,30 @@ end
         mktempdir() do depot
             depots = join([depot; DEPOT_PATH], Sys.iswindows() ? ';' : ':')
             loadpath = Sys.iswindows() ? "@;@stdlib" : "@:@stdlib"
+            # Preflight in the identical isolated environment: none of
+            # the six optional providers may be locatable (same
+            # assertion pattern as codec_loading_tests.jl). If a
+            # polluted root Manifest/depot makes one present, this
+            # fails honestly instead of labeling an optional run
+            # "core-only". The preflight is a generated script (no
+            # paths, no -e quoting) run under the identical env.
+            pre_script = joinpath(depot, "core_env_preflight.jl")
+            open(pre_script, "w") do f
+                write(f,
+                    "using Vetra\n" *
+                    "ids = (Vetra._PNGFILES_PKGID, Vetra._JPEGTURBO_PKGID,\n" *
+                    "    Vetra._XML_PKGID, Vetra._COLORTYPES_PKGID,\n" *
+                    "    Vetra._WEBP_PKGID, Vetra._HB_PKGID)\n" *
+                    "bad = [string(id.name) for id in ids if\n" *
+                    "    Base.locate_package(id) !== nothing]\n" *
+                    "isempty(bad) || error(\"core-only environment not core-only: \" *\n" *
+                    "    \"optional provider locatable: \" * join(bad, \", \"))\n" *
+                    "println(\"core-only preflight: all 6 providers absent\")\n")
+            end
+            pre = `$(Base.julia_cmd()) --startup-file=no --project=$(root) $(pre_script)`
+            @test success(pipeline(addenv(pre, "JULIA_DEPOT_PATH" => depots,
+                    "JULIA_LOAD_PATH" => loadpath);
+                stdout = stderr, stderr = stderr))
             for name in GALLERY_PROGRAMS
                 @testset "$name" begin
                     out = joinpath(depot, name)

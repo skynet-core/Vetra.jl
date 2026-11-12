@@ -840,30 +840,82 @@
         # ISO 32000-1 §7.3.3 NOTE 1: a conforming writer shall not use
         # the PostScript exponential syntax; poppler 26.01.0 (pinned
         # T026 validator) rejects such content streams. Values whose
-        # `string` is exponent form (|v| < 1e-4 or >= 1e16, incl. the
-        # Float32 sin residuals axis-aligned radial gradient maps leave
-        # in the ellipse CTM) are expanded losslessly — the same digits,
-        # the decimal point relocated; no rounding or digit cap.
-        # Expected strings: the exact decimals of these Float32 values
-        # (hand-verified; note Float32(1e20) is not exactly 10^20).
+        # `string` is exponent form (e.g. |v| >= 1e6 or |v| < 1e-4,
+        # incl. the Float32 sin residuals (~1e-6) axis-aligned radial
+        # gradient maps leave in the ellipse CTM) are rewritten by
+        # relocating the decimal point of the same digits — no
+        # rounding, no digit cap, no integer promotion. The `string`
+        # digits are the shortest round-trip decimal, not the exact
+        # binary expansion: Float32(1e20) is exactly
+        # 100000002004087734272 in binary, but its shortest
+        # round-trip digits expand to the shorter 100000002004087730000,
+        # which parses back to the same value (round trip asserted
+        # below).
+        # Expected strings: hand-verified (note Float32(1e20) is not
+        # exactly 10^20).
         @test Vetra._pdfNum(0.0) == "0"
         @test Vetra._pdfNum(-0.0f0) == "0" # signed zero normalizes
         @test Vetra._pdfNum(0.5f0) == "0.5" # ordinary form byte-unchanged
         @test Vetra._pdfNum(1234.5f0) == "1234.5"
+        # The three decimal-point cases: after all digits (zeros
+        # appended), inside the digit string, before it (leading zeros).
+        @test Vetra._pdfNum(1f20) == "100000002004087730000"
+        @test Vetra._pdfNum(1234567.125) == "1234567.125"
+        @test Vetra._pdfNum(Float32(1234567.125)) == "1234567.125"
+        @test Vetra._pdfNum(-1234567.125) == "-1234567.125"
+        @test Vetra._pdfNum(9999999999999998.0) == "9999999999999998"
+        @test Vetra._pdfNum(1e6) == "1000000"
+        @test Vetra._pdfNum(1e16) == "10000000000000000"
         @test Vetra._pdfNum(1f-20) ==
             "0.000000000000000000009999999682655225"
         @test Vetra._pdfNum(-1f-20) ==
             "-0.000000000000000000009999999682655225"
-        @test Vetra._pdfNum(1f20) == "100000002004087730000"
+        @test Vetra._pdfNum(1e-4) == "0.0001" # ordinary form passes through
+        @test Vetra._pdfNum(9.999e-5) == "0.00009999"
         @test Vetra._pdfNum(Float32(-1.5e-7)) == "-0.0000001500000053056283"
         @test Vetra._pdfNum(Float32(3.4e38)) ==
             "339999995214436420000000000000000000000"
+        # Round trip on hand-picked finite values (Float32 and Float64).
         for v in (1f-20, -1f-20, 1f20, Float32(-1.5e-7), Float32(3.4e38),
-            0.5f0, 1234.5f0)
+            0.5f0, 1234.5f0, 1234567.125, Float32(1234567.125),
+            -1234567.125, 9999999999999998.0, 12345678.9,
+            0.0000123456, 9.999e-5, 1e6, 1e16, 1e20, -1e20)
             s = Vetra._pdfNum(v)
             @test !occursin(r"[eE]", s)
-            @test parse(Float32, s) == v # independent parse-back
+            @test parse(Float64, s) == v # independent parse-back
         end
+        # Round trip on bit-pattern finite floats (deterministic sweep,
+        # no RNG; positive and negative halves of the exponent field).
+        for i in 0:4095
+            for v in (Core.bitcast(Float32, UInt32(i)),
+                Core.bitcast(Float32, UInt32(i) + 0x80000000),
+                Core.bitcast(Float64, UInt64(i)),
+                Core.bitcast(Float64,
+                    UInt64(i) + UInt64(0x8000000000000000)))
+                isfinite(v) || continue
+                s = Vetra._pdfNum(v)
+                @test s == "0" || (!occursin(r"[eE]", s) &&
+                    parse(Float64, s) == v)
+            end
+        end
+        # Real-export regression: million-range fractional coordinates
+        # (off-canvas geometry on a small page) must reach the content
+        # stream decimal-expanded, not in exponent form.
+        function scene_bigcoords(c)
+            c.fillStyle = rgb(200, 30, 40)
+            fillRect(c, 1234567.125f0, 40f0, 50f0, 30f0)
+            c.strokeStyle = rgb(15, 23, 42)
+            c.lineWidth = 2f0
+            strokeSegment(c, -987654.25f0, 10f0, -687653.75f0, 10f0)
+            return nothing
+        end
+        bigpdf = joinpath(dir, "bigcoords.pdf")
+        doc = writePdf(bigpdf, record(200, 100, scene_bigcoords);
+            dpi = 72f0)
+        @test occursin("1234567.125", doc)
+        @test occursin("-987654.25", doc)
+        @test occursin("-687653.75", doc)
+        @test !occursin(r"[0-9][eE][+-]?[0-9]", doc)
         # A radial gradient whose center-edge vector points in -x
         # (theta = pi) leaves Float32 sin residuals (~1e-6) in the
         # ellipse-map CTM.
