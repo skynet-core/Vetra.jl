@@ -46,8 +46,14 @@ function _svgHex(c::ColorRGBA)
 end
 
 """Number as SVG `float`; `-0.0` is normalized to `0.0` (inverse matrices
-produce signed zeros)."""
-_n(v::Float32) = v == Float32(0) ? "0.0" : string(v)
+produce signed zeros). The SVG 1.1 number grammar (W3C DataTypeNumber)
+explicitly allows exponent form, so `string` output is emitted as-is
+(correcting an over-restriction introduced with E001: the no-exponent
+requirement is a PDF one, ISO 32000-1 §7.3.3 NOTE 1, not an SVG one)."""
+function _n(v::Float32)
+    v == Float32(0) && return "0.0"
+    return string(v)
+end
 
 """The SVG `matrix(a b c d e f)` string for a Vetra `Mat3`
 (x' = a*x + c*y + e, y' = b*x + d*y + f; Vetra `m[i, j]` = column i, row j)."""

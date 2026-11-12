@@ -758,5 +758,31 @@
         end
     end
 
+    @testset "SVG number emission (E001 correction: exponent allowed)" begin
+        # The SVG 1.1 number grammar (W3C DataTypeNumber) explicitly
+        # allows exponent form, so the writer passes `string(v)`
+        # through; the axis-aligned radial gradient leaves Float32 sin
+        # residuals (~3e-6) in the ellipse-map off-diagonals, which now
+        # appear in exponent form in the document (the no-exponent
+        # restriction is a PDF one, ISO 32000-1 §7.3.3 NOTE 1).
+        function scene_res(c)
+            rad = Paint(RadialGradientPaint)
+            rad.gradientHandlePositions = [Vec2(50f0, 30f0),
+                Vec2(80f0, 30f0), Vec2(50f0, 60f0)]
+            rad.gradientStops = [
+                colorStop(rgba(255, 255, 255, 255), 0f0),
+                colorStop(rgba(234, 88, 12, 255), 1f0)]
+            c.fillStyle = rad
+            beginPath(c)
+            circle(c, 50f0, 30f0, 30f0)
+            fill(c)
+            return nothing
+        end
+        doc = writeSvg(joinpath(dir, "residual.svg"),
+            record(100, 60, scene_res))
+        @test occursin("matrix(-30.0 -2.6226833e-6 2.6226833e-6 -30.0 50.0 30.0)",
+            doc)
+    end
+
     rm(dir; recursive = true)
 end

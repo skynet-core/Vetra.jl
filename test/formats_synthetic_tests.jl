@@ -60,14 +60,19 @@
             [(1, 2, 3, 255), (4, 5, 6, 255), (7, 8, 9, 255), (10, 11, 12, 255)]
         @test decodeBMPDimensions(bmpTop) == (2, 2)
 
-        # 32-bit BITMAPV3HEADER (biSize 108) with alphaMask: the pixel
-        # 0x80402010 is stored premultiplied (a=0x80 r=0x40 g=0x20 b=0x10).
+        # 32-bit BITMAPV3HEADER (biSize 108) with a nonzero file
+        # alphaMask (byte 3 of the pixel): useAlpha, so the pixel bytes
+        # are straight RGBA at the file boundary. The BI_RGB default
+        # masks read byte2=red, byte1=green, byte0=blue, so the stored
+        # straight (64,32,16,128) decodes to premultiplied
+        # ((64*128+127) div 255, (32*128+127) div 255,
+        # (16*128+127) div 255, 128) = (32,16,8,128).
         bmp32a = vcat(UInt8[0x42, 0x4d], le32(126), le32(0), le32(122),
             le32(108), le32(1), le32(1), le16(1), le16(32), le32(0),
             le32(4), le32(0), le32(0), le32(0), le32(0),
             zeros(UInt8, 12), le32(Int(0xff000000)), zeros(UInt8, 52),
             UInt8[0x10, 0x20, 0x40, 0x80])
-        @test px(decodeBMP(bmp32a), 1) == (64, 32, 16, 128)
+        @test px(decodeBMP(bmp32a), 1) == (32, 16, 8, 128)
     end
 
     @testset "GIF synthetic: tables, interlace, disposal, extensions" begin
