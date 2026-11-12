@@ -550,14 +550,36 @@ end
             @test decodePNG(encodePNG(st)).data == s
         end
 
-        @testset "BMP round trip (upstream quirk: decodeDIB lpBitmapInfo)" begin
-            # encodeBMP claims biSize=124 in a 136-byte DIB, so a plain
-            # decodeBMP of it reads 12 bytes early (upstream's own
-            # round-trip test goes through decodeDib(..., lpBitmapInfo=true)).
+        @testset "BMP round trip (valid V5 header, exact)" begin
+            # E001 fix: upstream's encodeBmp wrote a 136-byte DIB under a
+            # biSize=124 claim, so any biSize-honoring reader (including
+            # decodeBMP) read pixels 12 bytes early and upstream's own
+            # encode->decode assertions stayed disabled (test_bmp.nim).
+            # Vetra now writes a real 124-byte BITMAPV5HEADER (file offset
+            # 138) and the 32-bit masked pixels as stored (premultiplied,
+            # matching decodeDIB's direct-premul masked read), so the round
+            # trip is exact for opaque and semi-transparent images.
             bmp = encodeBMP(img)
-            @test decodeDIB(Vector{UInt8}(bmp)[15:end];
-                lpBitmapInfo = true).data == d
-            @test decodeDIB(Vector{UInt8}(bmp)[15:end]).data != d
+            b = Vector{UInt8}(bmp)
+            le16(i) = Int(b[i]) | (Int(b[i + 1]) << 8)
+            le32(i) = le16(i) | (Int(b[i + 2]) << 16) | (Int(b[i + 3]) << 24)
+            @test le32(11) == 138 # file offset to pixel array
+            @test le32(15) == 124 # biSize equals the actual header size
+            @test le16(29) == 32 # BI_BITFIELDS 32 bpp
+            @test length(b) == 14 + 124 + 4 * width(img) * height(img)
+            @test decodeBMP(Vector{UInt8}(bmp)).data == d
+            @test decodeDIB(Vector{UInt8}(bmp)[15:end]).data == d
+            # semi-transparent premultiplied cells (incl. an a=0 cell)
+            # survive the round trip byte-exactly: the encoder writes the
+            # stored premultiplied bytes and decodeDIB's masked path stores
+            # them directly.
+            st = newImage(2, 2)
+            s = st.data
+            s[1:4] = [50, 50, 50, 0x80]
+            s[5:8] = [0, 0, 0, 0x80]
+            s[9:12] = [127, 64, 32, 0xbf]
+            s[13:16] = [0, 0, 0, 0x00]
+            @test decodeBMP(Vector{UInt8}(encodeBMP(st))).data == s
         end
 
         @testset "QOI round trip (opaque image)" begin

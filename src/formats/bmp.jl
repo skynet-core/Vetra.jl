@@ -12,10 +12,16 @@
 # - Rows are padded to 4-byte boundaries relative to the pixel-data start.
 # - Bottom-up rows by default; top-down (negative height) is handled by the
 #   same storage plus a final flipVertical.
-# - encodeDib writes a 136-byte DIB that claims biSize = 124; decodeBmp on
-#   that file (lpBitmapInfo = false) therefore reads pixels 12 bytes early.
-#   Upstream's own round-trip test goes through decodeDib(..., true), which
-#   adds the missing 12. This quirk is mirrored, not fixed.
+# - Upstream's encodeDib writes a 136-byte DIB that claims biSize = 124, so
+#   upstream's own decodeBmp of an encodeBmp file reads pixels 12 bytes
+#   early; upstream disabled its encode->decode round-trip assertions for
+#   this reason (test_bmp.nim, commented blocks). Vetra fixes the encoder
+#   instead (2026-11-12, E001): it writes a valid 124-byte BITMAPV5HEADER
+#   and the 32-bit masked pixels as stored (premultiplied), matching
+#   decodeDIB's direct-premul masked read, so decodeBMP(encodeBMP(img))
+#   round-trips exactly. The decoder is unchanged (its masked-pixel
+#   semantics are pinned by the 32-bit mask fixtures, and its
+#   lpBitmapInfo compensation still mirrors upstream).
 
 const BMP_SIGNATURE = "BM"
 
@@ -242,7 +248,8 @@ function decodeDIB(data::Vector{UInt8}; lpBitmapInfo::Bool = false)
                     a = bmpMaskShift(UInt32(color), UInt32(alphaMask))
                     off += 4
                     i = 4 * ((height - y - 1) * width + x)
-                    # Stored directly premultiplied (upstream rgbx pass).
+                    # Stored directly premultiplied (upstream rgbx pass;
+                    # pinned by the 32-bit mask fixtures — see file note).
                     d[i + 1] = r
                     d[i + 2] = g
                     d[i + 3] = b
@@ -296,9 +303,10 @@ function decodeBMPDimensions(data::Vector{UInt8})
 end
 
 """
-Upstream `encodeDib`: BITMAPV5-style header (claims biSize = 124), 32-bit
-BI_BITFIELDS pixels with the standard masks, straight-alpha colors, rows
-bottom-up. See the file-header quirk note.
+Upstream `encodeDib`, corrected: a valid 124-byte BITMAPV5 header (biSize
+equals the actual size — upstream wrote 136 bytes under the 124 claim),
+32-bit BI_BITFIELDS pixels with the standard masks, premultiplied colors
+(as stored — see the file-header note), rows bottom-up.
 """
 function encodeDIB(image::Image)
     out = Vector{UInt8}()
@@ -322,21 +330,22 @@ function encodeDIB(image::Image)
     addle32(0x00ff0000) # blue mask
     addle32(0xff000000) # alpha mask
     addle32(0x73524742) # LCS_sRGB
-    append!(out, zeros(UInt8, 64)) # unused
-    addle32(0) # bmiColors 0
-    addle32(0) # bmiColors 1
-    addle32(0) # bmiColors 2
+    append!(out, zeros(UInt8, 64)) # V4/V5 fields (zero-filled) -> 124 total
 
     d = image.data
     # Rows are written bottom-up: file row y is image row h - y - 1
     # (upstream `image[x, image.height - y - 1]`).
+    # Pixels are written as stored (premultiplied RGBA, LE uint32
+    # 0xAABBGGRR matching the masks above): decodeDIB's 32-bit masked
+    # path stores the masked bytes directly as premultiplied, so the
+    # encode/decode pair round-trips exactly. (Upstream wrote the
+    # premul->straight conversion here, so its own reader corrupted
+    # semi-transparent pixels on read-back; E001 fix.)
     for y in 0:(image.height - 1)
         for x in 0:(image.width - 1)
             i = 4 * ((image.height - 1 - y) * image.width + x)
-            c = rgba(ColorRGBX(d[i + 1], d[i + 2], d[i + 3], d[i + 4]))
-            # chroma ColorRGBA memory layout (r, g, b, a) -> LE uint32
-            # 0xAABBGGRR matches the masks above.
-            append!(out, [c.r, c.g, c.b, c.a])
+            append!(out, [UInt8(d[i + 1]), UInt8(d[i + 2]),
+                UInt8(d[i + 3]), UInt8(d[i + 4])])
         end
     end
 
@@ -344,15 +353,16 @@ function encodeDIB(image::Image)
 end
 
 """
-Upstream `encodeBmp`: "BM" file header (size patched at the end) plus the
-DIB; the pixel offset field is 14 + 12 + 124 = 150.
+Upstream `encodeBmp`, corrected: "BM" file header (size patched at the end)
+plus the DIB; the pixel offset field is 14 + 124 = 138 (upstream wrote 150
+to match its 136-byte header).
 """
 function encodeBMP(image::Image)
     out = Vector{UInt8}()
     append!(out, UInt8['B', 'M'])
     push!(out, 0, 0, 0, 0) # file size (patched below)
     push!(out, 0, 0, 0, 0) # reserved
-    push!(out, 150, 0, 0, 0) # offset to pixel array
+    push!(out, 138, 0, 0, 0) # offset to pixel array (14 + 124-byte V5 header)
     dib = encodeDIB(image)
     append!(out, codeunits(dib))
     # Patch the file size at offset 2 (little-endian).
