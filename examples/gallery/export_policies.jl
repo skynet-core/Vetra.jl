@@ -3,19 +3,22 @@
 # fail fast with an error that names the op index, before any file is
 # written: pre-existing destinations are preserved (sentinel check) and
 # fresh destinations are never created. The raster-fallback policy then
-# exports the same scene with an embedded raster, and the embedded bytes
-# are checked independently: the PDF XObject is parsed out of the
-# uncompressed document and compared to the CPU replay through the
-# documented premul -> straight boundary (min(round(c*255/a), 255),
-# hand-evaluated in integer arithmetic for sample pixels), and the SVG
-# data-URI PNG decodes back to the replay.
+# exports a genuinely strict-unsupported scene (a multiply-blend fill,
+# which both strict backends reject) with an embedded raster, and the
+# embedded bytes are checked independently: the PDF XObject is parsed
+# out of the uncompressed document and compared to the CPU replay
+# through the documented premul -> straight boundary
+# (min(round(c*255/a), 255), hand-evaluated in integer arithmetic for
+# opaque, partial-alpha and a = 0 samples), and the SVG data-URI PNG
+# decodes back to the replay.
 #
 #   julia --project=. examples/gallery/export_policies.jl [outdir]
 #
 # Outputs in outdir (caller-selected; default artifacts/gallery/):
 #   export_policies.svg      strict export of the supported scene
 #   export_policies.pdf      strict export of the supported scene
-#   export_policies_fb.pdf   PDF raster fallback (core-only path)
+#   export_policies_fb.pdf   PDF raster fallback of the multiply scene
+#                            (the core-only path: raw XObject + SMask)
 #   export_policies_fb.svg   SVG raster fallback (optional PNG support)
 #   export_policies_evenodd.svg  evenodd gradient: SVG-only positive case
 #
@@ -90,6 +93,24 @@ function record(scene)
     rec = PictureRecorder(W, H)
     scene(rec.ctx)
     return finish_recording!(rec)
+end
+
+"""The raster-fallback subject: genuinely strict-unsupported. op 1 fills
+the top half with the background, op 2 is a multiply-blend fill (not
+exportable to either strict backend), op 3 a solid accent in the bottom
+half. The layout exercises every case the embedded raster must carry:
+opaque, multiply over opaque (204,206,210,255), multiply over
+transparent (partial alpha 128), and uncovered canvas (a = 0)."""
+function fb_scene(ctx)
+    ctx.fillStyle = rgb(230, 232, 236)
+    fill_rect!(ctx, 0f0, 0f0, W, 24f0)
+    mp = Paint(rgbx(100, 100, 100, 128))
+    mp.blendMode = MultiplyBlend
+    ctx.fillStyle = mp
+    fill_rect!(ctx, 10f0, 10f0, 20f0, 20f0)
+    ctx.fillStyle = rgb(30, 64, 175)
+    fill_rect!(ctx, 36f0, 28f0, 20f0, 12f0)
+    return nothing
 end
 
 """Sentinel helper: writes the marker at `file`."""
@@ -187,16 +208,40 @@ function run(outdir::String)
     check(read(dst, String) == "SENTINEL-pdf_evenodd",
         "PDF: evenodd failure preserved the sentinel destination")
 
+    # ---- the fallback subject fails strict export on a fresh dest ----
+    # fb_scene is the scene the raster fallback exists for: op 2 is a
+    # multiply-blend fill, unexportable to either strict backend. The
+    # failure must name op 2 and leave a fresh destination uncreated
+    # (the sentinel-preservation case for the same op is covered by the
+    # loop above under :multiply).
+    fb_pic = record(fb_scene)
+    check(length(fb_pic.ops) == 3,
+        "fallback scene: 3 ops (the middle one is the multiply fill)")
+    for (writer, tag) in [(write_svg!, "svg"), (write_pdf!, "pdf")]
+        dst = joinpath(outdir, tag * "_fb_fresh.fail")
+        err = try
+            writer(dst, fb_pic)
+            nothing
+        catch e
+            e
+        end
+        check(err isa ArgumentError && occursin("op 2 (", err.msg),
+            "strict $tag: multiply scene failure names op 2")
+        check(!isfile(dst),
+            "strict $tag: the failed fresh destination is never created")
+    end
+
     # ---- PDF raster fallback (core-only: raw XObject + SMask) ----
     render = new_image(W, H)
-    draw_picture!(render, pic)
-    fb = write_pdf!(joinpath(outdir, "export_policies_fb.pdf"), pic;
+    draw_picture!(render, fb_pic)
+    fb = write_pdf!(joinpath(outdir, "export_policies_fb.pdf"), fb_pic;
         rasterFallback = true)
     (rgb, gray) = parse_pdf_streams(fb, W, H)
     check(length(rgb) == 3 * W * H && length(gray) == W * H,
         "PDF fallback: XObject and SMask carry the full pixel payloads")
-    # structural: the embedded bytes equal the replay through the
-    # documented boundary (premul -> straight)
+    # Structural: the embedded bytes equal the replay through the
+    # documented boundary (premul -> straight) — secondary to the
+    # hand-evaluated samples below, which are the independent evidence.
     ok = true
     for i in 1:(W * H)
         c = to_straight_alpha(render[i])
@@ -207,29 +252,45 @@ function run(outdir::String)
         end
     end
     check(ok, "PDF fallback: embedded RGB/SMask == replay at the boundary")
-    # independent: hand-evaluated min(round(c*255/a), 255) in integer
-    # arithmetic for three known premul samples (a > 0):
-    # round(p/q) for positive rationals = (2p + q) div (2q)
+    # Independent: hand-evaluated min(round(c*255/a), 255) in integer
+    # arithmetic (round(p/q) for positive rationals = (2p + q) div (2q))
+    # for samples covering opaque, partially transparent (multiply over
+    # a transparent backdrop keeps the source alpha 128) and fully
+    # transparent (a = 0 -> smask 0, rgb dropped):
     hand(a, c) = min((2 * 255 * c + a) ÷ (2 * a), 255)
-    i1 = 1 # (1, 1): background (230,232,236,255)
-    check(rgb[1:3] == [UInt8(hand(255, 230)), UInt8(hand(255, 232)),
-        UInt8(hand(255, 236))] && gray[1] == 255,
+    i1 = 66 # (2, 2): background (230,232,236,255), opaque
+    k1 = 3 * (i1 - 1)
+    check(rgb[k1 + 1:k1 + 3] == [UInt8(230), UInt8(232), UInt8(236)] &&
+        gray[i1] == 255,
         "PDF fallback: background sample hand-equals the embedded bytes")
-    i2 = 593 # (17, 10): inside the square (30,64,175,255)
+    i2 = 1236 # (20, 20): multiply over the opaque background;
+    # f(bv,sv) = ((255-255)*sv + (255-128)*bv + bv*sv) div 255 gives
+    # (204,206,210) and the alpha combine 128 + 255*127 div 255 = 255
     k2 = 3 * (i2 - 1)
-    check(rgb[k2 + 1:k2 + 3] == [UInt8(hand(255, 30)),
-        UInt8(hand(255, 64)), UInt8(hand(255, 175))] && gray[i2] == 255,
-        "PDF fallback: square sample hand-equals the embedded bytes")
-    i3 = 552 # (40, 9): gradient column 39 (0-based), t = 3/20
+    check(rgb[k2 + 1:k2 + 3] == [UInt8(204), UInt8(206), UInt8(210)] &&
+        gray[i2] == 255,
+        "PDF fallback: multiply-over-background sample hand-equals")
+    i5 = 1612 # (12, 26): multiply over the transparent backdrop ->
+    # source premul (100,100,100,128); straight round(100*255/128) = 199
+    k5 = 3 * (i5 - 1)
+    check(rgb[k5 + 1:k5 + 3] == [UInt8(hand(128, 100)),
+        UInt8(hand(128, 100)), UInt8(hand(128, 100))] && gray[i5] == 128,
+        "PDF fallback: partial-alpha sample hand-equals (smask 128)")
+    i3 = 2024 # (40, 32): accent (30,64,175,255)
     k3 = 3 * (i3 - 1)
-    g3 = UInt8((2 * 255 * 17 + 20) ÷ 40) # round(255 * 17/20) = 217, ties away
-    check(gray[i3] == 255 && rgb[k3 + 1:k3 + 3] ==
-        [g3, g3, g3],
-        "PDF fallback: gradient sample hand-equals the embedded bytes")
+    check(rgb[k3 + 1:k3 + 3] == [UInt8(30), UInt8(64), UInt8(175)] &&
+        gray[i3] == 255,
+        "PDF fallback: accent sample hand-equals the embedded bytes")
+    i4 = 1858 # (2, 30): below the background fill, left of the multiply
+    # rect: uncovered canvas, a = 0 -> smask 0, rgb dropped
+    k4 = 3 * (i4 - 1)
+    check(rgb[k4 + 1:k4 + 3] == [UInt8(0), UInt8(0), UInt8(0)] &&
+        gray[i4] == 0,
+        "PDF fallback: uncovered sample embeds smask 0, rgb 0")
 
     # ---- SVG raster fallback (optional: PNG data URI) ----
     if VetraGallery.available(VetraGallery.PNG_ID)
-        sv = write_svg!(joinpath(outdir, "export_policies_fb.svg"), pic;
+        sv = write_svg!(joinpath(outdir, "export_policies_fb.svg"), fb_pic;
             rasterFallback = true)
         b64 = match(r"data:image/png;base64,([A-Za-z0-9+/=]+)", sv)
         b64 === nothing && check(false, "SVG fallback: data URI not found")
@@ -240,7 +301,7 @@ function run(outdir::String)
         dst = joinpath(outdir, "svg_fallback.fail")
         write_file_sentinel(dst, "svg_fallback")
         err = try
-            write_svg!(dst, pic; rasterFallback = true)
+            write_svg!(dst, fb_pic; rasterFallback = true)
             nothing
         catch e
             e
