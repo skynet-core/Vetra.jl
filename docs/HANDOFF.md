@@ -11,7 +11,8 @@ with no blocking findings.
 Coordinator owns these documents. Qwen's bounded M003 implementation in
 `modernization/native-api` is now approved and integrated. On 2026-11-11 the user
 requested implementation start; M004 is now independently approved and integrated,
-and R040 remains active in its separate worktree (below). Future streams are gated by
+and R040's bounded Linux/NVIDIA probe is now approved and integrated (D037).
+E001 feature examples are active (below). Future backend streams are gated by
 R010's contract review. Final milestone task R099 publishes the real interactive
 tutorial via GitHub Pages CI; R098 prepares the illustrated README.
 
@@ -40,10 +41,71 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: review/validate R040's corrected submission, then freeze R010 using verified
-Vulkan constraints. M003/M004 and the Windows allocation-gate follow-up are
-approved with passing four-platform CI (evidence below); R040 remains open.
+Next: review/validate E001's feature examples and freeze R010 using the approved
+bounded Vulkan constraints. M003/M004 and the Windows allocation-gate follow-up
+are approved with passing four-platform CI (evidence below). Other-platform GPU
+runtime acceptance remains open; R040 does not establish a production backend.
 R099 remains the final task.
+
+### Latest user request: review and executable feature programs (2026-11-12)
+
+User requested review/improvements and Qwen3.8 implementation of examples that
+exercise the full library across backends/renderers, with fixes for bugs exposed
+while building them. Scope and acceptance: `tasks/EXAMPLES_PLAN.md`.
+E001 is assigned to Qwen in `/tmp/opencode/vetra-feature-gallery`, branch
+`examples/feature-gallery`, base `7a54ea9`; owns `examples/gallery/`, related
+example instructions, `test/gallery_examples_tests.jl` and its explicit runner
+include. Connected reproduced library bugs may be fixed in separate commits;
+shared contracts, dependencies and status documents remain coordinator-owned.
+
+Six programs: drawing atlas, plotting dashboard, typography, image lab,
+recording reuse and strict/fallback export policies. Current real targets are
+CPU drawing/replay, SVG and PDF; the image lab also demonstrates existing PNG
+MIME display. The same programs are extended by the planned Canvas providers
+and the media editor when their roadmap dependencies are implemented. R099
+publication stays last. Every runnable example requires semantic assertions,
+real outputs, honest provider requirements and source-preserving I/O.
+
+R040 writer's final correction `db47824` was independently reviewed in
+`/tmp/opencode/vetra-r040-coord-c3`. Self-checks **174/174**, independent actual
+debug-callback capture survival **13/13**; p00/p10/p20/p30/p40/p60 checks passed
+**14/8/7/15/18/5** respectively. Captured workload errors survive both hazard
+controls, failed-control setup and synthetic severity checks; the controls'
+intentional errors do not contaminate workload validation. Logs are
+`/tmp/opencode/r040-c3-coord-{tests,capture,p00,p10,p20,p30,p40,p60}.log`.
+The independent p50 rerun passed **8/8** (log
+`/tmp/opencode/r040-c3-coord-p50.log`). The root Julia 1.13.3 gate passed:
+`julia --startup-file=no --project=. scripts/check.jl`, **95.79% (7762/8103)**
+coverage; log `/tmp/opencode/r040-coord-root-gate113.log`. PyMuPDF interoperability
+was skipped because that module is unavailable.
+Root integration candidate was detached `440276d` in
+`/tmp/opencode/vetra-r040-integration`: prior main plus R040 commits, exact
+probe-tree match to `db47824`. Coordinator approved this bounded probe and
+fast-forwarded main through `440276d`; all source/evidence matches the reviewed
+candidate. Integration commits: `3d1f9a9`, `12f781d`, `9374696`, `440276d`.
+Coordinator subsequently updated only the probe README's approval status and
+clarified direct-destructor misuse versus `Base.finalize`; scripts, tests,
+pins and committed evidence remain byte-identical to `db47824`.
+
+Independent commands in `/tmp/opencode/vetra-r040-coord-c3` used:
+
+```sh
+export VK_LAYER_PATH=/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d
+export LD_LIBRARY_PATH=/tmp/opencode/vvl/install/lib
+julia +1.11 --startup-file=no --project=lib/VetraVulkan/probe lib/VetraVulkan/probe/test/runtests.jl
+# Each p00_env, p10_loader_device, p20_offscreen, p30_compute,
+# p40_bool_layers, p50_errors and p60_julia_matrix script was run separately:
+julia +1.11 --startup-file=no --project=lib/VetraVulkan/probe lib/VetraVulkan/probe/scripts/p20_offscreen.jl
+julia +1.11 --startup-file=no --project=lib/VetraVulkan/probe /tmp/opencode/r040-c3-coord-capture.jl /tmp/opencode/vetra-r040-coord-c3/lib/VetraVulkan/probe
+```
+
+All seven probe commands exited successfully, with **14/8/7/15/18/8/5** checks.
+The capture-survival probe submits an actual debug-utils error, verifies survival
+through both hazard controls and failed setup, then through synthetic severity
+checks (**13/13**). The intentional errors are positive controls, not workload
+failures. The original false-clean result is resolved. D037 records the pins,
+native ownership constraints, independent provider minimum and explicit platform
+blockers. R010 is ready; no renderer or other-platform support is inferred.
 
 ### Implementation wave started 2026-11-11
 
@@ -54,12 +116,13 @@ Pinned base: `9826b7e`. Qwen3.8 writers have disjoint ownership:
   lifetime/language/buffer cleanup and confirmed paragraph-shaping gaps. M003
   already fixed constructor/zero-PPM validation. Keep independent expectations,
   lazy optional providers and Julia 1.10 compatibility; both full gates passed.
-- **R040 (corrections assigned)**, `/tmp/opencode/vetra-r040`, branch `canvas/vulkan-probe`:
+- **R040 (bounded probe approved)**, `/tmp/opencode/vetra-r040`, branch `canvas/vulkan-probe`:
   isolated `lib/VetraVulkan/probe/` stack, discovery, clear/readback, nonconstant
   Julia-authored shaders, SPIR-V plus runtime validation and platform evidence.
   Investigate declared-compatible SPIRV/Vulkan first; missing drivers/devices or
   incompatible toolchains are explicit blockers, not inferred support. Initial
-  candidate `713543b` was rejected after independent review (below).
+  candidate `713543b` was rejected after independent review (history below);
+  final `db47824` is approved and integrated as described above.
 
 Coordinator owns shared docs/metadata/exports and integration; writers do not
 push or approve their own work. No overlapping Canvas implementation is assigned.
@@ -287,6 +350,103 @@ Logs: `/tmp/opencode/r040-coord-p20.log` (8192/8192 upload bytes and exact clear
 described above). These establish bounded execution, not approval of the original
 validation/ownership claims. Corrections were returned to the existing Qwen
 writer. R010 remains gated; no R040 code has been merged or pushed.
+
+### R040 correction `2ac65cc`: partial validation, further corrections assigned
+
+The committed Manifest and corrected severity masks resolve the original
+reproducibility/filtering blockers. Coordinator used a fresh detached worktree
+`/tmp/opencode/vetra-r040-coord-c1` at this exact candidate:
+
+- `test/runtests.jl`: **143/143**, including actual debug-callback severity
+  controls. Log `/tmp/opencode/r040-c1-coord-tests.log`.
+- `p20_offscreen.jl`: **5/5**, 8192/8192 upload bytes and exact magenta clear,
+  zero classified validation errors/warnings through the successful cleanup.
+  Log `/tmp/opencode/r040-c1-coord-p20.log`.
+- `p30_compute.jl`: **15/15**, same independently checked compute results,
+  50 GC-stressed rooted feature queries, no variable-pointer device features,
+  zero classified validation errors/warnings. Log
+  `/tmp/opencode/r040-c1-coord-p30.log`.
+- `p40_bool_layers.jl`: **18/18**, requested layer states verified, true/false
+  readbacks exact, no reproduced layer crash. The 1-byte case remains a
+  diagnostic, not proof of safe buffer bounds. Log
+  `/tmp/opencode/r040-c1-coord-p40.log`.
+- Fresh CMake build-directory configuration from the README succeeded and
+  built the known-good dependencies. Log `/tmp/opencode/r040-c1-coord-vvl-config.log`.
+- Independent synchronization-validation controls **2/2**: two overlapping
+  buffer fills without a barrier produce WRITE_AFTER_WRITE only when sync
+  validation is enabled. Probe `/tmp/opencode/r040-c1-coord-sync.jl`, log
+  `/tmp/opencode/r040-c1-coord-sync.log`.
+
+Commands use Julia 1.11.9, `--startup-file=no --project=lib/VetraVulkan/probe`,
+`VK_LAYER_PATH=/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d` and
+`LD_LIBRARY_PATH=/tmp/opencode/vvl/install/lib`, in the coordinator worktree.
+The independent 1.10 child was invoked via `julia +1.10` with a fresh temporary
+project and the pinned SPIRV source path.
+
+Remaining findings returned to the same writer:
+
+1. `p60_child.jl:62` catches the genuine `cached_return_type` source-compatibility
+   failure, then throws **BoundsError** by slicing a 121-codeunit message at
+   `1:300`. Parent checks accept any nonzero exit as compatibility evidence.
+   Capture the real error safely and reject unrelated diagnostic/process failures.
+   Full independent log `/tmp/opencode/r040-c1-coord-110child.log`.
+2. Partial resource-construction failures still lack deterministic cleanup.
+   Injecting a memory-type-selection error after buffer creation raises the
+   device refcount **1→2**, restored only by later GC. Log
+   `/tmp/opencode/r040-c1-coord-failure-cleanup.log`. Guard acquired resources
+   and assert immediate parent-count restoration on bounded failure paths.
+3. `VK_EXT_validation_features` is a layer-provided instance extension,
+   deprecated by `VK_EXT_layer_settings`, not promoted to core. Coordinator
+   enumerated it by specifying the validation layer. Sync validation works,
+   but the explanation must be corrected. MoltenVK portability enumeration
+   needs an instance extension plus `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR`,
+   not the invented `physicalDevicePortabilityEnumeration` feature; advertised
+   `VK_KHR_portability_subset` must be enabled on the selected device.
+4. Isolated precompile source copying selects by version string, which does not
+   uniquely identify a pinned Git revision. Resolve and verify the exact manifest
+   source/tree. Remove residual unsupported host/API claims and distinguish API
+   version from driver version in the platform notes.
+
+Independent p50 re-execution passed **8/8**: no-device, bogus-extension and
+unsupported-format errors; isolated precompile succeeds for `false`/`auto` and
+fails with the expected no-driver diagnostic for `true`. Log:
+`/tmp/opencode/r040-c1-coord-p50.log`. The source-selection provenance correction
+above remains required despite these successful executions. Linux evidence can be accepted
+with explicit unavailable-platform blockers once the remaining correctness and
+provenance issues are resolved; no cross-platform execution is claimed. R010
+continues to await approved constraints, and no R040 code is integrated.
+
+### R040 correction `a45f9cb`: validation capture regression
+
+Coordinator checked exact candidate `a45f9cb` in detached worktree
+`/tmp/opencode/vetra-r040-coord-c2`. Its self-checks passed **174/174**
+(`/tmp/opencode/r040-c2-coord-tests.log`), using:
+
+```sh
+VK_LAYER_PATH=/tmp/opencode/vvl/install/share/vulkan/explicit_layer.d LD_LIBRARY_PATH=/tmp/opencode/vvl/install/lib julia +1.11 --startup-file=no --project=lib/VetraVulkan/probe lib/VetraVulkan/probe/test/runtests.jl
+```
+
+**Not approved:** the newly added `sync_hazard_control` empties shared `_CAP`.
+`p20_offscreen.jl` calls both controls after the real upload/clear workload,
+before classifying validation. A separate instance does not isolate this global
+capture. Coordinator seeded an error, observed one classified error, called the
+sync-disabled control, and observed **zero errors and `validation_clean=true`**.
+Log: `/tmp/opencode/r040-c2-coord-capture-loss.log`. The reproduction deliberately
+asserted the bad outcome; its exit success is evidence of the bug, not acceptance.
+The writer must preserve caller capture on success/failure, isolate intentional
+control errors, and add a regression retaining the seeded workload error through
+both controls. Other capture resets and messenger lifetime through cleanup/GC
+are included in this bounded correction.
+
+The writer also reintroduced false build-specific Julia claims. Coordinator
+verified **8/8 standard semantics checks** on Julia 1.11.9: pattern-first
+`occursin`, character-safe `first`/`last` on short and multibyte strings,
+`throw(e)` inside a catch, and binding-less catch syntax all work normally.
+Current `occursin` call sites use the correct standard order and must not be
+inverted. Remove false host warnings and language-semantic portability tests;
+retain actual helper regression tests. The existing Qwen session has been
+resumed for these corrections. No R040 code is integrated or pushed; R010
+remains gated and non-Linux execution remains unverified.
 
 Vulkan source research is **reviewed for planning**, with coordinator qualifications
 recorded in `docs/CANVAS_RESEARCH.md`: SPIRV.jl exists (experimental,

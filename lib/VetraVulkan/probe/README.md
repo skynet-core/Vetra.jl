@@ -8,13 +8,14 @@ code (R010) is written. This directory is a **standalone probe project** —
 repository root; nothing here is production code (no placeholders, no Vetra
 core edits).
 
-Status: **partial candidate — Linux + NVIDIA discrete GPU only.**
+Status: **independently approved bounded probe — Linux + NVIDIA discrete GPU only.**
 Compute dispatch and offscreen upload/clear are byte-exact under the
 KHRONOS validation layer (sync validation enabled) with the pinned stack;
 all evidence is in [`evidence/`](evidence/) and `test/runtests.jl` re-verifies
-it. This is **not** a cross-platform result and does not unblock R010:
-R010 stays gated on coordinator review of this probe and of the recorded
-upstream defects below.
+it. Coordinator review and independent reruns passed on `db47824`; see
+[D037](../../../docs/DECISIONS.md#d037--bounded-vulkanspirv-probe-acceptance-and-frontend-constraints).
+R010 may use these bounded constraints. This is **not** a production renderer
+or a cross-platform result; other-platform runtime acceptance remains open.
 
 ## Pinned environment
 
@@ -134,7 +135,7 @@ R040_RUN_PROBES=1 julia +1.11 --startup-file=no --project=lib/VetraVulkan/probe 
   lib/VetraVulkan/probe/test/runtests.jl
 ```
 
-## Recorded upstream defects (constraints for R010)
+## Recorded wrapper ownership constraints for R010
 
 Both verified on the pinned Vulkan.jl **0.6.30** checkout
 (`~/.julia/packages/Vulkan/12azN/`), by source reading and by execution.
@@ -170,12 +171,11 @@ correct `sType`/`pNext` set at construction, called under
 `GC.@preserve`, unwrapped to high-level only inside the preserve) — never
 via `Vulkan.initialize` with `next=` chains it does not keep alive.
 
-### 2. Handle finalizers are never unregistered
+### 2. Direct destructor calls leave registered finalizers armed
 
 `src/prewrap/handles.jl`, `init_handle!` (lines 46–48):
-`finalizer(x -> handle.destructor(), handle)` — and there is no public API
-to remove it. The only deterministic release a user has is calling
-`h.destructor()` directly; that leaves the finalizer registered, so GC runs
+`finalizer(x -> handle.destructor(), handle)`. Calling `h.destructor()`
+directly leaves the finalizer registered, so GC runs
 `try_destroy` (lines 34–44) a second time: `decrement_refcount!`
 (line 30) does `atomic_sub!` on the already-zero `UInt` counter → it wraps
 to 2^64−1. The `iszero` guard stops a double raw destroy in the simple case,

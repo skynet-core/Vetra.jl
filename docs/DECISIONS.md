@@ -1204,6 +1204,47 @@ The coordinator verified the OpenType 1.9.1 layout and HarfBuzz 15.1.0 source,
 then injected failures and GC through the existing native function table in
 isolated probes. RSS/Julia allocation measurements alone are not lifetime proofs.
 
+## D037 — Bounded Vulkan/SPIRV probe acceptance and frontend constraints
+
+Status: **accepted**, 2026-11-12, R040 final `db47824` integrated through
+`440276d`. This qualifies D034's earlier statement that all Vulkan execution
+was future work. It approves compatibility evidence, not a production backend.
+
+- Executed: Linux x86_64, NVIDIA RTX 3050 Ti Laptop, Julia 1.11.9,
+  Vulkan.jl 0.6.30, VulkanCore 1.3.1, SPIRV.jl 0.6.11 at
+  `218b33b21e5b23d7c3c34bb07f6c114723a5e193`, SPIRV-Tools 2026.4.0 and VVL
+  `vulkan-sdk-1.4.363.1`. Isolated Project/Manifest remain under
+  `lib/VetraVulkan/probe/`; no root runtime dependency is added.
+- Julia-authored nonconstant compute and offscreen upload/clear/readback work
+  with independent exact results and runtime validation. SPIR-V validation is
+  complementary. The demonstrated emitted module needs Int64, buffer device
+  addresses, VulkanMemoryModel and maintenance4/LocalSizeId on this route;
+  it does not need variable pointers. These are prototype module requirements,
+  not an approved minimum for every future Vetra Vulkan renderer.
+- The pinned SPIRV source cannot load on Julia 1.10 (`cached_return_type`);
+  Julia 1.13 was load-tested only. Keep CPU core support at Julia 1.10 and
+  higher-minimum optional providers independently packaged. Do not silently
+  widen Vulkan compat to 0.7 or assume all Julia code compiles as a shader.
+- Avoid the pinned wrapper's unrooted initialized pNext chain: own and preserve
+  Refs through query and conversion. Explicit handle release uses `Base.finalize`
+  rather than invoking a registered destructor twice. Resource cleanup and
+  validation capture must survive failures; deliberate control messages stay
+  isolated from workload evidence. These are implementation constraints for
+  R041, not generic core APIs.
+- Device-free optional installation is feasible with Vulkan's `false`/`auto`
+  precompile preference; `true` correctly fails without a driver. Core loading
+  must never require a GPU. Provider initialization reports missing drivers and
+  unsupported capabilities explicitly, without hidden CPU fallback.
+- Windows/macOS/FreeBSD, ARM hosts, other GPU vendors and Vulkan 0.7 remain
+  unverified. MoltenVK needs portability enumeration and subset handling, then
+  actual feature checks. Retain those runtime acceptance items in backend/CI
+  work; no four-platform CPU result establishes GPU support. R010 can now
+  freeze renderer-independent contracts against these bounded constraints.
+
+Independent evidence: all p00–p60 checks **14/8/7/15/18/8/5**, **174** self-checks,
+**13** additional real-callback capture checks, and the root Julia 1.13.3 gate
+**95.79% (7762/8103)**. Commands/logs and correction history: `docs/HANDOFF.md`.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

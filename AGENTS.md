@@ -11,8 +11,10 @@ and embedding seams for future GUI/plotting libraries (host lifecycle, reusable
 drawing, text metrics and precise data-to-local-coordinate mapping).
 The architecture is `docs/CANVAS_DESIGN.md`; the detailed parallel development
 plan is `tasks/CANVAS_ROADMAP.md`. R000 is planning/review, not a claim of backend
-implementation. M003/M004 are complete; independent R040 Vulkan probes remain
-active in their assigned worktree (see TASKS.md). New backend
+implementation. M003/M004 are complete; R040's bounded Linux/NVIDIA probe is
+approved and integrated, with other-platform execution still unverified (D037).
+The user-requested E001 feature examples are active (tasks/EXAMPLES_PLAN.md).
+New backend
 implementation follows reviewed R010 contracts and explicit task ownership.
 Use separate worktrees for parallel writers. The coordinator reviews and
 validates each result before approval. R099 (interactive GitHub Pages tutorial)

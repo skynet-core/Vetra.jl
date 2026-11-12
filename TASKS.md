@@ -30,7 +30,8 @@ source research is reviewed, with runtime decisions deferred to implementation
 probes. M003 is complete: Qwen's final `0c88c91` candidate was independently
 validated and integrated through `901b9d7`. On 2026-11-11 the user authorized
 starting implementation: M004 correctness is now approved and integrated;
-independent R040 Vulkan probes remain active (ownership below). New backend implementation is dependency-
+R040's bounded Linux/NVIDIA probe is approved and integrated (D037). E001
+feature examples are active (ownership below). New backend implementation is dependency-
 gated by R010's reviewed contracts. M005/M006/M007 are folded into R099/R086/R090
 respectively; M003 and M004 prerequisites are complete.
 
@@ -80,7 +81,8 @@ test logs for independent validation before approval/push.
 | Task | Writer / worktree | Owned scope | Stop condition |
 | --- | --- | --- | --- |
 | M004 (done) | Qwen3.8, `/tmp/opencode/vetra-m004`, `modernization/correctness` | Crop bounds, cmap-12 validation, dash ownership, HarfBuzz lifecycle | Approved 52a40b9: both full gates, 113 independent probes/version and targeted benchmark comparison pass |
-| R040 | Qwen3.8, `/tmp/opencode/vetra-r040`, `canvas/vulkan-probe` | Isolated `lib/VetraVulkan/probe/` environment, scripts and evidence | 713543b rejected: validation masks, missing manifest and native ownership/evidence corrections assigned; see handoff |
+| R040 (bounded probe approved) | Qwen3.8, `/tmp/opencode/vetra-r040`, `canvas/vulkan-probe` | Isolated `lib/VetraVulkan/probe/` environment, scripts and evidence | db47824 independently validated, integrated through 440276d; non-Linux/device acceptance remains open (D037) |
+| E001 | Qwen3.8, `/tmp/opencode/vetra-feature-gallery`, `examples/feature-gallery` | Six executable feature programs, gallery tests, reproduced connected library bugs | Implement [example plan](tasks/EXAMPLES_PLAN.md); coordinator reviews and validates before integration |
 | Windows CI follow-up (done) | Qwen3.8, `/tmp/opencode/vetra-windows-allocation`, `modernization/windows-allocation` | Constructor allocation-parity gate in `test/api_native_tests.jl` | 6eff5cd independently approved, integrated as e879026: both full gates, 304/304 probes per Julia and all 10 CI jobs pass |
 
 M004 push `a69027a`: [run 43002436891](https://github.com/skynet-core/Vetra.jl/actions/runs/43002436891)
@@ -92,8 +94,18 @@ Follow-up `c31626a` passed all **10 jobs** in
 [run 43019390200](https://github.com/skynet-core/Vetra.jl/actions/runs/43019390200),
 including both Windows Julia lanes and four platform benchmark artifacts.
 
-R040 continues independently. R010 awaits reviewed R040 evidence;
-downstream backend tasks retain their dependency gates. R099 stays last.
+R040 supplies approved bounded constraints for R010, which is now ready for
+contract work. Other-platform GPU acceptance remains open; downstream backend
+tasks retain their dependency gates. R099 stays last.
+
+2026-11-12: user requested a review, improvements, and Qwen implementation of
+feature-rich programs across renderers, fixing bugs exposed by their use.
+E001 runs independently against the implemented CPU/recording/SVG/PDF APIs;
+the same scenes acquire GPU/browser/notebook/media routes in the dependency-ready
+tasks listed in `tasks/EXAMPLES_PLAN.md`. No provider is represented as implemented
+by an example stub. R040 candidate `db47824` is independently approved:
+174 self-checks, 13 extra capture-preservation checks, all seven probes and the
+root Julia 1.13 gate pass. Exact evidence and platform limits are in the handoff.
 
 ## Historical board (retired after M006 consolidation)
 

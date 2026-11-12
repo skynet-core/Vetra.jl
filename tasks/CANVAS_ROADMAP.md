@@ -92,8 +92,8 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | ID | Task | Stream | Depends on | Initial status |
 | --- | --- | --- | --- | --- |
 | R000 | Architecture, research and reviewed task plan | Coordinator | — | done |
-| R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | in_progress (713543b rejected; probe corrections assigned) |
-| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | planned |
+| R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | bounded probe approved (db47824; other-platform execution open, D037) |
+| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | ready (bounded R040 constraints approved; no cross-platform GPU claim) |
 | R011 | Independent conformance corpus and capability inventory | Q | R010 | planned |
 | R012 | Shared text/layout correctness and font contract | F | R010, M004 | planned |
 | R013 | Zero-core-change external extension conformance | Q | R021, R022, R060, R065, R066 | planned |
@@ -192,12 +192,18 @@ temporary experiment output until the package boundary is approved.
 Assigned 2026-11-11: Qwen3.8, branch `canvas/vulkan-probe`, worktree
 `/tmp/opencode/vetra-r040`, base `9826b7e`; owns `lib/VetraVulkan/probe/` only.
 Coordinator reviews evidence and packaging proposals before R010 or approval.
+Approved 2026-11-12: final `db47824`, integrated through `440276d`, as a bounded
+Linux x86_64/NVIDIA compatibility probe. Independent p00–p60 checks passed
+14/8/7/15/18/8/5, self-checks 174/174, extra capture checks 13/13 and the root
+Julia 1.13 gate (95.79%). D037 records constraints for R010. Windows/macOS/FreeBSD,
+other GPU vendors/host architectures and Vulkan 0.7 execution remain open;
+approval does not satisfy those platform runtime criteria or imply a renderer.
 
-First submission `713543b` is not approved. Coordinator reproduced offscreen
+Review history: first submission `713543b` was rejected. Coordinator reproduced offscreen
 and compute readbacks on Linux NVIDIA, but found incorrect validation severity
 masks (errors/warnings silently omitted), an uncommitted Manifest, an unrooted
 feature-query pNext chain in the pinned wrapper, and unsupported minimum-feature
-claims. Bounded corrections are assigned to the same writer; exact findings and
+claims. The final candidate resolves those findings; exact corrections and
 independent evidence are in `docs/HANDOFF.md`. Other OS execution remains open.
 
 - Start from the [reviewed research corrections](../docs/CANVAS_RESEARCH.md),
@@ -1064,6 +1070,11 @@ W owns connected-browser transport fixes.
   tree clean, candidate committed/pushed, package registration still user-owned.
 
 ### R098 — Attractive README with real image examples
+
+The user-requested feature programs are specified in [EXAMPLES_PLAN.md](EXAMPLES_PLAN.md).
+E001 builds the current-API scenes first; backend owners extend those same scenes
+as their tasks become ready, fixing and regression-testing bugs they expose.
+R098 consumes real executed outputs; R099 remains the final publication task.
 
 **Owner/paths:** D; `README.md`, reproducible asset generator, `docs/assets/readme/`.
 
