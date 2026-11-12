@@ -80,33 +80,45 @@ round trip. The display cells use image functions only (`enlarge8`,
 `invert!`, `apply_opacity!`, `rotate_90`) — no font fixtures, so it
 runs without the gitignored `.reference` checkout.
 
-One-time, from the repository root — an isolated project that never
-touches the repository `Project.toml`/`Manifest.toml` (the pattern of
-`optional_env` above, with only the two packages the notebook needs):
+One-time, from the repository root — an isolated project under the
+already-gitignored `artifacts/` directory (the pattern of
+`optional_env` above, with only the two packages the notebook needs;
+`Pkg.develop` before `Pkg.add` so the local Vetra is never resolved
+from the registry; the repository `Project.toml`/`Manifest.toml` are
+never touched):
 
 ```
-mkdir -p .notebook-env
-julia --project=.notebook-env -e 'using Pkg; Pkg.add(["IJulia", "PNGFiles"]); Pkg.develop(path = "."); Pkg.instantiate()'
-julia --project=.notebook-env -e "using IJulia; IJulia.installkernel(\"VetraNotebook\", \"--project=$(pwd)/.notebook-env\")"
+mkdir -p artifacts/notebook-env
+julia --project=artifacts/notebook-env -e 'using Pkg; Pkg.develop(path = "."); Pkg.add(["IJulia", "PNGFiles"]); Pkg.instantiate()'
+julia --project=artifacts/notebook-env -e 'using IJulia; IJulia.installkernel("VetraNotebook", "--project=$(dirname(Base.active_project()))")'
 ```
 
-Then in VS Code: open this repository, open
-`examples/gallery/image_lab.ipynb`, choose the kernel
-**VetraNotebook** (the IJulia Julia kernelspec) in the notebook's
-kernel picker, and run all cells. Expected: the contract cells finish
-with no error (a failed `@assert` errors the cell), and the two
-display cells render the 32×32 test image and the 200×64
-original / inverted / 50% opacity / rotated strip.
+The `$(...)` in the install command is Julia string interpolation
+(the absolute env path), not a shell expansion — it works even when
+the checkout path contains spaces. The kernelspec is registered in
+your normal Jupyter data directory.
+
+Then in VS Code (prerequisite: the Microsoft Jupyter extension
+`ms-toolsai.jupyter` installed): open this repository, open
+`examples/gallery/image_lab.ipynb`, and pick the kernel via
+`Notebook: Select Notebook Kernel` → `Select Another Kernel...` →
+`Jupyter Kernels` → `VetraNotebook` (a version suffix such as
+`VetraNotebook 1.13` may be shown), and run all cells. Expected: the
+contract cells finish with no error (a failed `@assert` errors the
+cell), and the two display cells render the 32×32 test image and the
+200×64 original / inverted / 50% opacity / rotated strip. Kernel
+selection follows the official Jupyter kernel management
+documentation
+(https://code.visualstudio.com/docs/datascience/jupyter-kernel-management).
+This direct-kernel path needs no Python and no PDF tooling.
 
 If the picker does not offer `VetraNotebook`: start a local Jupyter
-server (any Jupyter installation, e.g. `python -m jupyter server
---port 8899`) — it prints a token URL — then in VS Code run
-`Notebook: Select Notebook Runtime` (or kernel picker →
-`Jupyter Kernels` → `Local` → `Enter local server URL`), enter
-`http://127.0.0.1:8899` (you are asked for the token), and select the
-`VetraNotebook` kernelspec. That path needs a local Jupyter; the
-picker path does not. No Python or PDF tooling is needed to *see* the
-notebook either way.
+server (this path requires a Jupyter installation, e.g.
+`python -m jupyter server --ip=127.0.0.1 --port=8899 --no-browser` —
+the default token stays intact and the server prints a token URL),
+then in VS Code use `Select Another Kernel...` →
+`Existing Jupyter Server` → `Enter URL of running server` and paste
+the full token URL; select the `VetraNotebook` kernelspec.
 
 ## Coverage matrix
 
