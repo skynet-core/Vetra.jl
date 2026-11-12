@@ -69,6 +69,45 @@ img                                       # a notebook cell displays the PNG
 This documents the display path only — no live-adapter or
 interactivity claim; `run()` returns the check report, never the image.
 
+## VS Code / Jupyter notebooks
+
+`image_lab.ipynb` (this directory) is a clean, unexecuted notebook
+that includes `image_lab.jl` from its package location
+(`pkgdir(Vetra)` — no host-specific paths) and asserts the T016
+contract with hand-derived expectations: MIME payload byte identity,
+source preservation, independent premultiplied pixels, and the PNG
+round trip. The display cells use image functions only (`enlarge8`,
+`invert!`, `apply_opacity!`, `rotate_90`) — no font fixtures, so it
+runs without the gitignored `.reference` checkout.
+
+One-time, from the repository root — an isolated project that never
+touches the repository `Project.toml`/`Manifest.toml` (the pattern of
+`optional_env` above, with only the two packages the notebook needs):
+
+```
+mkdir -p .notebook-env
+julia --project=.notebook-env -e 'using Pkg; Pkg.add(["IJulia", "PNGFiles"]); Pkg.develop(path = "."); Pkg.instantiate()'
+julia --project=.notebook-env -e "using IJulia; IJulia.installkernel(\"VetraNotebook\", \"--project=$(pwd)/.notebook-env\")"
+```
+
+Then in VS Code: open this repository, open
+`examples/gallery/image_lab.ipynb`, choose the kernel
+**VetraNotebook** (the IJulia Julia kernelspec) in the notebook's
+kernel picker, and run all cells. Expected: the contract cells finish
+with no error (a failed `@assert` errors the cell), and the two
+display cells render the 32×32 test image and the 200×64
+original / inverted / 50% opacity / rotated strip.
+
+If the picker does not offer `VetraNotebook`: start a local Jupyter
+server (any Jupyter installation, e.g. `python -m jupyter server
+--port 8899`) — it prints a token URL — then in VS Code run
+`Notebook: Select Notebook Runtime` (or kernel picker →
+`Jupyter Kernels` → `Local` → `Enter local server URL`), enter
+`http://127.0.0.1:8899` (you are asked for the token), and select the
+`VetraNotebook` kernelspec. That path needs a local Jupyter; the
+picker path does not. No Python or PDF tooling is needed to *see* the
+notebook either way.
+
 ## Coverage matrix
 
 Feature → program, renderer, optional dependency, and what is checked.
