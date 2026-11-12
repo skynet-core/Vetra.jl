@@ -1,9 +1,13 @@
-# image_lab.jl -- E001 gallery program 4: pixel storage and interop, the
-# premultiplied/straight alpha boundary, blend math, image effects
+# image_lab.jl -- E001 gallery program 4: pixel storage and interop,
+# the premultiplied/straight alpha boundary, blend math, image effects
 # (invert / spread / blur / opacity / crop / rotate / resize / flip),
 # native codec exact round trips, optional PNG/JPEG/WebP/ColorTypes with
-# explicit matte/lossless policy, and the current T016 PNG MIME display
-# for notebooks (no future live-adapter claims).
+# explicit matte/lossless policy (JPEG flattens alpha to the explicit
+# `background` matte, bounded per block interior; WebP lossless keeps
+# alpha), and the current T016 PNG MIME display for notebooks — the
+# user-facing call is show(MIME"image/png", img) or a bare img; run()
+# returns the check report, never the image (no future live-adapter
+# claims).
 #
 #   julia --project=. examples/gallery/image_lab.jl [outdir]
 #
@@ -294,16 +298,22 @@ function run(outdir::String)
 
     # ---- E: native codecs ----
     q = decode_qoi(Vector{UInt8}(encode_qoi(opaque_copy(src))))
-    check(Image(q.width, q.height, q.data).data == opaque_copy(src).data,
-        "QOI: opaque round trip is byte-exact")
+    check(new_image(q).data == opaque_copy(src).data,
+        "QOI: opaque round trip through the public new_image(Qoi) is " *
+        "byte-exact")
     q2 = decode_qoi(Vector{UInt8}(encode_qoi(src)))
-    qi = Image(q2.width, q2.height, q2.data)
-    check(get_color(qi, 4, 1) == rgbx(255, 255, 255, 128),
-        "QOI: semi-transparent pixels store the straight boundary " *
-        "((128,128,128,128) -> (255,255,255,128))")
+    check(q2.data[13:16] == [UInt8(255), UInt8(255), UInt8(255), UInt8(128)],
+        "QOI: the file is straight RGBA — pixel (4,1) (128,128,128,128) " *
+        "stored premul reads back as straight (255,255,255,128)")
+    check(new_image(q2).data == src.data,
+        "QOI: new_image(Qoi) converts the straight file back to the " *
+        "valid premul storage, byte-exact (Linear colorspace, no " *
+        "sRGB-linearization pass)")
     bmp = decode_bmp(Vector{UInt8}(encode_bmp(src)))
     check(bmp.data == src.data,
-        "BMP: valid V5 header round trip is byte-exact, alpha included")
+        "BMP: round trip is byte-exact with alpha — the 32-bit file " *
+        "boundary is straight RGBA (encode toStraightAlpha, decode " *
+        "rgbx(rgba(...))); exact on valid premul storage")
     ppm = decode_ppm(Vector{UInt8}(encode_ppm(src)))
     expect_ppm = opaque_copy(src).data
     check(ppm.data == expect_ppm,
@@ -331,11 +341,15 @@ function run(outdir::String)
             "PNG: lossless round trip is byte-exact, valid premul with alpha")
         check(showable(MIME"image/png"(), src),
             "T016: showable(MIME\"image/png\") reports PNGFiles availability")
+        # The user-facing notebook call is show(MIME"image/png", img) —
+        # or a bare img, which the MIME method serves. run() itself
+        # returns the check report, never the image.
         buf = IOBuffer()
+        snap = copy(src.data)
         show(buf, MIME"image/png"(), src)
         check(buf.data[1:buf.size] == encode_png(src),
             "T016: show to an IO is exactly the encode_png bytes")
-        check(src.data[1] == 255, "T016: show does not mutate the source")
+        check(src.data == snap, "T016: show does not mutate the source")
         check(showable(MIME"text/plain"(), src),
             "T016: the text/plain fallback is always available")
     else
@@ -363,8 +377,36 @@ function run(outdir::String)
         j = decode_jpeg(Vector{UInt8}(encode_jpeg(grad; quality = 92)))
         check(size(j) == (32, 32), "JPEG: dimensions exact at q92")
         check(psnr_straight(grad, j) >= 40.0,
-            "JPEG: PSNR >= 40 dB on the smooth gradient (lossy: no " *
-            "exact-equality assertion, quality bound instead)")
+            "JPEG: PSNR >= 40 dB on the opaque smooth gradient (lossy: " *
+            "no exact-equality assertion, quality bound instead)")
+        # alpha flattening: JPEG has no alpha channel — encode_jpeg's
+        # explicit `background` matte is flattened into an all-opaque
+        # frame. Block-separated 16x1 layout (left 8 px opaque, right 8 px
+        # transparent) so each 8x8 DCT block is uniform; only the two
+        # boundary-adjacent pixels (x = 8, 9) carry block-edge loss.
+        jm = new_image(16, 1)
+        for x in 1:8
+            set_color!(jm, x, 1, rgb(200, 30, 40))
+        end
+        for x in 9:16
+            set_color!(jm, x, 1, rgba(0, 0, 0, 0))
+        end
+        out = decode_jpeg(
+            Vector{UInt8}(encode_jpeg(jm; quality = 92,
+                background = rgb(210, 190, 60))))
+        check(all(get_color(out, x, 1).a == 255 for x in 1:16),
+            "JPEG: the matte flatten is total — every output pixel is " *
+            "fully opaque (a = 255)")
+        l = get_color(out, 4, 1)
+        check(max(abs(Int(l.r) - 200), abs(Int(l.g) - 30),
+            abs(Int(l.b) - 40)) <= 2,
+            "JPEG: opaque-block interior (4,1) within 2 channels of " *
+            "(200,30,40) (measured 1; lossy bound, not equality)")
+        mt = get_color(out, 12, 1)
+        check(max(abs(Int(mt.r) - 210), abs(Int(mt.g) - 190),
+            abs(Int(mt.b) - 60)) <= 2,
+            "JPEG: matte-block interior (12,1) within 2 channels of the " *
+            "background rgb(210,190,60) (measured 1; lossy bound)")
     else
         try
             encode_jpeg(grad)
@@ -378,7 +420,8 @@ function run(outdir::String)
     if webp_ok
         wl = decode_webp(Vector{UInt8}(encode_webp(src; lossy = false)))
         check(wl.data == src.data,
-            "WebP lossless: byte-exact round trip, explicit matte policy")
+            "WebP lossless: byte-exact round trip, alpha preserved " *
+            "(no matte involved)")
         wy = decode_webp(
             Vector{UInt8}(encode_webp(grad; lossy = true, quality = 75)))
         check(size(wy) == (32, 32) && psnr_straight(grad, wy) >= 35.0,
@@ -405,7 +448,8 @@ function run(outdir::String)
             "ColorTypes: from_colors(to_colors) is exact on valid premul")
         view = Base.view(m, 1:2, :)
         check(from_colors(view).width == 4,
-            "ColorTypes: range views are accepted without a copy")
+            "ColorTypes: range views are accepted (the result is a " *
+            "fresh copy, per the README matrix)")
     else
         try
             to_colors(src)
