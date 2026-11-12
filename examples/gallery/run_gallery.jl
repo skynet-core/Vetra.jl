@@ -94,11 +94,18 @@ function core_only_run(name::String, outdir::String, depot::String)
 end
 
 function main()
-    outdir = default_outdir()
+    # args are fully parsed before any output directory is resolved or
+    # created (default_outdir is a pure path helper; run_all ensures).
     core = false
+    outdirs = String[]
     for arg in ARGS
-        arg === "--core-only" ? (core = true) : (outdir = arg)
+        if arg == "--core-only"
+            core = true
+        else
+            push!(outdirs, arg)
+        end
     end
+    outdir = isempty(outdirs) ? default_outdir() : outdirs[1]
     println("gallery batch run -> ", outdir)
     run_all(outdir)
     if core

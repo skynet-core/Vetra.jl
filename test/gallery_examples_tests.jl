@@ -46,6 +46,39 @@ end
             default_outdir_existed
     end
 
+    @testset "entry guard: real CLI / include / -e invocations" begin
+        # The guard is Base.PROGRAM_FILE (entry path; "" for -e, REPL and
+        # included code). Each mode is verified with a real process
+        # invocation (not an in-process emulation).
+        prog = joinpath(gallery, "plot_dashboard.jl")
+        mktempdir() do dir
+            # CLI: the program is the entry script -> main runs
+            out1 = joinpath(dir, "cli")
+            cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(root) $(prog) $(out1)`
+            @test success(pipeline(cmd; stdout = stderr, stderr = stderr))
+            @test isfile(joinpath(out1, "plot_dashboard.bmp"))
+            # include from a driver script: not the entry -> no render at
+            # include time; the explicit run() still works
+            drv = joinpath(dir, "driver.jl")
+            out2 = joinpath(dir, "include")
+            open(drv, "w") do f
+                println(f, "include(\"", prog, "\")")
+                println(f,
+                    "if VetraGallery.is_entry(\"", prog, "\")")
+                println(f, "    error(\"entry guard false positive\")")
+                println(f, "end")
+                println(f, "run(\"", out2, "\")")
+            end
+            cmd2 = `$(Base.julia_cmd()) --startup-file=no --project=$(root) $(drv)`
+            @test success(pipeline(cmd2; stdout = stderr, stderr = stderr))
+            @test isfile(joinpath(out2, "plot_dashboard.bmp"))
+            # -e with an existing .jl path in ARGS: that path is an
+            # argument, not the entry (PROGRAM_FILE == "")
+            cmd3 = `$(Base.julia_cmd()) --startup-file=no --project=$(root) -e "include(\"$(gallery)/gallery.jl\"); @assert Base.PROGRAM_FILE == \"\"; @assert !VetraGallery.is_entry(ARGS[1])" $(prog)`
+            @test success(pipeline(cmd3; stdout = stderr, stderr = stderr))
+        end
+    end
+
     @testset "end-to-end runs (optional-provider environment)" begin
         dir = mktempdir()
         try

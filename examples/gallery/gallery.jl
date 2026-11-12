@@ -13,8 +13,8 @@ using Vetra
 
 export ROOT, FONT_PROVENANCE, ROBOTO, NOTO_SANS, NOTO_SANS_JP, ARABIC,
     PNG_ID, JPEG_ID, XML_ID, WEBP_ID, COLORTYPES_ID, HARBUFF_ID,
-    available, require!, ensure_outdir, default_outdir, entry_script,
-    is_entry, check, reset_checks, check_count, finish
+    available, require!, ensure_outdir, default_outdir, is_entry,
+    check, reset_checks, check_count, finish
 
 # examples/gallery/gallery.jl -> repository root (two levels up).
 const ROOT = normpath(joinpath(dirname(dirname(@__DIR__)), "."))
@@ -81,54 +81,21 @@ function ensure_outdir(dir::String)
     return dir
 end
 
-"""Default output directory (gitignored artifacts/)."""
-default_outdir() = ensure_outdir(joinpath(ROOT, "artifacts", "gallery"))
+"""Default output directory (gitignored artifacts/). Pure path helper —
+no side effects; the caller's outdir is parsed before anything is
+created (run() calls ensure_outdir)."""
+default_outdir() = joinpath(ROOT, "artifacts", "gallery")
 
 # ---------- import-safe entry guard ----------
 
-"""Entry script path ("julia prog.jl"), or "" when julia ran without one
-(-e, REPL, code included from another script). New builds expose
-`JLOptions.program_file`, standard older ones `JLOptions.file`; the
-frozen 1.10 build used by the CI gates exposes neither, so there we read
-the process argv from `/proc/self/cmdline` and take the first existing
-`.jl` argument."""
-function entry_script()
-    opts = Base.JLOptions()
-    fs = fieldnames(typeof(opts))
-    f = :program_file in fs ? :program_file :
-        :file in fs ? :file : nothing
-    f === nothing && return _procEntry()
-    v = getfield(opts, f)
-    v isa AbstractString && return v
-    return v == Ptr{UInt8}(0) ? "" : unsafe_string(v)
-end
-
-"""Entry script from the process argv: the first existing `.jl` argument
-(Linux; for the frozen 1.10 build where `JLOptions` has no entry field).
-Note: no `try` around the field access — the frozen builds mis-scope
-variables assigned inside `try` blocks."""
-function _procEntry()
-    Sys.islinux() || return ""
-    raw = read("/proc/self/cmdline")
-    args = String[]
-    s = 1
-    for (i, b) in enumerate(raw)
-        if b == UInt8(0)
-            i > s && push!(args, String(raw[s:i-1]))
-            s = i + 1
-        end
-    end
-    for a in args
-        startswith(a, "-") && continue
-        endswith(a, ".jl") && isfile(a) && return a
-    end
-    return ""
-end
-
-"""True when `file` is the script julia was started with."""
+"""True when `file` is the script julia was started with.
+`Base.PROGRAM_FILE` is the entry path for `julia prog.jl` and "" for
+`-e`, REPL and code included from another script — including `-e` with
+an existing `.jl` path in `ARGS`, which is an argument, not the entry.
+Verified on both gate Julia versions (1.10.13 and 1.13.3)."""
 function is_entry(file::String)
-    ef = entry_script()
-    return !isempty(ef) && normpath(abspath(ef)) == normpath(abspath(file))
+    pf = Base.PROGRAM_FILE
+    return !isempty(pf) && normpath(abspath(pf)) == normpath(abspath(file))
 end
 
 # ---------- check counter ----------
