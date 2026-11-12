@@ -193,6 +193,15 @@ content stream carries one root CTM (scale + y flip: top-left/y-down
 picture space to PDF's bottom-left/y-up page space); vector content is
 emitted directly into the page, groups become Form XObjects.
 
+Image placement (corrected in E001/D038): PDF §8.9.4 maps top-down samples
+to a y-up unit square with implicit matrix `[1/w 0 0 -1/h 0 1]`.
+Under the strict writer's y-down root CTM, an image therefore uses
+`imageMat * scale(w,h) * translate(0,1) * scale(1,-1)`; an identity imageMat
+gives `[w 0 0 -h 0 h]`. Raster fallback has no picture-space root CTM and
+uses `[sW 0 0 sH 0 0]` directly in page space. RGB and SMask samples both
+remain top-down. The old placement matrices vertically flipped both paths;
+asymmetric external-render checks now cover their orientation and alpha.
+
 | element | v1 | mechanism |
 | --- | --- | --- |
 | solid fill/stroke, NormalBlend | ✓ | path operators + `rg`/`RG`; opacity via ExtGState `ca`/`CA` |

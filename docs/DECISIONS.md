@@ -1245,6 +1245,50 @@ Independent evidence: all p00–p60 checks **14/8/7/15/18/8/5**, **174** self-ch
 **13** additional real-callback capture checks, and the root Julia 1.13.3 gate
 **95.79% (7762/8103)**. Commands/logs and correction history: `docs/HANDOFF.md`.
 
+## D038 — Correct BMP alpha boundaries and PDF serialization/placement
+
+Status: **accepted and independently validated**, 2026-11-12.
+Writer `873939f`, integrated through `254be96`; this follows M004's policy of correcting justified bugs
+rather than preserving upstream interoperability failures.
+
+- BMP's masked file channels are straight, while `Image` stores premultiplied
+  RGBA. Encode through the existing `toStraightAlpha` conversion and premultiply
+  on masked decode. Write an actual 124-byte BITMAPV5HEADER (file offset 138),
+  with bottom-up rows. Upstream already converted colors to straight on encode;
+  its direct-store masked decoder and 136-byte header were the defects.
+- Keep the five pinned BMP files/raw oracles unchanged. Their old decoder
+  behavior remains traceable; tests independently transform the affected
+  expectations using integer alpha math and retain checksum checks. This
+  supersedes exact upstream decode parity for affected masked-alpha pixels.
+  Handcrafted V5 inputs and external Pillow output checks establish the file
+  boundary independently of self-roundtrips.
+- PDF ISO 32000-1 §7.3.3 NOTE 1 prohibits exponential numeric syntax. Expand
+  the existing floating-point string's significand/exponent by relocating the
+  decimal point, including positions inside the digits. Do not truncate tiny
+  values, force large values through fixed-width integers, or fall back to
+  exponent form. The result preserves the round-trip value, rather than claiming
+  an exact decimal expansion of the binary float. Existing non-finite input
+  validation and signed-zero normalization remain in force.
+- SVG 1.1 XML numeric attributes permit exponents. Retract the first E001
+  candidate's opposite SVG/PDF grammar claims and remove its SVG workaround.
+  New providers or dependencies are unnecessary for either correction.
+- PDF image placement must compose §8.9.4's implicit top-down sample to y-up
+  unit-square transform. In strict y-down picture space, append the local
+  `translate(0,1) * scale(1,-1)` after the image pixel-size scale. Fallback
+  page content has no picture-space root transform and uses positive page
+  height with zero translation. This corrects vertical flips in both paths
+  while preserving top-down RGB/SMask payload order. External asymmetric
+  image, scale, rotation and alpha checks establish rendered placement; the
+  old symmetric fallback test and raw-stream checks could not detect the bug.
+
+Primary sources: [WIC BMP format](https://learn.microsoft.com/en-us/windows/win32/wic/bmp-format-overview),
+[WIC pixel formats](https://learn.microsoft.com/en-us/windows/win32/wic/-wic-codec-native-pixel-formats),
+[PDF 32000-1 §7.3.3](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf),
+[SVG 1.1 number syntax](https://www.w3.org/TR/SVG11/types.html#DataTypeNumber).
+Independent evidence: 65,536 BMP color/alpha combinations and **24,014** numeric
+checks per Julia version, plus real PDF rendering. Full commands and gate status:
+`docs/HANDOFF.md`.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

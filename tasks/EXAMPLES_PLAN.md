@@ -7,6 +7,15 @@ regression-tested, not hidden with example-specific workarounds.
 
 ## E001 — executable examples on the current public API
 
+**Done, independently approved 2026-11-12:** writer `873939f`, integrated through
+`254be96`. All six programs and optional/core-only CLI runs pass. Both required
+Julia gates pass (1.10: 96.11%, 1.13: 96.07%; 79 gallery tests each). Review
+fixed BMP header/alpha interoperability, PDF numeric serialization and strict/
+fallback image orientation; D038 and `docs/HANDOFF.md` record independent
+Pillow/Poppler/Chromium evidence and commands. Run instructions and the feature
+matrix are in [the gallery README](../examples/gallery/README.md).
+The backend extensions below remain attached to their dependency-ready tasks.
+
 Owner: Qwen3.8, `examples/feature-gallery`, worktree
 `/tmp/opencode/vetra-feature-gallery`. Base: `7a54ea9`. Coordinator reviews,
 validates and integrates. This independent consumer task does not change R010's

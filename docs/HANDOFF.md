@@ -12,7 +12,8 @@ Coordinator owns these documents. Qwen's bounded M003 implementation in
 `modernization/native-api` is now approved and integrated. On 2026-11-11 the user
 requested implementation start; M004 is now independently approved and integrated,
 and R040's bounded Linux/NVIDIA probe is now approved and integrated (D037).
-E001 feature examples are active (below). Future backend streams are gated by
+E001 feature examples are independently approved and integrated (D038, below).
+Future backend streams are gated by
 R010's contract review. Final milestone task R099 publishes the real interactive
 tutorial via GitHub Pages CI; R098 prepares the illustrated README.
 
@@ -41,7 +42,7 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: review/validate E001's feature examples and freeze R010 using the approved
+Next: freeze R010 using the approved
 bounded Vulkan constraints. M003/M004 and the Windows allocation-gate follow-up
 are approved with passing four-platform CI (evidence below). Other-platform GPU
 runtime acceptance remains open; R040 does not establish a production backend.
@@ -52,7 +53,7 @@ R099 remains the final task.
 User requested review/improvements and Qwen3.8 implementation of examples that
 exercise the full library across backends/renderers, with fixes for bugs exposed
 while building them. Scope and acceptance: `tasks/EXAMPLES_PLAN.md`.
-E001 is assigned to Qwen in `/tmp/opencode/vetra-feature-gallery`, branch
+E001 was assigned to Qwen in `/tmp/opencode/vetra-feature-gallery`, branch
 `examples/feature-gallery`, base `7a54ea9`; owns `examples/gallery/`, related
 example instructions, `test/gallery_examples_tests.jl` and its explicit runner
 include. Connected reproduced library bugs may be fixed in separate commits;
@@ -65,6 +66,187 @@ MIME display. The same programs are extended by the planned Canvas providers
 and the media editor when their roadmap dependencies are implemented. R099
 publication stays last. Every runnable example requires semantic assertions,
 real outputs, honest provider requirements and source-preserving I/O.
+
+#### E001 approval (2026-11-12)
+
+**Approved and integrated through `254be96`**, final writer `873939f`.
+All six programs are executable under `examples/gallery/`; current targets are
+CPU direct/replay, SVG, PDF and optional codec/MIME paths. D038 records the
+BMP straight-alpha/header correction, lossless PDF decimal serialization and
+strict/fallback image-orientation correction found during independent rendering.
+
+Final required checks (identical integration source, isolated worktrees):
+
+- `/tmp/opencode/vetra-e001-integration`:
+  `julia +1.10 --startup-file=no --project=. scripts/check.jl` — passed,
+  **96.11% (7907/8227)**, gallery **79/79**.
+- `/tmp/opencode/vetra-e001-coord-final113`:
+  `julia --startup-file=no --project=. scripts/check.jl` — Julia 1.13.3 passed,
+  **96.07% (7805/8124)**, gallery **79/79**.
+- Logs: `/tmp/opencode/e001-coord-orientation-gate{110,113}.log`.
+- Independent PDF numeric probes: **24,014 checks/version**; BMP boundary:
+  **65,536 pixel combinations**, independent integer decode expectations and
+  Pillow encode verification against the unchanged alpha oracle.
+- All six optional-provider and core-only CLI runs passed, with explicit
+  six-provider absence preflight. Poppler rendered all twelve documents;
+  the final CTM fix additionally passed asymmetric strict/fallback/rotation
+  checks and five gallery color/alpha samples. Five SVG scenes rendered in
+  Chromium; the fallback passed the same five expected samples.
+
+Main now contains exactly the reviewed implementation. Coordinator additionally
+updated compatibility, decision, recording-contract and status documentation;
+`git diff --check` passes. Remote CI for this integration is pending the push.
+Live Jupyter execution was not performed; PNG MIME behavior is tested. PyMuPDF
+interoperability was skipped because that module is unavailable. Existing
+dash-cap/scaled-gradient renderer differences are documented. Future GPU,
+browser Canvas2D and media extensions retain their roadmap dependencies; R099
+publication remains last. R010 is the next ready contract task.
+
+#### E001 review history: first candidate (2026-11-12)
+
+Candidate `bde2e75` (preceded by BMP `51760ee` and number formatting `6bf893c`)
+was **rejected**. The same Qwen writer corrected these findings:
+
+- **BMP external alpha boundary:** independent Pillow 12.1.1 decodes the
+  candidate's encoded premultiplied red `(128,0,0,128)` as straight
+  `(128,0,0,128)`, rather than `(255,0,0,128)`. The 124-byte header correction
+  is justified; storing premultiplied file bytes to match the existing decoder
+  is not. Correct encoder and decoder boundaries with independent byte fixtures;
+  preserve pinned oracle provenance and explain justified divergence.
+- **Numeric serialization:** `_pdfNum(1f-20)` and `_n(1f-20)` become zero;
+  `1f20` still emits exponent notation. PDF ISO 32000-1 §7.3.3 explicitly
+  forbids exponent notation, while SVG 1.1 XML number attributes allow it.
+  Require lossless decimal expansion for PDF, remove the unjustified SVG
+  workaround and retract the reversed specification claims.
+- **Entry detection:** both Julia 1.10.13 and 1.13.3 have `PROGRAM_FILE`.
+  Under `-e`, passing an existing `.jl` argument falsely triggers the candidate's
+  `/proc/self/cmdline` scanner on both versions. Replace it with the documented
+  entry path, remove unsupported frozen-build/try-scope claims, and test CLI,
+  include and `-e` invocation. Fix runner string equality and premature default
+  output-directory creation.
+- **Example correctness:** QOI straight bytes must enter `Image` through
+  `new_image(q)`. Explicit raster fallback must export the same unsupported
+  scene, with independently checked transparent/partial/opaque samples;
+  also test fresh destination preservation. Correct copying/matte claims,
+  demonstrate actual notebook-returned images, and document font setup.
+
+Independent review worktree: `/tmp/opencode/vetra-e001-coord-c0`, detached at
+`bde2e75`. Reproductions: `/tmp/opencode/e001-c0-coord-bmp.log` and
+`/tmp/opencode/e001-c0-alpha.bmp`; official PDF specification downloaded to
+`/tmp/opencode/PDF32000_2008.pdf` (text lines 1196–1220). SVG source:
+<https://www.w3.org/TR/SVG11/types.html#DataTypeNumber>.
+
+Coordinator ran `julia --startup-file=no --project=.
+examples/gallery/run_gallery.jl /tmp/opencode/e001-c0-core-artifacts` in the
+review tree: six programs passed **60/26/35/59/17/27** internal checks in the
+current environment (not a proof of provider isolation). Log:
+`/tmp/opencode/e001-c0-coord-gallery.log`. Raster contact sheet was visually
+inspected; all six produced PDFs rendered with `pdftoppm -singlefile
+-scale-to 800 -png` with exit 0 and empty stderr. Those checks do not cover
+the independently reproduced alpha/number edge failures. Writer-reported full
+gates remain unapproved; run fresh independent gates on the corrected candidate.
+
+R040 integration push `489d30e` passed all **10 CPU CI jobs** in
+[run 43148162586](https://github.com/skynet-core/Vetra.jl/actions/runs/43148162586),
+including Linux/Windows/macOS/FreeBSD tests and four non-expired platform
+benchmark artifacts. This adds no cross-platform Vulkan runtime evidence.
+
+#### E001 review history: correction candidates
+
+Candidate `65a7006` was also **rejected**. Independent source
+review confirms substantial corrections, but `_pdfNum(1234567.125)` and its
+Float32 equivalent throw `ArgumentError: can't repeat a string -7 times`.
+The same failure is reproduced through `write_pdf!` with a 32×32 recording
+containing an off-canvas rectangle at that coordinate; the fresh destination
+is correctly left uncreated. Decimal expansion omitted the case where the
+decimal point falls inside the significand digits. New tests also interpolate
+raw paths into Julia/Python source, which breaks Windows path escaping.
+These fixes, precise decimal/upstream attribution, core-provider absence
+assertions and the notebook invocation snippet are assigned to the same writer.
+
+The BMP boundary correction independently passes in detached review worktree
+`/tmp/opencode/vetra-e001-coord-c1`: a handcrafted top-down V5 covers **65,536**
+straight color/alpha combinations. Decoding matches independent integer
+premultiplication; encode/decode preserves those stored bytes; Pillow 12.1.1
+decodes the encoded output exactly against the unchanged pinned
+`straight_alpha.tsv` oracle. **4/4 assertions on each of Julia 1.10.13 and
+1.13.3**, plus both independent Python checks. Commands:
+
+```sh
+/usr/bin/python3 /tmp/opencode/e001-coord-bmp.py prepare
+julia +1.10 --startup-file=no --project=. /tmp/opencode/e001-coord-bmp.jl
+julia --startup-file=no --project=. /tmp/opencode/e001-coord-bmp.jl
+/usr/bin/python3 /tmp/opencode/e001-coord-bmp.py verify
+```
+
+The initial coordinator harness used the wrong binary-string decode argument
+and ties-to-even expectation; it was corrected to the documented byte-vector
+API and pinned independent alpha oracle before recording these passing results.
+Writer-reported full gates for `65a7006` (96.11%/96.07%) do not cover the newly
+reproduced PDF failure. Fresh independent full gates await the next correction.
+
+Final writer correction `e2bcfba` addresses the decimal-point interior case,
+Windows-safe test paths, source attribution and explicit core-provider absence
+preflight. Coordinator integration candidate is detached **`748d5e1`** (main
+`489d30e` merged with the writer branch), in `/tmp/opencode/vetra-e001-integration`.
+Main had not advanced to this candidate at that review stage. Separate identical tree
+`/tmp/opencode/vetra-e001-coord-final113` isolates the concurrent coverage gate.
+
+Independent `/tmp/opencode/e001-coord-numbers.jl` passed **24,014/24,014** on each
+of Julia 1.10.13 and 1.13.3: finite Float32/Float64 bit patterns spanning signs,
+exponents and significands, decimal grammar, parse-back at both precisions,
+subnormal/extreme values and a real million-coordinate export. Poppler rendered
+that 32×32 PDF with empty stderr and correct red/background sample pixels.
+The BMP interop probe also passes on the final integration source.
+
+Both required `scripts/check.jl` gates passed: Julia 1.10.13 **96.11%
+(7907/8227)**, Julia 1.13.3 **96.07% (7805/8124)**, gallery **79/79** each; logs:
+`/tmp/opencode/e001-coord-final-gate110.log` and `...-gate113.log`.
+The documented optional environment setup succeeded with Julia 1.10 without
+changing tracked metadata (`/tmp/opencode/e001-coord-optional-setup.log`).
+Actual optional-provider batch plus core-only CLI re-runs passed:
+`julia --startup-file=no --project=examples/gallery/optional_env
+examples/gallery/run_gallery.jl /tmp/opencode/e001-coord-final-artifacts --core-only`;
+log `/tmp/opencode/e001-coord-final-cli.log`. Optional counts:
+**60/26/37/67/17/33**; core-only counts **60/26/34/56/17/34**, with the six-provider
+absence preflight passing. All twelve optional/core PDFs rendered with Poppler
+at 96 dpi, exit 0 and empty stderr. Five representative SVGs rendered in
+headless Chromium; the asymmetric fallback SVG passed five independent pixel
+samples including partial/zero alpha on white. Optional Arabic typography and
+the atlas were visually inspected.
+
+**Approval was blocked by a newly exposed PDF orientation bug.** The
+fallback PDF's raster is vertically flipped: at 96 dpi, gallery pixel `(1,1)`
+is white instead of background `(230,232,236)`, and `(39,31)` is background
+instead of accent `(30,64,175)` (coordinates here are zero-based Pillow).
+`/tmp/opencode/e001-coord-image-orientation.jl` independently confirms both
+strict ImageOp and raster fallback invert a six-color 16×24 asymmetric stamp
+on a 32×32 page. Outputs are in `/tmp/opencode/e001-coord-orientation/`.
+The old fallback test is vertically symmetric, so even its external renderer
+checks cannot detect this error. Qwen is correcting both coordinate paths and
+adding asymmetric rendered regressions. PDF 32000-1 §8.9.4 explicitly defines
+the image-to-unit-square transform `[1/w 0 0 -1/h 0 1]`; source text is at
+`/tmp/opencode/PDF32000_2008.txt`, lines 13937–13966. Correct raw image bytes
+alone do not establish rendered placement. D038 will include the reviewed
+orientation correction once validated; no candidate had been integrated then.
+
+Final orientation correction **`873939f`** was independently validated in
+detached candidate **`254be96`**, now integrated. Independent source review confirms
+both placement matrices now compose §8.9.4 correctly. Re-running
+`/tmp/opencode/e001-coord-image-orientation.jl` adds a 90-degree rotated case:
+strict, fallback and rotation each render the six expected colored blocks and
+white background correctly with Poppler at 96 dpi (empty stderr). The corrected
+gallery fallback independently passes all five expected samples, including
+partial alpha `(227,227,227)` over white and uncovered white pixels. Actual
+`export_policies.jl` optional CLI passes **33 checks**, log
+`/tmp/opencode/e001-coord-orientation-gallery.log`; rendered artifacts in the
+matching directory. RGB and alpha streams are unchanged by this CTM-only fix.
+
+Required full gates run on identical `254be96` source in the two isolated review
+trees. Julia 1.10.13 passed **96.11% (7907/8227)**, gallery **79/79**, log
+`/tmp/opencode/e001-coord-orientation-gate110.log`; Julia 1.13.3 passed
+**96.07% (7805/8124)**, gallery **79/79**, log `...-gate113.log`.
+Both final gates and external render checks support the approval above.
 
 R040 writer's final correction `db47824` was independently reviewed in
 `/tmp/opencode/vetra-r040-coord-c3`. Self-checks **174/174**, independent actual

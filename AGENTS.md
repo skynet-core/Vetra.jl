@@ -13,7 +13,8 @@ The architecture is `docs/CANVAS_DESIGN.md`; the detailed parallel development
 plan is `tasks/CANVAS_ROADMAP.md`. R000 is planning/review, not a claim of backend
 implementation. M003/M004 are complete; R040's bounded Linux/NVIDIA probe is
 approved and integrated, with other-platform execution still unverified (D037).
-The user-requested E001 feature examples are active (tasks/EXAMPLES_PLAN.md).
+The user-requested E001 feature examples are independently approved and integrated
+(tasks/EXAMPLES_PLAN.md, D038). R010 contract work is next.
 New backend
 implementation follows reviewed R010 contracts and explicit task ownership.
 Use separate worktrees for parallel writers. The coordinator reviews and

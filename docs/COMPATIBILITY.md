@@ -136,9 +136,16 @@ and SVG operations in the codec-enabled test environment.
   Evidence: test/formats_tests.jl.
 - BMP: `decodeBMP` / `decodeDIB` / `encodeBMP` / `decodeBMPDimensions`
   (`pixie/fileformats/bmp.nim`) — **implemented** (T008), native port:
-  1/4/8/24/32-bit, bottom-up and top-down (negative height), BITMAPV3HEADER
-  alpha; encode writes 32-bit top-down. Evidence: test/formats_tests.jl
-  (5 pinned fixtures), test/formats_synthetic_tests.jl.
+  1/4/8/24/32-bit, bottom-up and top-down (negative height), masked alpha.
+  E001/D038 corrects the encoder to a 124-byte BITMAPV5HEADER, pixel offset
+  138, and 32-bit **bottom-up** rows. Masked file pixels are straight RGBA;
+  decoding premultiplies into `Image`, encoding unpremultiplies. This deliberately
+  differs from upstream's direct-store masked decoder and malformed 136-byte
+  header. Pinned raw fixtures remain unchanged; corrected expectations apply
+  independently specified `(channel * alpha + 127) ÷ 255` to their straight
+  channels. Evidence: test/formats_tests.jl (5 pinned fixtures, handcrafted V5,
+  optional Pillow interoperability), test/formats_synthetic_tests.jl and the
+  independent 65,536-pixel check recorded in docs/HANDOFF.md.
 - QOI: `decodeQOI` / `encodeQOI` / `decodeQOIDimensions`
   (`pixie/fileformats/qoi.nim`) — **implemented** (T008), native port.
   Upstream quirk preserved: op tags RGB=0xFE / RGBA=0xFF, INDEX is the raw
@@ -277,7 +284,18 @@ and SVG operations in the codec-enabled test environment.
    semi-transparent gradient stops, non-finite geometry, and gradient
    fills under singular transforms each raise `ArgumentError` naming
    the op index before any file is written; `rasterFallback = true`
-   renders the whole picture to one embedded full-page image.
+    renders the whole picture to one embedded full-page image.
+    E001/D038 fixes numeric serialization: ISO 32000-1 §7.3.3 forbids exponent
+    notation. Finite floating-point numbers are expanded to decimal without
+    rounding away small values or losing fractional large coordinates. SVG
+    attributes retain their permitted exponent notation. Regression evidence:
+    test/pdf_export_tests.jl, independent float-pattern checks and Poppler
+    rendering recorded in docs/HANDOFF.md.
+    E001 also corrects previously vertically flipped strict image operations
+    and raster fallback. Placement matrices now account for PDF's implicit
+    top-down-sample-to-y-up-unit-square transform (§8.9.4); RGB and alpha stay
+    aligned. Asymmetric image, scale, rotation and alpha checks use rendered
+    output, not just embedded stream bytes (D038, docs/RECORDING.md §6.2).
    Gradient fills are exact for every invertible op transform (linear:
    repelled element-space handles; radial: the CTM is exactly the
    raster's ellipse map, with the path emitted in `M^-1 o T` space).
