@@ -46,8 +46,38 @@ function _svgHex(c::ColorRGBA)
 end
 
 """Number as SVG `float`; `-0.0` is normalized to `0.0` (inverse matrices
-produce signed zeros)."""
-_n(v::Float32) = v == Float32(0) ? "0.0" : string(v)
+produce signed zeros). Exponent notation is never emitted: the SVG 1.1
+number grammar has no exponent form, and Float32 trigonometry leaves
+residuals like 3e-6 on axis-aligned ellipse maps (E001 reproduction:
+strict readers reject `e` numbers)."""
+function _n(v::Float32)
+    v == Float32(0) && return "0.0"
+    s = string(v)
+    if !occursin('e', s) && !occursin('E', s)
+        return s
+    end
+    return _svgFixed(v)
+end
+
+"""Fixed-point form of a `Float32` whose `string` uses exponent notation
+(`|v| < 1e-4` or `>= 1e16`). Small values: 12 decimal places past the
+first significant digit, capped at 18 (Float32 has ~7; beyond 1e-18 the
+value rounds to zero, which no renderer can distinguish from 0). Large
+values: integer (no fractional part). Beyond the Int64 range the original
+`string` form is kept (not a rendering-relevant coordinate)."""
+function _svgFixed(v::Float32)
+    a = Float64(abs(v))
+    if a >= 9e18
+        return string(v)
+    end
+    if a < 1
+        e = floor(Int, log10(a))
+        dec = min(-e + 12, 18)
+        n = Int(round(v * 10^dec))
+        return (v < 0 ? "-" : "") * "0." * lpad(string(abs(n)), dec, '0')
+    end
+    return string(Int(round(v)))
+end
 
 """The SVG `matrix(a b c d e f)` string for a Vetra `Mat3`
 (x' = a*x + c*y + e, y' = b*x + d*y + f; Vetra `m[i, j]` = column i, row j)."""

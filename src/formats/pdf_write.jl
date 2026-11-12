@@ -49,11 +49,41 @@
 
 # ---------- number / matrix helpers ----------
 
-"""PDF real; signed zero normalizes to `0` (inverses produce -0.0)."""
+"""PDF real; signed zero normalizes to `0` (inverses produce -0.0).
+Exponent notation is never emitted: `string` yields it for |v| < 1e-4 or
+>= 1e16, and Float32 trigonometry leaves residuals like 3e-6 on
+axis-aligned ellipse maps (E001 reproduction: poppler 26.01.0, a pinned
+T026 validator, misparses exponent-form numbers in content streams; ISO
+32000-1 permits both notations, so fixed-point is the portable form)."""
 function _pdfNum(v)
-    return v == 0 ? "0" : string(v)
+    v == 0 && return "0"
+    s = string(v)
+    if !occursin('e', s) && !occursin('E', s)
+        return s
+    end
+    return _pdfFixed(v)
 end
 _pdfNum(v::Float32) = _pdfNum(Float64(v))
+
+"""Fixed-point form of a value whose `string` uses exponent notation
+(`|v| < 1e-4` or `>= 1e16`). Small values: 12 decimal places past the
+first significant digit, capped at 18 (beyond 1e-18 the value rounds to
+zero, which no renderer can distinguish from 0). Large values: integer.
+Beyond the Int64 range the original `string` form is kept (not a
+rendering-relevant coordinate)."""
+function _pdfFixed(v)
+    a = Float64(abs(v))
+    if a >= 9e18
+        return string(v)
+    end
+    if a < 1
+        e = floor(Int, log10(a))
+        dec = min(-e + 12, 18)
+        n = Int(round(v * 10^dec))
+        return (v < 0 ? "-" : "") * "0." * lpad(string(abs(n)), dec, '0')
+    end
+    return string(Int(round(v)))
+end
 
 """The six PDF `cm` numbers for a Vetra `Mat3` (same mapping as the SVG
 `matrix(a b c d e f)`)."""

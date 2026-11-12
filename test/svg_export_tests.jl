@@ -758,5 +758,30 @@
         end
     end
 
+    @testset "no exponent notation in emitted numbers (E001)" begin
+        # A radial gradient whose center-edge vector points in -x
+        # (theta = pi) leaves Float32 sin residuals (~1e-6) in the
+        # ellipse-map off-diagonals. The SVG 1.1 number grammar has no
+        # exponent form, so the writer emits fixed-point decimals
+        # (reproduction: Chromium-strict parsers reject `3.059797e-6`).
+        function scene_res(c)
+            rad = Paint(RadialGradientPaint)
+            rad.gradientHandlePositions = [Vec2(50f0, 30f0),
+                Vec2(80f0, 30f0), Vec2(50f0, 60f0)]
+            rad.gradientStops = [
+                colorStop(rgba(255, 255, 255, 255), 0f0),
+                colorStop(rgba(234, 88, 12, 255), 1f0)]
+            c.fillStyle = rad
+            beginPath(c)
+            circle(c, 50f0, 30f0, 30f0)
+            fill(c)
+            return nothing
+        end
+        doc = writeSvg(joinpath(dir, "residual.svg"),
+            record(100, 60, scene_res))
+        @test !occursin(r"[0-9][eE][+-]?[0-9]", doc)
+        @test occursin("matrix(-30.0 -0.", doc)
+    end
+
     rm(dir; recursive = true)
 end

@@ -836,5 +836,40 @@
         expectErr(scene_nanalpha, "non-finite group opacity")
     end
 
+    @testset "no exponent notation in content streams (E001)" begin
+        # A radial gradient whose center-edge vector points in -x
+        # (theta = pi) leaves Float32 sin residuals (~1e-6) in the
+        # ellipse-map CTM. The pinned poppler 26.01.0 validator
+        # misparses exponent-form numbers ("Unknown operator 'e-6'",
+        # dropping content after them), so the writer emits fixed-point
+        # decimals (ISO 32000-1 permits both; this is the portable one).
+        function scene_res(c)
+            rad = Paint(RadialGradientPaint)
+            rad.gradientHandlePositions = [Vec2(50f0, 30f0),
+                Vec2(80f0, 30f0), Vec2(50f0, 60f0)]
+            rad.gradientStops = [
+                colorStop(rgba(255, 255, 255, 255), 0f0),
+                colorStop(rgba(234, 88, 12, 255), 1f0)]
+            c.fillStyle = rad
+            beginPath(c)
+            circle(c, 50f0, 30f0, 30f0)
+            fill(c)
+            return nothing
+        end
+        pdf = joinpath(dir, "residual.pdf")
+        doc = writePdf(pdf, record(100, 60, scene_res); dpi = 72f0)
+        @test !occursin(r"[0-9][eE][+-]?[0-9]", doc)
+        @test occursin("-30.0 -0.", doc)
+        if isfile("/usr/bin/pdftoppm")
+            cmd = `pdftoppm -png -r 72 $(pdf) $(joinpath(dir, "residualpg"))`
+            err = IOBuffer()
+            Base.run(pipeline(cmd; stderr = err, stdout = devnull))
+            @test !occursin("Syntax Error", String(err.data[1:err.size]))
+            @test isfile(joinpath(dir, "residualpg-1.png"))
+        else
+            println("pdftoppm not present; poppler render check skipped")
+        end
+    end
+
     rm(dir; recursive = true)
 end
