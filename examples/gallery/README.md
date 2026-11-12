@@ -8,6 +8,18 @@ and writes only to a caller-selected output directory.
 
 ## Running
 
+One-time, from the repository root — the pinned reference checkout
+(fonts, file-format fixtures; provenance in docs/UPSTREAM.md, pinned by
+upstream.toml) is gitignored and fetched explicitly:
+
+```
+julia --project=. scripts/fetch_upstream.jl
+```
+
+The Noto Sans Arabic/Devanagari fonts are the committed `test/fixtures/`
+files (sha256 sidecars). Every program raises an actionable error
+naming the missing input and this command if it runs without them.
+
 ```
 # one program (current environment; optional features activate if present)
 julia --project=. examples/gallery/<name>.jl [outdir]
@@ -21,21 +33,19 @@ julia --project=. examples/gallery/run_gallery.jl [outdir]
 julia --project=. examples/gallery/run_gallery.jl [outdir] --core-only
 ```
 
-`outdir` defaults to `artifacts/gallery/`. Fonts come from the pinned
-fixtures; no binary is downloaded by the programs themselves.
+`outdir` defaults to `artifacts/gallery/`; programs never download
+anything themselves.
 
 ## Environments
 
-Core-only runs need nothing: the repository environment resolves Vetra
-from its core dependencies. To enable the optional features (PNG, JPEG,
-WebP, ColorTypes matrix interop, HarfBuzz shaping, XML) in an isolated
-environment that never touches the repository `Project.toml`/`Manifest.toml`:
+Core-only runs need the repository environment (Vetra + its core
+dependencies) plus the pinned inputs from Running above. To enable the
+optional features (PNG, JPEG, WebP, ColorTypes matrix interop, HarfBuzz
+shaping, XML) in an isolated environment that never touches the
+repository `Project.toml`/`Manifest.toml`, from the repository root:
 
 ```
-julia --project=examples/gallery/optional_env -e 'using Pkg; \
-    p = Base.active_project(); isfile(p) && (p = dirname(p)); \
-    Pkg.develop(path=joinpath(dirname(p), "..", "..")); \
-    Pkg.instantiate()'
+julia --project=examples/gallery/optional_env -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
 julia --project=examples/gallery/optional_env examples/gallery/run_gallery.jl
 ```
 
@@ -67,8 +77,8 @@ Feature → program, renderer, optional dependency, and what is checked.
 | Blend math (normal/multiply/alpha) | image_lab | CPU | – | documented byte formulas |
 | Crop / rotate / resize / flip / invert / spread / blur / opacity | image_lab | CPU | – | hand-derived permutations + pinned blur kernel |
 | Native codecs QOI / BMP / PPM / GIF | image_lab | CPU | – | byte-exact round trips + pinned GIF fixture |
-| PNG / JPEG / WebP | image_lab | CPU | PNGFiles / JpegTurbo / WebP | exact (lossless) or PSNR bounds (lossy), matte policy |
-| ColorTypes matrix interop | image_lab | CPU | ColorTypes | straight bytes, round trip, no-copy views |
+| PNG / JPEG / WebP | image_lab | CPU | PNGFiles / JpegTurbo / WebP | exact (lossless) or PSNR bounds (lossy); JPEG alpha flattened to the explicit matte |
+| ColorTypes matrix interop | image_lab | CPU | ColorTypes | straight bytes, round trip, range views accepted (result is a copy) |
 | Notebook PNG MIME display (T016) | image_lab | CPU | PNGFiles | showable/show bytes; text fallback in core |
 | Snapshot ownership (mutate sources → replay unchanged) | recording_reuse | CPU, PDF | – | byte-identical replay after mutation |
 | Re-rasterization at 2x (hand-derived geometry) | recording_reuse | CPU | – | doubled square/outline/stamp |
@@ -81,11 +91,22 @@ Feature → program, renderer, optional dependency, and what is checked.
 
 ## Limitations (stated, not hidden)
 
-- **No GPU/browser backend exists** in this milestone. "CPU, SVG, PDF"
-  are the real renderers; nothing here claims Vulkan or browser Canvas2D.
+- **Renderer scope.** CPU raster, SVG and PDF are the renderers
+  implemented and exercised here. The renderer-independent canvas
+  design targets GPU (Vulkan.jl, offscreen first) and browser Canvas2D
+  later in this milestone (docs/CANVAS_DESIGN.md renderer table);
+  neither backend exists yet, and nothing in these programs claims one.
 - **SVG-in-browser is not Canvas2D.** The SVG exports are static vector
   documents (with a PNG data-URI for image stamps when `PNGFiles` is
   present); they are not a live, interactive canvas.
+- **Dash-row cross-renderer difference.** The atlas square-capped dash
+  row (dashes [12,6], stroke width 8) renders with the gaps preserved
+  on CPU — the documented interior dash-end cap deviation
+  (docs/RECORDING.md §6.1, T025) — while a standard renderer's square
+  caps extend every dash end by 4 px and bridge the 6 px gap, so the
+  same row appears nearly solid in the SVG/PDF exports. Both outputs
+  are correct for their semantics; the visible difference is stated,
+  not papered over.
 - **Pure-LTR shaping limit.** `shape_text` with auto script/direction
   engages only for unambiguous runs; the RTL paragraph path
   (`layout_paragraph` with `dir = RightToLeft`) always requires the

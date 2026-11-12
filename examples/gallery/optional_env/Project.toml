@@ -12,4 +12,4 @@ WebP = "e3aaa7dc-3e4b-44e0-be63-ffb868ccd7c1"
 XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
 
 [sources]
-Vetra = {path = "/tmp/opencode/vetra-feature-gallery/examples/gallery/../.."}
+Vetra = {path = "../../.."}

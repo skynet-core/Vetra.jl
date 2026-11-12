@@ -184,6 +184,7 @@ end
 
 function run(outdir::String)
     reset_checks()
+    require_fonts()
     ensure_outdir(outdir)
 
     # ---- the large-offset discipline (independent Float32 facts) ----

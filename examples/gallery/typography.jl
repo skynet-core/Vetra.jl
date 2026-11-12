@@ -131,6 +131,7 @@ end
 
 function run(outdir::String)
     reset_checks()
+    require_fonts()
     ensure_outdir(outdir)
 
     tf = read_typeface(VetraGallery.ROBOTO)

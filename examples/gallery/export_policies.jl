@@ -122,6 +122,7 @@ end
 
 function run(outdir::String)
     reset_checks()
+    require_fonts()
     ensure_outdir(outdir)
 
     # ---- strict export of the supported scene (both backends) ----
