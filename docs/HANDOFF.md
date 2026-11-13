@@ -93,6 +93,60 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 revision 4 review (2026-11-13)
+
+Candidate `9998b87` plus SHA-record follow-up `bbfabe5` is **rejected by both
+reviewers**. No candidate is merged. The duplicate 4,660-line frontend is deleted;
+a 1,942-line checker
+now labels arithmetic/record/dispatch evidence separately from pending runtime
+acceptance. Group entry alpha and all-submission tracking rules improve.
+
+Coordinator reran `tasks/r010/boundary_check.jl` from `/tmp/opencode/vetra-r010`
+with `julia --startup-file=no --project=.` and `julia +1.10 --startup-file=no
+--project=.`: **213/213** pass on Julia 1.13.3 and 1.10.13. The separate
+`/tmp/opencode/r010-v4-coordinator-probe.jl` passes **4 positive arithmetic** and
+**11 defect/control assertions** per version. Exact rational derivation confirms
+the disputed hue `(87,0,64,192)` anchor independently of Vetra's output.
+
+Remaining coordinator blockers: unchanged legacy PicOp records cannot represent
+the promised full-Canvas recording conversion (group composition, effects, image
+sampling and dash phase); the normative placement matrix scales translation;
+the checker has incorrect burn/dodge endpoints and bypasses artistic blending
+for Lighter. Small signature/sketch contradictions also remain. The corrected
+group/ownership rules and retired mock are contract progress, not runtime proof.
+Independent review passes **18 positive boundary assertions + 25
+counterexample/control assertions** per version. Coordinator independently reran:
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v4/probe.jl
+julia +1.10 --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v4/probe.jl
+```
+
+Both commands pass with those counts on Julia 1.13.3 and 1.10.13. Remaining
+independent blockers are normative/interface defects, not missing runtime code:
+
+- Public upload dispatch omits the core-assigned asset identity; wire submission
+  and execution-ACK records are missing. Serialized byte accounting undercounts
+  base64, escaping and numeric fields: a 64×64 import counts 16,816 units while
+  its base64 data alone occupies 21,848 bytes.
+- Adapter output clauses disagree on canonical premultiplied versus converted
+  data; allocation lacks explicit type/dimensions and a consistent public filling
+  route. Direct method calls do not prove consumer integration.
+- Array layout/alpha clauses conflict, transparent grayscale ignores matte,
+  and owned staging incorrectly promises atomic indexed writeback. Validation
+  failures leave targets unchanged; actual commit failures may be partial.
+- DPI byte counts, multiplication precision and the optional resize signature
+  disagree. Response checks accept invalid encoding/dimensions/data and compare
+  submission identity against mutable completion state rather than the saved
+  request. Fractional clear, gradient, text and stroke wire mappings need correction.
+
+Consolidated packet: `/tmp/opencode/r010-v4-coordinator-review.md`, **12 correction
+groups**, assigned to a fresh Qwen3.8 writer context for revision 5 in the same
+worktree and owned paths. Require one authoritative definition per boundary;
+remove contradictory duplicate clauses instead of appending another correction
+layer. Preserve the contract-only scope, verified improvements and every scenario's
+downstream acceptance owner. Both reviewers must approve before freeze or merge.
+
 #### R010 revision 3 review (2026-11-13)
 
 Candidate `870e8c7` is **rejected by both reviewers**.
