@@ -99,7 +99,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | --- | --- | --- | --- | --- |
 | R000 | Architecture, research and reviewed task plan | Coordinator | — | done |
 | R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | bounded probe approved (db47824; other-platform execution open, D037) |
-| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | revision 3 in progress (9d66e97 rejected by both reviewers; consolidated corrections assigned; neither candidate merged) |
+| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | revision 4 in progress (870e8c7 rejected by both reviewers; normative-contract correction and small boundary proof assigned; no candidate merged) |
 | R011 | Independent conformance corpus and capability inventory | Q | R010 | planned |
 | R012 | Shared text/layout correctness and font contract | F | R010, M004 | planned |
 | R013 | Zero-core-change external extension conformance | Q | R021, R022, R060, R065, R066 | planned |
@@ -266,6 +266,13 @@ Assigned 2026-11-12 to Qwen3.8 in `/tmp/opencode/vetra-r010`, branch
 `tasks/r010/`; coordinator integrates changes to shared design/decision/status
 files. This freezes a reviewed contract, not placeholder production backends.
 Include the user's WebGL2 provider and Vulkan/browser showcase amendment.
+
+Revision-4 review direction (2026-11-13): retire the expanded mock frontend;
+R010 freezes exact semantics, public records/dispatch and independently justified
+scenario tables, with small executable boundary checks. Shared-scene/extension
+sketches are contract evidence, not runtime implementation. Keep every reviewed
+failure scenario assigned to its implementation/conformance owner; deleting a
+mock does not establish that the runtime behavior works.
 
 - Freeze constructors, drawing signatures, Canvas state, logical/physical size,
   path/paint coordinate spaces, transforms, clear/clip/layer semantics, pixel

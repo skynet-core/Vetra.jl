@@ -93,6 +93,78 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 revision 3 review (2026-11-13)
+
+Candidate `870e8c7` is **rejected by both reviewers**.
+Neither it nor its rejected predecessors is integrated. The model
+imports actual Vetra primitives but grew again, from 3,787 to **4,660 lines**.
+Coordinator independently reran `tasks/r010/check_contract_model.jl` in
+`/tmp/opencode/vetra-r010` with `julia --startup-file=no --project=.` and
+`julia +1.10 --startup-file=no --project=.`: **444/444** pass on both versions.
+
+With those same commands, `/tmp/opencode/r010-v3-coordinator-probe.jl` verifies
+**8 positive assertions** (same-batch image captures, saved image/Copy styles,
+coverage/destination-atop/additive anchors) and **23 defect-confirming assertions**
+on Julia 1.13.3 and 1.10.13. Initial scratch assertions were corrected to the
+actual Hue/Saturation exception type before successful reruns. Remaining issues:
+
+- Explicit flush followed by wait(canvas)/snapshot does not wait prior work;
+  close forgets all but the latest submission. New drawing can overwrite a
+  failed handle and let close succeed.
+- The contract now explicitly endorses the rejected 0.25 group-opacity result
+  instead of fixing it. Group composition bypasses capability preflight, and
+  invalid image style leaves a partially entered group.
+- Nonseparable artistic modes fail in the composed pipeline. Raster fallback
+  discards original operation data for zero-filled placeholders and breaks
+  balanced group restore.
+- Picture capture drops assets; replay loses destination translation. Asset
+  storage retains every copied capture even after completion/close.
+- The duplicate frontend remains expanded; proposed edits wrongly describe
+  main's R010 row as ready/missing. Some asset-version prose contradicts the new
+  fresh-ID rule. The claim that every prior counterexample is closed is rejected.
+
+Independent review additionally verifies **22 positive closure assertions** and
+**34 defect-confirming assertions** on each Julia version. Coordinator reran:
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v3/probe.jl
+julia +1.10 --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v3/probe.jl
+```
+
+Both pass with those exact counts. Genuine raw-matrix/gray/vector imports,
+some typed/public readback routes, external import/borrow dispatch, element-array
+DPI and public resize improve; D037 `false`/`auto` packaging prose is corrected.
+Remaining independent blockers:
+
+- Browser snapshots reuse stale ACKs after context loss or without fresh
+  responses; submission wait needs no execution acknowledgment. Draw/upload IDs
+  collide, geometry/initial content bypass retention limits, resize keeps stale
+  recovery content, and disposal retains submissions/assets. The wire section
+  still lacks concrete command and transport-message records.
+- Array routes disagree on vector scan order, ordered offset axes, destination
+  shape, straight/premultiplied conversion and float/gray output. Ordinary Julia
+  matrices are incorrectly described as row-major.
+- Invalid uploads partly mutate targets; upload completion omits staged writeback;
+  raw UInt8 views receive 1 instead of 255; repeated opaque writeback compounds
+  red 128→192. External adapter output/allocation consumers are still missing.
+- Raw/adapter high-DPI constructors discard validated logical sizes and bind
+  storage smaller than the declared physical target.
+
+Consolidated packet: `/tmp/opencode/r010-v3-coordinator-review.md`, **15 groups**,
+assigned to Qwen for revision 4. **Scope correction:** the coordinator's prior
+request for every mock failure to become an executable frontend acceptance case
+encouraged duplicate implementation beyond R010. Retire that mock; freeze precise
+semantics, records, public dispatch and scenario tables, with a small checker for
+actual numeric/record/dispatch boundaries. Keep shared-scene/extension sketches
+explicitly labeled; runtime acceptance belongs to R020/R021/R022/R013 and the
+backend tasks. Deleting a mock is not a runtime fix and cannot close its scenario.
+The group correction explicitly freezes entry alpha/composition on the group,
+starts child alpha at 1/composition at SourceOver, and restores parent state.
+The alpha-0.5 single-child case must have net alpha 0.5.
+
+Preserve all independently verified improvements. Both reviewers must trace and
+approve the corrected normative contract; no downstream implementation is approved.
+
 #### R010 revision 2 review (2026-11-13)
 
 Qwen submitted `9d66e97` on `canvas/frontend-contract`, on top of rejected
