@@ -93,6 +93,76 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 revision 2 review (2026-11-13)
+
+Qwen submitted `9d66e97` on `canvas/frontend-contract`, on top of rejected
+`d0d956f`. **Rejected by coordinator and independent reviewer.**
+Neither candidate is integrated. The four-file candidate contains a 3,787-line
+model, up from 1,522 lines despite the requested reduction.
+
+Coordinator independently ran, from `/tmp/opencode/vetra-r010`, both
+`julia --startup-file=no --project=. tasks/r010/check_contract_model.jl` and
+`julia +1.10 --startup-file=no --project=. tasks/r010/check_contract_model.jl`:
+**801/801** pass on Julia 1.13.3 and 1.10.13. Running
+`/tmp/opencode/r010-v2-coordinator-counterexamples.jl` with the same two Julia
+commands confirms defects with **20 assertions per version**:
+
+- Drawing an image, mutating it, and drawing again before one flush loses the
+  first capture: both commands resolve the latest asset version.
+- Saving an image paint then restoring raises `KeyError`; saved OverwriteBlend
+  loses its Copy composition override. Layer-entry alpha 0.5 becomes 0.25
+  because both child and group carry it.
+- Half-covered opaque red becomes `(64,0,0,128)` instead of `(128,0,0,128)`;
+  destination-atop uses the wrong output alpha; additive blending sums straight
+  RGB rather than premultiplied contributions.
+- Failed completion is forgotten on repeated wait. Retrying failed close can
+  close successfully with zero executed operations and no pending work.
+- An external provider implementing all five documented required methods fails
+  on private backend-field access. Failed image preflight also mutates capture
+  state. The model's redefined matrix translation disagrees with actual Vetra.
+
+Independent v2 review confirms additional blockers:
+
+- The normative browser wire/recovery section was removed, while the inventory
+  and task record still claim it exists. Session-only ACKs authorize later
+  snapshots without matching completion, survive context loss, and accept future
+  sessions. Explicit uploads are absent from recovery data; retained drawing is
+  unbounded and closed sessions remain globally rooted.
+- Storage-adapter methods are disconnected from Canvas construction/writeback.
+  Raw initial pixels bypass public target binding. Typed Matrix/Vector snapshots
+  return Image, raw output lacks a layout keyword, array upload is missing, and
+  snapshot! bypasses public GPU/browser readback.
+- Genuine nonsquare raw matrices, grayscale vectors, pixel vectors and correctly
+  shaped destinations fail. The claimed raw-matrix fixture was a vector; staged
+  view writeback does not occur. High-DPI array input allocates inconsistent byte
+  storage, and resize bypasses the public provider method with no scale update.
+- D037 packaging is mostly corrected, but `auto` precompilation is not device-free:
+  it runs the device workload and catches unavailable-driver failure. Only `false`
+  skips it (approved probe README, p50 evidence).
+
+Independent probe commands, also rerun successfully by the coordinator:
+
+```sh
+julia --startup-file=no /tmp/opencode/r010-independent-review-v2/probe.jl
+julia +1.10 --startup-file=no /tmp/opencode/r010-independent-review-v2/probe.jl
+```
+
+Both pass **27 defect-confirming assertions** (Julia 1.13.3 and 1.10.13).
+These and the coordinator's 20 assertions are negative evidence, not acceptance.
+The independent review closes the earlier conversion/matte/partial-transfer
+rules at the stated-rule level and confirms the corrected ready wave; actual
+adapter routes remain broken. Physical rounding and most package constraints
+are corrected; browser recovery, storage integration and DPI transitions are not.
+
+Consolidated packet: `/tmp/opencode/r010-v2-coordinator-review.md`, **15 correction
+groups**, returned to the same Qwen writer for revision 3 in the existing owned
+worktree. Require a substantially smaller contract proof using actual Vetra
+primitives, public-only provider/adapter dispatch and independent positive checks
+for each counterexample. Moving the duplicate frontend into more files or deleting
+difficult cases does not satisfy the reduction. No production implementation is
+assigned here. Both reviews must approve the next candidate before freeze;
+passing model counts are not semantic acceptance evidence.
+
 #### R010 first contract review (2026-11-13)
 
 Qwen submitted `d0d956f` on `canvas/frontend-contract` (four new files, no
