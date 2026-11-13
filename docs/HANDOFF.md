@@ -93,6 +93,67 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 first contract review (2026-11-13)
+
+Qwen submitted `d0d956f` on `canvas/frontend-contract` (four new files, no
+production changes). **Not approved or integrated.** Coordinator independently
+reran `tasks/r010/check_contract_model.jl` in `/tmp/opencode/vetra-r010` with
+`julia --startup-file=no --project=.` and `julia +1.10 --startup-file=no --project=.`:
+**91/91 pass on Julia 1.13.3 and 1.10.13**. These checks do not establish that the
+contract is complete or internally consistent.
+
+Coordinator counterexamples in `/tmp/opencode/r010-coord-counterexamples.jl`
+reproduce defects with **19 assertions on each Julia version** (asserting the
+observed defects, not acceptance):
+
+- Ordinary fill/clear commands have no clip snapshot. The model emits an opaque
+  fill even at global alpha zero; mutable paints also change sealed commands
+  and saved state after the fact. The required ownership/state boundary is absent.
+- Strict preflight accepts fallback-level capabilities and ignores unsupported
+  stroke blends; failed layer preflight leaves modified saved state.
+- The PDF model loses pages without manual flush and creates extra pages on
+  repeated flush. Closing a canvas silently leaves buffered drawing unsubmitted.
+- Asset IDs/versions restart after every flush, giving different images identical
+  advertised cache keys on the same device.
+
+Contract-level blockers also include narrowing required painted strokes/tiled
+paints/Porter–Duff composition to legacy gaps instead of freezing their semantics;
+missing target-binding and physical-size/resize rules; and incomplete public
+extension seams. The approved R032 task explicitly consumes R010's Porter–Duff
+coefficient table. Deferring that table while calling v1 frozen is not acceptable.
+
+The required independent reviewer also **blocked approval**, corroborating the
+command/ownership/preflight failures and identifying:
+
+- WebGL restoration from only the last incremental batch loses previous drawing;
+  retaining recovery data only in Julia cannot restore standalone offline HTML.
+- No public custom pixel-storage adapter seam; explicit raw Matrix channels,
+  allocating Vector snapshots and array upload routes are missing.
+- `UInt8(N0f8(0.5))` throws, while `UInt8(N0f8(1.0))` is 1 rather than the
+  required byte 255. The draft's quantization formula is incorrect.
+- A default black matte contradicts explicitly selected transparent-to-opaque
+  conversion. Generic staged array writes cannot promise atomic commit after a
+  later `setindex!` fails; report partial transfer truthfully.
+- Physical sizing/rounding, resize/DPI transitions and the D037-informed optional
+  package/compatibility boundary are not frozen sufficiently for implementers.
+
+Independent probe `/tmp/opencode/r010-independent-review/probe.jl` confirms
+defects with **16/16 assertions on Julia 1.13.3**, also rerun successfully by
+the coordinator. Both probes are negative evidence, not acceptance suites.
+Full correction packet: `/tmp/opencode/r010-coordinator-review.md` (**13 items**,
+11 must-fix contract groups plus model/evidence and readiness corrections).
+Returned to Qwen in the same owned worktree for a bounded correction commit;
+shared documents and production code remain coordinator-owned. The next
+candidate requires coordinator and independent re-review before approval.
+The submitted model's large duplicate frontend and placeholder readbacks are
+not a production skeleton. Shader authoring remains an explicit proposed
+decision before R053 kernels, not an approved policy exception.
+
+After R010 approval, **R011/R012/R020/R064/R080** become dependency-ready (M004
+already complete); R021, R053, R061 and R063 retain their additional dependencies.
+This corrects the coordinator's initial three-task list, which omitted R064 and
+R080. No downstream task is authorized by this rejected draft.
+
 #### V001 independent verification (2026-11-12)
 
 Coordinator independently executed the existing notebook through a real IJulia
