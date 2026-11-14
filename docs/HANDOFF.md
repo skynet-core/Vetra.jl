@@ -93,6 +93,69 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 revision 5 review (2026-11-14)
+
+Qwen submitted `65d6f88` after two interrupted writer runs; candidate worktree
+was clean at submission. **Rejected by both reviewers.** No candidate is
+integrated. The boundary checker is now 2,833 lines.
+
+Coordinator reran, from `/tmp/opencode/vetra-r010`:
+
+```sh
+julia --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia +1.10 --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia --startup-file=no --project=. /tmp/opencode/r010-v5-coordinator-probe.jl
+julia +1.10 --startup-file=no --project=. /tmp/opencode/r010-v5-coordinator-probe.jl
+git diff --check bbfabe5..65d6f88
+```
+
+Checker **336/336** and coordinator **16 positive math/placement assertions +
+14 counterexample/control assertions** pass on Julia 1.13.3 and 1.10.13;
+whitespace check passes. Placement, burn/dodge endpoints and artistic-before-
+Lighter math corrections are independently confirmed. The hue value remains
+correct, although its written derivation has a 7/100 versus 7/10 typo.
+
+Remaining coordinator findings:
+
+- Lossless capture is defined as `flush!` plus batch accessors, but `flush!`
+  returns an opaque submission with no public batch retrieval. New-feature
+  recording/replay with frontend placement remains unspecified.
+- Reusing legacy clip wrappers with Copy→OverwriteBlend changes pixels: the
+  actual legacy recorder leaves blue where a clipped transparent Copy must clear.
+- Completed submission retirement is unspecified; the checker retains all
+  completed handles/batches even after successful close, contradicting bounded
+  lifetime claims. Keep pending/failed handles without retaining successful history.
+
+Independent review verifies **46 positive assertions + 15 counterexample/control
+assertions** per version. Coordinator reran both commands successfully:
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v5/probe.jl
+julia +1.10 --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v5/probe.jl
+```
+
+Canonical adapter exchange/allocation and saved-request payload validation are
+closed at the contract/boundary level. Actual base64 accounting, matte conversion,
+partial-store reporting and forward DPI arithmetic improve. Remaining findings:
+
+- Valid uploads lack explicit ordering after pending drawing, and upload-only
+  work is not fully connected to admission, ACKs, tracking and staged completion.
+- Blanket `vec(Matrix)` advice scrambles channel-packed raw arrays; shape clauses
+  conflict and raw helpers do not consistently honor axes/view policies.
+- A failed-commit paragraph still promises unchanged host storage. Canonical
+  wire numbers lack a uniform type/promotion policy, changing exact byte lengths.
+- Document helpers replace core asset IDs with local IDs and reset them on resize.
+  Fractional image source/effect geometry rules conflict with integer mapping.
+  Inverse DPI division lacks the Float64 promotion already used by its helper.
+
+Consolidated packet: `/tmp/opencode/r010-v5-coordinator-review.md`, **11 groups**,
+assigned to Qwen for revision 6 in the same owned worktree. Require a usable owned
+normalized recording contract independent of opaque submission handles, explicit
+legacy conversion limits, completed-handle retirement, and consistent ordered
+upload/array/wire/DPI clauses. Correct existing narrow helpers and scenario traces;
+runtime frontend/backend implementation stays downstream. Both reviewers must
+approve before freeze or merge.
+
 #### R010 revision 4 review (2026-11-13)
 
 Candidate `9998b87` plus SHA-record follow-up `bbfabe5` is **rejected by both
