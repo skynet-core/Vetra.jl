@@ -93,6 +93,73 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 revision 6 review (2026-11-14)
+
+Candidate `66b3ff7` is **rejected by both reviewers**.
+Candidate worktree was clean at submission; no candidate is integrated. Explicit
+CanvasRecording capture/replay signatures replace the opaque-submission capture
+promise. The boundary checker grew from 2,833 to 3,358 lines.
+
+Coordinator reran from `/tmp/opencode/vetra-r010`:
+
+```sh
+julia --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia +1.10 --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia --startup-file=no --project=. /tmp/opencode/r010-v6-coordinator-probe.jl
+julia +1.10 --startup-file=no --project=. /tmp/opencode/r010-v6-coordinator-probe.jl
+git diff --check 65d6f88..66b3ff7
+```
+
+Both Julia versions pass **389/389** candidate checks and **20 positive + 14
+counterexample/control assertions** in the coordinator probe. Whitespace passes.
+Math/placement, image-draw ID remapping, asset-byte copying, group balancing,
+clipped Copy rejection and wait-all core-root retirement have positive evidence.
+Remaining findings:
+
+- The new replay helper fails on clears and nonempty clips, and leaves image-paint
+  IDs unchanged. Seal ownership checks cover asset bytes but not aliased paths;
+  full replay evidence claims are too broad. Target ambient-clip replay semantics
+  also need to be explicit.
+- The legacy adapter still accepts clipped artistic Multiply: the actual legacy
+  recorder produces red over blue where the normalized rule requires black.
+  Its accept/reject table has overlapping rules.
+- Direct `wait(handle)` does not notify core retirement; repeated direct waits
+  leave completed handles tracked. The spy provider retains batches/assets even
+  after successful close, while its test checks only the emptied core vector.
+
+Independent review passes **89 positive assertions (46 preserved + 43 new) + 17
+counterexample/control assertions** per version. Coordinator reran the final
+probe successfully on Julia 1.13.3 and 1.10.13:
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v6/probe.jl
+julia +1.10 --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v6/probe.jl
+```
+
+The review records earlier probe development: image opacity failed an expected
+positive assertion and became a confirmed counterexample; a scratch-only no-op
+wait assumption was corrected to inspect the no-op record under the documented
+inert-wait rule. No candidate checks or expectations were changed by reviewers.
+
+Verified closures include commit prose, fractional source/effect geometry,
+inverse-DPI policy, offset raw vectors/views and most numeric mappings. Remaining
+independent corrections:
+
+- G12 still promises staged upload completion through an empty drawing flush;
+  use the upload's tracked frontend handle or wait(canvas), keeping no-op inert.
+- Raw snapshot shape clauses conflict; zero-based raw matrices still fail in
+  both scan orientations despite working offset-vector and element-matrix cases.
+- Image opacity still widens Float32, adding 16 canonical bytes for 0.1f0.
+- Resize-with-initial replaces the captured asset's ID with the next counter.
+- The inverse-DPI approximation is wrong and its claimed G14 scenario is absent.
+
+Consolidated packet: `/tmp/opencode/r010-v6-coordinator-review.md`, **eight groups**,
+assigned to a fresh Qwen3.8 context for revision 7 in the same owned worktree.
+Prefer narrow recording/reference/placement checks to the expanded replay visitor;
+keep its scenarios pending with their owners. Freeze one tracked frontend completion
+route for direct waits, wait(canvas) and staged uploads. Both reviews must approve
+before freeze/merge; production frontend/backend execution remains downstream.
+
 #### R010 revision 5 review (2026-11-14)
 
 Qwen submitted `65d6f88` after two interrupted writer runs; candidate worktree
