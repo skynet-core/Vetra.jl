@@ -93,6 +93,60 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 revision 7 review (2026-11-14)
+
+Candidate `7b1e8e4` has **overall approval withheld by both reviewers**;
+independent groups 5–8 and the specific group-4 upload/no-op correction are
+approved at contract/narrow-proof level. Candidate worktree was clean at
+submission; no candidate is integrated. The broad
+replay visitor is retired, with accurate narrow seal/reference/placement evidence
+and explicit ambient-clip replay semantics. Runtime replay remains downstream.
+
+Coordinator reran from `/tmp/opencode/vetra-r010`:
+
+```sh
+julia --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia +1.10 --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia --startup-file=no --project=. /tmp/opencode/r010-v7-coordinator-probe.jl
+julia +1.10 --startup-file=no --project=. /tmp/opencode/r010-v7-coordinator-probe.jl
+git diff --check 66b3ff7..7b1e8e4
+```
+
+Julia 1.13.3 and 1.10.13 each pass **449/449** candidate assertions and **26
+positive + 17 counterexample/control assertions** in the coordinator probe.
+Whitespace passes. Direct waits retire core entries, successful staged actions
+run once, no-op waits stay inert and provider errors stay sticky. Remaining:
+
+- A staged commit failure leaves partial host data, but its once-flag is already
+  set. The next wait skips the failed action, completes and retires the handle;
+  close succeeds. Transfer-error/state/retention rules need reconciliation.
+- Provider release only sets a Boolean; its backend still roots all completed
+  handles/batches/assets after close. The zero-root claim is not demonstrated.
+- The new opacity-to-Paint.opacity lowering accepts zero-opacity Copy, but actual
+  legacy replay leaves blue where Copy must clear. The table still omits some
+  combinations accepted by its helper (grouped Copy and clipped Normal root draws).
+
+Independent review passes **121 positive assertions (46 preserved + 75 closure
+cases) + 12 counterexample/control assertions** per version. Coordinator reran:
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v7/probe.jl
+julia +1.10 --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v7/probe.jl
+```
+
+Both commands pass on Julia 1.13.3 and 1.10.13. The independent review confirms
+the staged-failure defect using both partial TransferError and a staged
+BackendSubmitError. It finds no additional blocker in raw-array axes/shapes,
+Float32 image opacity, initial asset IDs or inverse DPI. These corrections and
+the upload/no-op rule remain closed at the contract/boundary level.
+
+Consolidated packet: `/tmp/opencode/r010-v7-coordinator-review.md`, **three groups**,
+assigned to Qwen for revision 8: failure-safe single completion route (including
+error/ownership metadata), actual provider-root release, and zero-opacity Copy
+conversion/table consistency. Preserve approved boundaries and narrow recording
+evidence. Corrections remain contract/boundary-only; both reviews are required
+before overall approval or integration.
+
 #### R010 revision 6 review (2026-11-14)
 
 Candidate `66b3ff7` is **rejected by both reviewers**.
