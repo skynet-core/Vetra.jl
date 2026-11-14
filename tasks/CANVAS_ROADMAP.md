@@ -99,7 +99,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | --- | --- | --- | --- | --- |
 | R000 | Architecture, research and reviewed task plan | Coordinator | — | done |
 | R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | bounded probe approved (db47824; other-platform execution open, D037) |
-| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | revision 8 in progress (7b1e8e4 overall approval withheld; independent groups 5–8 and upload/no-op correction approved; three-group correction assigned; no candidate merged) |
+| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | revision 9 in progress (06046d0 overall approval withheld; two-group legacy-table/staged-validation-error correction assigned; prior closures preserved; no candidate merged) |
 | R011 | Independent conformance corpus and capability inventory | Q | R010 | planned |
 | R012 | Shared text/layout correctness and font contract | F | R010, M004 | planned |
 | R013 | Zero-core-change external extension conformance | Q | R021, R022, R060, R065, R066 | planned |

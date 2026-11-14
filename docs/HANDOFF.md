@@ -93,6 +93,56 @@ E001 push `b631410` passed **all 10 CI jobs** at
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
 
+#### R010 revision 8 review (2026-11-14)
+
+Candidate `06046d0` has **positive closure of the three v7 counterexamples;
+overall approval is withheld by both reviewers pending two corrections**.
+Candidate worktree was clean at submission; no candidate is integrated.
+
+Coordinator reran from `/tmp/opencode/vetra-r010`:
+
+```sh
+julia --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia +1.10 --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia --startup-file=no --project=. /tmp/opencode/r010-v8-coordinator-probe.jl
+julia +1.10 --startup-file=no --project=. /tmp/opencode/r010-v8-coordinator-probe.jl
+git diff --check 7b1e8e4..06046d0
+```
+
+Julia 1.13.3 and 1.10.13 each pass **508/508** candidate assertions and **69/69
+coordinator assertions** (26 preserved + 27 staged-failure + 10 provider-reference
++ 6 legacy checks/controls). Whitespace passes. Known staged partial/unwritten and
+dispatch failures stay sticky without rerunning writes; actual provider batch
+references clear on completion, including externally kept handles; zero-opacity
+Copy conversion now rejects conservatively. These are narrow boundary closures.
+
+The revised final legacy SourceOver accept row requires a non-artistic paint,
+accidentally leaving unwrapped artistic draws without any acceptance row, although
+the helper and existing control still accept them. Reconcile that table condition.
+Independent review passes **190 positive assertions (121 preserved + 69 repaired
+failure cases) + 15 counterexample/control assertions** per version. Coordinator
+reran both final commands successfully on Julia 1.13.3 and 1.10.13:
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v8/probe.jl
+julia +1.10 --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v8/probe.jl
+```
+
+Remaining independent finding: §7 permits named phase-one validation errors during
+staged writeback, but the tracked handle stores only BackendSubmitError or
+TransferError. The existing commit helper's ArgumentError becomes a MethodError
+while storing it, leaving failed state with no error; later wait/wait-all/close
+throw `nothing`. They do not return success. The host remains untouched and the
+action runs once, but its original diagnostic is lost. This is a composed
+record-helper/contract defect, not a claim about invalid UInt8 production data.
+
+The review confirms prior array/wire/ID/DPI approvals, the corrected partial/
+unwritten/action-error cases, actual retained core staging and released provider
+batches. Consolidated packet: `/tmp/opencode/r010-v8-coordinator-review.md`, **two
+groups**, assigned to Qwen for revision 9: fix the artistic acceptance row and
+preserve the complete staged validation-error domain. Runtime implementations
+remain with downstream owners; both reviews must approve before integration.
+
 #### R010 revision 7 review (2026-11-14)
 
 Candidate `7b1e8e4` has **overall approval withheld by both reviewers**;
