@@ -14,10 +14,12 @@ plan is `tasks/CANVAS_ROADMAP.md`. R000 is planning/review, not a claim of backe
 implementation. M003/M004 are complete; R040's bounded Linux/NVIDIA probe is
 approved and integrated, with other-platform execution still unverified (D037).
 The user-requested E001 feature examples are independently approved and integrated
-(tasks/EXAMPLES_PLAN.md, D038). R010 contract work is next.
+(tasks/EXAMPLES_PLAN.md, D038). R010 revision 9 is complete and approved by both reviewers
+(docs/CANVAS_CONTRACT.md, D039); integration verification is in docs/HANDOFF.md.
 Latest addition (2026-11-12): user requests native GPU projects and a WebGL
 browser showcase. WebGL2 is a separate provider alongside Canvas2D (R053–R055);
-R010 is active and includes those contracts. V001 separately verifies existing
+R010 includes those approved contracts. R011 conformance is next.
+V001 separately verifies existing
 Jupyter/PyMuPDF behavior in isolated tooling environments. No 3D scope is added.
 New backend
 implementation follows reviewed R010 contracts and explicit task ownership.

@@ -15,6 +15,14 @@ Scope note: `pixie.nim` re-exports `bumpy`, `chroma`, `vmath` wholesale;
 those third-party APIs are reference material, not a parity obligation beyond
 what the pixie modules themselves use (see docs/NUMERICAL_CONTRACT.md).
 
+## Canvas contract freeze (R010)
+
+The [renderer-independent Canvas contract](CANVAS_CONTRACT.md) is approved
+(revision 9, D039). Its records, lifecycle, array/wire boundaries and extension
+protocols are implementation requirements. No new Canvas API, renderer, codec
+or display provider is exported by R010; existing runtime support below remains
+the compatibility inventory. Runtime acceptance belongs to the roadmap owners.
+
 ## Notebook and external-reader verification (V001)
 
 Real IJulia execution on Julia 1.13.3 independently verified PNG MIME bytes,

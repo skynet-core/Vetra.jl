@@ -99,12 +99,12 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | --- | --- | --- | --- | --- |
 | R000 | Architecture, research and reviewed task plan | Coordinator | — | done |
 | R040 | Vulkan.jl/platform/shader compatibility spike | G | R000 | bounded probe approved (db47824; other-platform execution open, D037) |
-| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | revision 9 in progress (06046d0 overall approval withheld; two-group legacy-table/staged-validation-error correction assigned; prior closures preserved; no candidate merged) |
-| R011 | Independent conformance corpus and capability inventory | Q | R010 | planned |
-| R012 | Shared text/layout correctness and font contract | F | R010, M004 | planned |
+| R010 | Freeze Canvas semantics and backend/package contracts | F | R000, R040, M003 | done (c81e15b approved by both reviewers; 524 + 103 + 271 assertions/version; full integration gate 96.07%, D039) |
+| R011 | Independent conformance corpus and capability inventory | Q | R010 | ready (next; unassigned) |
+| R012 | Shared text/layout correctness and font contract | F | R010, M004 | ready (unassigned) |
 | R013 | Zero-core-change external extension conformance | Q | R021, R022, R060, R065, R066 | planned |
 | R014 | External GUI and plotting integration proofs | Q | R013, R012, R034, R045, R052, R062, R063 | planned |
-| R020 | Owned commands/assets and legacy Picture adapter | F | R010 | planned |
+| R020 | Owned commands/assets and legacy Picture adapter | F | R010 | ready (unassigned) |
 | R021 | Renderer-independent Canvas and submission lifecycle | F | R020 | planned |
 | R022 | Host array canvas targets and pixel import/export | O | R030, M003 | planned |
 | R023 | GPU/host array transfers and processor switching | G | R022, R043 | planned |
@@ -128,7 +128,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | R061 | PDF page backend and document lifecycle | O | R021, R011 | planned |
 | R062 | PDF completeness, text accessibility and fallback | O | R061, R034, R012, R060 | planned |
 | R063 | SVG target/import integration | O | R061, R034 | planned |
-| R064 | Media provider spike and frame/timing contracts | T | R010 | planned |
+| R064 | Media provider spike and frame/timing contracts | T | R010 | ready (unassigned) |
 | R065 | GIF/WebP/MP4 editable frame readers | T | R064, R060 | planned |
 | R066 | GIF and animated WebP frame writers | T | R065 | planned |
 | R067 | MP4 frame writer and timing/color conversion | T | R065 | planned |
@@ -136,7 +136,7 @@ and MP4 modules/worktrees after R065 freezes the common reader/writer interface.
 | R069 | Media conformance, lifecycle and performance | T + Q | R068, R081 | planned |
 | R070 | Jupyter MIME display and real notebook execution | N | R051, R060, R061, R042 | planned |
 | R071 | Optional live notebook updates and disposal | N | R070, R052 | planned |
-| R080 | Backend/platform CI and artifact infrastructure | Q | R010 | planned |
+| R080 | Backend/platform CI and artifact infrastructure | Q | R010 | ready (unassigned) |
 | R081 | Reproducible backend benchmark/profiling harness | Q | R011, R030 | planned |
 | R082 | End-to-end performance and allocation review | Q | R045, R052, R060, R062, R071, R081, R023, R069, R014, R055 | planned |
 | R086 | Package/document cleanup and migration consolidation | Coordinator | R082, R063, M004 | planned |
@@ -257,6 +257,12 @@ independent evidence are in `docs/HANDOFF.md`. Other OS execution remains open.
 - **Handoff:** R010 receives actual types/compat constraints, not guessed APIs.
 
 ### R010 — Freeze the frontend/backend contract
+
+**Status: done**, 2026-11-14. Revision 9 `c81e15b` passed both reviews and was
+squash-integrated with the full Julia 1.13.3 gate passing (96.07% coverage).
+The authoritative contract is `docs/CANVAS_CONTRACT.md` (D039); exact commands
+and boundary-check counts are in `docs/HANDOFF.md`. Runtime conformance remains
+with the downstream owners in the contract's §19.
 
 **Owner/paths:** coordinator + F; design/decision docs and proposed public API.
 

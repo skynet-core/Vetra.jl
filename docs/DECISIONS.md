@@ -1289,6 +1289,57 @@ Independent evidence: 65,536 BMP color/alpha combinations and **24,014** numeric
 checks per Julia version, plus real PDF rendering. Full commands and gate status:
 `docs/HANDOFF.md`.
 
+## D039 — Renderer-independent Canvas contract freeze (R010)
+
+Status: **accepted by coordinator and independent review**, 2026-11-14.
+Qwen3.8 candidate `c81e15b` is the approved revision-9 contract. Earlier
+unapproved candidates remain review history, not alternative specifications.
+[`CANVAS_CONTRACT.md`](CANVAS_CONTRACT.md) is authoritative for implementation;
+[`CANVAS_DESIGN.md`](CANVAS_DESIGN.md) retains the architecture and rationale.
+
+- Keep a concrete parametric Canvas and multiple-dispatch provider contracts.
+  Execution, pixel storage, codecs, temporal media and display are separate
+  extension seams; new providers require no central registry or core edits.
+  Canvas2D and WebGL2 are distinct; native GPU remains Vulkan.jl under D037.
+- Capture owned normalized commands/assets. Reusable `CanvasRecording` capture
+  is independent of opaque submission handles. Replay remaps both drawn-image
+  and image-paint IDs, applies placement once and preserves target ambient clips.
+  Legacy `Picture` conversion is a separate conservative, explicit admission
+  procedure: unsupported combinations reject rather than change pixels silently.
+- Freeze source-over/Porter–Duff/artistic composition, neutral child group state
+  with frozen parent alpha/composition, geometry/DPI precision, and premultiplied
+  RGBA8 exchange. Array layout/axes, copy/borrow, typed output, staged writeback
+  and explicit GPU readback follow the same owned-pixel boundary.
+- Providers return their own completion handles; the frontend wraps accepted
+  work in core-owned tracked handles. Direct waits and wait(canvas) share one
+  completion route. Empty flush is inert. Provider failure retains in-flight
+  resources; staged failure preserves the original named error and core staging
+  after provider completion. Repeated wait/close never reports false success or
+  automatically repeats partial writes. Completed provider handles release actual
+  batch/asset references; scalar completion state may remain.
+- Browser transport preserves captured asset IDs and declared numeric types.
+  Admission counts actual canonical UTF-8 bytes; execution ACKs and readback
+  responses have distinct identities and validation. Uploads are ordered after
+  prior drawing and have their own tracked completion, even without a later draw.
+- Unsupported capabilities fail explicitly. Raster fallback and GPU readback
+  require explicit selection. Host lifecycle, text metrics, reusable drawing,
+  bounds and precise world-to-local mapping remain public embedding seams.
+
+Evidence on Julia 1.13.3 and 1.10.13: **524** candidate boundary assertions,
+**103** coordinator assertions and **271** independent assertions per version;
+coordinator reproduced the independent results. These exercise arithmetic,
+records/dispatch, reference lifetimes and bounded actual-legacy pixel controls.
+They do not establish production frontend/backend conformance. Exact commands,
+integration gate and limitations are in `docs/HANDOFF.md`. The clean integration
+gate passes on Julia 1.13.3: 96.07% coverage (7805/8124), gallery 79/79.
+
+Compatibility impact: no production code, package dependencies or exported API
+changes. R011/R012/R020/R064/R080 become dependency-ready after integration;
+runtime acceptance remains with the contract's §19 owners. Provider-owned GLSL ES
+is still a proposal requiring the R053 shader-route decision. D037's bounded
+hardware evidence, VS Code/RTX 3090 gaps, user-owned registration and R099-last
+remain unchanged.
+
 ## Adding a decision
 
 Append a short entry with status, task, problem, chosen behavior, alternatives

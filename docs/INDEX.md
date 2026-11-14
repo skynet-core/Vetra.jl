@@ -6,7 +6,8 @@ recipes render.
 
 ## Navigation
 
-Future architecture: [renderer-independent Canvas](CANVAS_DESIGN.md) and the
+Future architecture: [renderer-independent Canvas](CANVAS_DESIGN.md), its
+[approved public contract](CANVAS_CONTRACT.md), and the
 [parallel CPU/Vulkan/browser/document development plan](../tasks/CANVAS_ROADMAP.md).
 These are design documents; the current implementation remains CPU-based.
 

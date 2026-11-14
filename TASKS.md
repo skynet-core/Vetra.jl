@@ -24,8 +24,9 @@ showcases, and asks how to resolve Jupyter/PyMuPDF verification gaps. R053–R05
 add a distinct WebGL2 provider and interactive Vulkan/browser projects; the
 expanded board has **46 matching specs / 110 edges**, is acyclic and retains
 R099 as the final task. The historical 43-task approval above predates this
-amendment. R010 is now active; existing display/PyMuPDF verification runs
-separately in isolated tools environments (V001), without core dependencies.
+amendment. R010's contract is complete and approved by both reviewers (D039), with
+the integration gate passing. Existing display/PyMuPDF verification is recorded separately
+in isolated tooling environments (V001), without core dependencies.
 
 SOLID and zero-core-change extension are explicit requirements, verified by
 R013's external-package conformance gate. R014 verifies future GUI/plotting-core
@@ -91,7 +92,7 @@ test logs for independent validation before approval/push.
 | M004 (done) | Qwen3.8, `/tmp/opencode/vetra-m004`, `modernization/correctness` | Crop bounds, cmap-12 validation, dash ownership, HarfBuzz lifecycle | Approved 52a40b9: both full gates, 113 independent probes/version and targeted benchmark comparison pass |
 | R040 (bounded probe approved) | Qwen3.8, `/tmp/opencode/vetra-r040`, `canvas/vulkan-probe` | Isolated `lib/VetraVulkan/probe/` environment, scripts and evidence | db47824 independently validated, integrated through 440276d; non-Linux/device acceptance remains open (D037) |
 | E001 (done) | Qwen3.8, `/tmp/opencode/vetra-feature-gallery`, `examples/feature-gallery` | Six executable feature programs, gallery tests, reproduced connected library bugs | 873939f approved, integrated through 254be96, pushed b631410; both full gates, 79 gallery tests/version, external render checks and all 10 CI jobs pass (D038) |
-| R010 (revision 9 in progress) | Qwen3.8, `/tmp/opencode/vetra-r010`, `canvas/frontend-contract` | Proposed contract, scenario tables and boundary checker; duplicate frontend retired | 06046d0 overall approval withheld; 508 candidate + 69 coordinator assertions/version, independent 190 positive + 15 counterexample/control assertions/version; two-group table/error-domain correction assigned; prior closures preserved; no candidate merged |
+| R010 (done) | Qwen3.8, `/tmp/opencode/vetra-r010`, `canvas/frontend-contract` | Approved contract, scenario tables and boundary checker; duplicate frontend retired | c81e15b approved by both reviewers and squash-integrated: 524 candidate + 103 coordinator + 271 independent assertions/version; Julia 1.13.3 full gate 96.07%, gallery 79/79 (D039) |
 | V001 (delivery approved; VS Code UI open) | Qwen3.8, scratch `/tmp/opencode/vetra-v001/`; notebook writer `/tmp/opencode/vetra-v001-notebook` | Isolated verification; portable `examples/gallery/image_lab.ipynb` and gallery README | Integrated through 1c88768; independent notebook 11 assertions + 9 external pixels, Julia 1.10 cells and PyMuPDF JPEG 61/61 pass; clean full gate 96.07%, gallery 79/79; VS Code UI unverified |
 | Windows CI follow-up (done) | Qwen3.8, `/tmp/opencode/vetra-windows-allocation`, `modernization/windows-allocation` | Constructor allocation-parity gate in `test/api_native_tests.jl` | 6eff5cd independently approved, integrated as e879026: both full gates, 304/304 probes per Julia and all 10 CI jobs pass |
 
@@ -104,7 +105,8 @@ Follow-up `c31626a` passed all **10 jobs** in
 [run 43019390200](https://github.com/skynet-core/Vetra.jl/actions/runs/43019390200),
 including both Windows Julia lanes and four platform benchmark artifacts.
 
-R040 supplies approved bounded constraints for R010, which is now in progress.
+R040 supplies approved bounded constraints for R010's reviewed contract.
+R011/R012/R020/R064/R080 are dependency-ready; R011 is next, not yet assigned.
 Other-platform GPU acceptance remains open; downstream backend
 tasks retain their dependency gates. R099 stays last.
 

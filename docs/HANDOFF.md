@@ -13,8 +13,8 @@ Coordinator owns these documents. Qwen's bounded M003 implementation in
 requested implementation start; M004 is now independently approved and integrated,
 and R040's bounded Linux/NVIDIA probe is now approved and integrated (D037).
 E001 feature examples are independently approved and integrated (D038, below).
-Future backend streams are gated by
-R010's contract review. Final milestone task R099 publishes the real interactive
+R010's contract is complete and approved by both reviewers (D039); the integration
+gate passes. Final milestone task R099 publishes the real interactive
 tutorial via GitHub Pages CI; R098 prepares the illustrated README.
 
 User additions incorporated into the plan: GIF/WebP/MP4 existing-frame editing,
@@ -42,8 +42,9 @@ Q's integration-consumer paths. The remaining non-blocking R070 media-view note
 now explicitly uses a pinned prerecorded fixture, with engine-generated media
 integration in R099 after R069; it adds no premature encoder dependency.
 Approval covers architecture/task documents only, not providers or execution.
-Next: review the active R010 contract draft using the approved
-bounded Vulkan constraints. M003/M004 and the Windows allocation-gate follow-up
+Next: R011's independent conformance corpus. R011/R012/R020/R064/R080 are
+dependency-ready; none is assigned by this integration.
+M003/M004 and the Windows allocation-gate follow-up
 are approved with passing four-platform CI (evidence below). Other-platform GPU
 runtime acceptance remains open; R040 does not establish a production backend.
 R099 remains the final task.
@@ -64,11 +65,11 @@ against Julia algorithm ownership before kernel implementation.
 The amended roadmap independently checks **46 matching specs / 110 edges**,
 acyclic with every task leading to R099. Native GPU remains Vulkan.jl; no 3D.
 
-- **R010 assigned:** Qwen3.8 in `/tmp/opencode/vetra-r010`, branch
+- **R010 complete:** Qwen3.8 in `/tmp/opencode/vetra-r010`, branch
   `canvas/frontend-contract`, base `b631410`; owns `docs/CANVAS_CONTRACT.md`
   and isolated supporting sketches/checks under `tasks/r010/`. Coordinator owns
-  shared design/status integration. Draft must cover the new WebGL2 provider
-  alongside CPU/Vulkan/Canvas2D/PDF; no production dummy backends.
+  shared design/status integration. Approved candidate `c81e15b` includes WebGL2
+  alongside CPU/Vulkan/Canvas2D/PDF at contract-only scope (D039).
 - **V001 verification assigned:** Qwen3.8 in `/tmp/opencode/vetra-v001/`,
   main repository read-only. Isolated Python environment for PyMuPDF/Jupyter,
   isolated Julia IJulia/PNG environment; execute a real notebook kernel, verify
@@ -92,6 +93,75 @@ E001 push `b631410` passed **all 10 CI jobs** at
 [run 43288151394](https://github.com/skynet-core/Vetra.jl/actions/runs/43288151394):
 Linux/Windows/macOS/FreeBSD tests and four non-expired benchmark artifacts.
 This CPU CI evidence does not establish GPU/WebGL runtime support.
+
+#### R010 revision 9 review (2026-11-14)
+
+Candidate `c81e15b` is **approved by coordinator and independent review at
+contract-only scope**. R010 is complete: the final four-file snapshot is
+squash-integrated with coordinator documentation updates; the full integration
+gate passes. Rejected intermediate specifications remain review history.
+
+Coordinator reran from `/tmp/opencode/vetra-r010`:
+
+```sh
+julia --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia +1.10 --startup-file=no --project=. tasks/r010/boundary_check.jl
+julia --startup-file=no --project=. /tmp/opencode/r010-v9-coordinator-probe.jl
+julia +1.10 --startup-file=no --project=. /tmp/opencode/r010-v9-coordinator-probe.jl
+git diff --check 06046d0..c81e15b
+```
+
+Julia 1.13.3 and 1.10.13 each pass **524/524** candidate assertions and **103/103
+coordinator assertions** (69 preserved + 30 validation-error + 4 artistic
+acceptance/control assertions). Whitespace passes. The actual phase-one error is
+preserved by identity for direct wait, wait-all and close, including each as the
+initial completion route; zero stores, one action call and the correct ownership
+distinction remain. The legacy table now admits unwrapped artistic draws while
+preserving the wrapped-artistic rejection. Both remaining v8 findings are closed
+in coordinator review.
+
+The independent probe passes **271/271 positive assertions** on each version
+(121 preserved boundaries + 69 staged-failure closures + 81 validation-error
+assertions). Coordinator reproduced both commands:
+
+```sh
+julia --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v9/probe.jl
+julia +1.10 --startup-file=no --project=/tmp/opencode/vetra-r010 /tmp/opencode/r010-independent-review-v9/probe.jl
+```
+
+Reports: `/tmp/opencode/r010-v9-coordinator-review.md` and
+`/tmp/opencode/r010-independent-review-v9/report.md`. Both approve; no remaining
+contract-review findings. D039 records the freeze. The checker is unchanged
+from the approved candidate; coordinator edits integrate documentation/status.
+
+Integration validation uses `/tmp/opencode/vetra-r010-integration`, based on
+main `64e887c` with the final candidate squash-applied and a separate Manifest.
+The existing root Manifest is preserved. Exact commands in that worktree:
+
+```sh
+julia --startup-file=no --project=. scripts/check.jl > /tmp/opencode/r010-integration-check-113.log 2>&1
+julia --startup-file=no --project=. scripts/fetch_upstream.jl
+julia --startup-file=no --project=. scripts/check.jl > /tmp/opencode/r010-integration-check-113-with-fixtures.log 2>&1
+```
+
+The first gate exited 1 because the fresh worktree lacked
+`.reference/upstream/tests/fileformats/jpeg/masters/mandrill.jpg`. The fetch
+succeeded and verified pinned revision
+`30bb510877f02cbf9643e4f904e33d1c90f7910f`. The Julia 1.13.3 rerun passes:
+`scripts/check.jl: OK`, **96.07% coverage (7805/8124)** and gallery **79/79**.
+The optional PyMuPDF leg was skipped because it was not resolvable in this
+worktree; V001's separate 61/61 JPEG evidence remains recorded below. This
+integration did not repeat a full Julia 1.10 gate; its contract checker and both
+review probes pass on 1.10.13. Package metadata and production sources are
+unchanged; `git diff --check` passes.
+This setup failure is retained as verification history, not a passing test.
+Contract approval and narrow boundary checks do not establish downstream runtime
+acceptance.
+
+Next: R011 independent conformance corpus. R012/R020/R064/R080 are also
+dependency-ready; R021 and later tasks retain their prerequisite gates.
+No implementation task is started by this integration. Actual VS Code UI,
+RTX 3090 and other-platform GPU acceptance remain open; R099 stays last.
 
 #### R010 revision 8 review (2026-11-14)
 
@@ -712,7 +782,7 @@ interoperability was skipped; V001's later independent checks above close those
 kernel/reader gaps, with VS Code UI still unverified. Existing
 dash-cap/scaled-gradient renderer differences are documented. Future GPU,
 browser Canvas2D and media extensions retain their roadmap dependencies; R099
-publication remains last. R010 contract work is active.
+publication remains last. R010's later contract approval is recorded above.
 
 #### E001 review history: first candidate (2026-11-12)
 

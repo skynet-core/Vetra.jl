@@ -3,7 +3,9 @@
 Status: **approved implementation plan (R000)**, requested 2026-11-10.
 Independent architectural/task-plan review: **approved** after corrections 1–10
 (2026-11-10, 43 tasks). Source review and final media-amendment review are complete.
-R010's executable interface freeze remains pending; approval is not provider/runtime evidence.
+R010's [public contract](CANVAS_CONTRACT.md) is approved (revision 9, D039).
+It is authoritative for implementation signatures and semantics; this document
+supplies architecture and rationale. Approval is not provider/runtime evidence.
 The interfaces below are design contracts, not claims that new backends exist.
 User amendment (2026-11-12): native Vulkan projects and an interactive **WebGL2**
 browser showcase are required. WebGL2 is an additional provider, distinct from
